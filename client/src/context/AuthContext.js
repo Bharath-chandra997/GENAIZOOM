@@ -13,6 +13,9 @@ export const AuthProvider = ({ children }) => {
   const hasInitialized = useRef(false);
   const lastToken = useRef(null);
 
+  // Use environment variable for server URL from .env
+  const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+
   const fetchUser = async (token, caller = 'unknown') => {
     if (lastToken.current === token) {
       console.log(`fetchUser skipped: token already processed, caller: ${caller}`);
@@ -22,12 +25,11 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(true);
     try {
       console.log(`Fetching user with token (caller: ${caller}):`, token.slice(0, 10) + '...');
-      const response = await fetch(`https://7fa7a3e1ad9a.ngrok-free.app/api/auth/me`, {
+      const response = await fetch(`${SERVER_URL}/api/auth/me`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
         },
       });
       console.log('Fetch user response:', {
@@ -36,12 +38,22 @@ export const AuthProvider = ({ children }) => {
         headers: Object.fromEntries(response.headers.entries()),
       });
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const text = await response.text();
         console.error('Fetch user error details:', {
           status: response.status,
-          error: errorData.error || 'No error message',
+          statusText: response.statusText,
+          responseText: text.slice(0, 100),
         });
-        throw new Error(`Failed to fetch user: ${response.status} ${response.statusText}`);
+        if (text.includes('<!DOCTYPE')) {
+          throw new Error('Received HTML response. Ensure server is running at https://zoom-clone.onrender.com and URL is correct.');
+        }
+        let errorData;
+        try {
+          errorData = JSON.parse(text);
+        } catch (e) {
+          throw new Error(`Failed to fetch user: ${response.status} ${response.statusText}`);
+        }
+        throw new Error(`Failed to fetch user: ${errorData.error || response.statusText}`);
       }
       const data = await response.json();
       console.log('Fetched user data:', data);
@@ -51,7 +63,7 @@ export const AuthProvider = ({ children }) => {
       }
       const formattedUser = {
         ...data.user,
-        userId: data.user._id, // Map _id to userId
+        userId: data.user._id,
         token,
       };
       console.log('Setting user with userId:', formattedUser.userId);
@@ -65,7 +77,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('userData');
       setIsAuthenticated(false);
       setUser(null);
-      toast.error('Session invalid. Please log in again.');
+      toast.error(error.message || 'Session invalid. Please log in again.');
       navigate('/login');
     } finally {
       setIsLoading(false);
@@ -75,8 +87,8 @@ export const AuthProvider = ({ children }) => {
   const loginWithGoogle = (flow = 'login') => {
     try {
       console.log('Initiating Google login with flow:', flow);
-      const serverUrl = 'https://7fa7a3e1ad9a.ngrok-free.app';
-      window.location.href = `${serverUrl}/api/auth/google?flow=${flow}`;
+      // Redirect to backend's Google OAuth endpoint
+      window.location.href = `${SERVER_URL}/api/auth/google?flow=${flow}`;
     } catch (error) {
       console.error('Google login error:', error);
       toast.error('Failed to initiate Google login');
@@ -143,12 +155,11 @@ export const AuthProvider = ({ children }) => {
       if (!token) {
         throw new Error('No authentication token found');
       }
-      const response = await fetch(`https://7fa7a3e1ad9a.ngrok-free.app/api/auth/profile`, {
+      const response = await fetch(`${SERVER_URL}/api/auth/profile`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
         },
         body: JSON.stringify({ username }),
       });
@@ -159,7 +170,7 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
       const formattedUser = {
         ...data.user,
-        userId: data.user._id, // Map _id to userId
+        userId: data.user._id,
         token,
       };
       setUser(formattedUser);
@@ -191,7 +202,7 @@ export const AuthProvider = ({ children }) => {
             const userData = JSON.parse(cachedUser);
             const formattedUser = {
               ...userData,
-              userId: userData._id, // Map _id to userId
+              userId: userData._id,
               token,
             };
             console.log('Setting user from cache with userId:', formattedUser.userId);

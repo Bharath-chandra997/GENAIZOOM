@@ -5,6 +5,8 @@ import { toast } from 'react-toastify';
 import axios from 'axios';
 import LoadingSpinner from '../components/LoadingSpinner';
 
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+
 const Schedule = () => {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
@@ -52,7 +54,7 @@ const Schedule = () => {
       const startTime = new Date(year, month - 1, day, hours, minutes);
       
       const response = await axios.post(
-        '/api/meetings/schedule',
+        `${SERVER_URL}/api/meetings/schedule`,
         {
           title: formData.title,
           startTime,

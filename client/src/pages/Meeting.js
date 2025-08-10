@@ -12,8 +12,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
 
-// --- ADDED: ngrok Configuration ---
-const SERVER_URL = 'https://7fa7a3e1ad9a.ngrok-free.app'; // Replace with your ngrok URL
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
 
 const Meeting = () => {
   const { roomId } = useParams();
@@ -51,7 +50,7 @@ const Meeting = () => {
   // --- Core Logic ---
   const getIceServers = useCallback(async () => {
     try {
-      const response = await axios.get(`https://7fa7a3e1ad9a.ngrok-free.app/ice-servers`);
+      const response = await axios.get(`${SERVER_URL}/ice-servers`);
       console.log('ICE servers from Twilio:', response.data);
       return response.data;
     } catch (error) {

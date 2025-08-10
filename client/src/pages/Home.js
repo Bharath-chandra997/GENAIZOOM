@@ -6,6 +6,8 @@ import axios from 'axios';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Navbar from '../components/Navbar';
 
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+
 const Home = () => {
   const { user, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
@@ -45,7 +47,7 @@ const Home = () => {
     setLoading(true);
     try {
       const response = await axios.post(
-        '/api/meetings',
+        `${SERVER_URL}/api/meetings`,
         { title: meetingTitle.trim() },
         { headers: { Authorization: `Bearer ${user.token}` } }
       );

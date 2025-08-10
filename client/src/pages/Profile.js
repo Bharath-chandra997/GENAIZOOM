@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // Added import
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const Profile = () => {
   const { user, updateProfile, isLoading } = useAuth();
-  const navigate = useNavigate(); // Define navigate
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     username: user?.username || ''
@@ -23,7 +23,7 @@ const Profile = () => {
     } else {
       setFormData({ username: user.username || '' });
     }
-  }, [isLoading, user]); // Removed navigate from dependencies
+  }, [isLoading, user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;

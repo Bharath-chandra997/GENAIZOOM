@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import axios from 'axios';
 import LoadingSpinner from '../components/LoadingSpinner';
 
-const SERVER_URL = "https://zoom-clone.onrender.com";
+const SERVER_URL = "https://genaizoomserver-0yn4.onrender.com";
 
 const Schedule = () => {
   const { user, isLoading } = useAuth();

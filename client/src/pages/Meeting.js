@@ -12,7 +12,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
 
-const SERVER_URL = 'https://zoom-clone.onrender.com';
+const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
 const Meeting = () => {
   const { roomId } = useParams();

@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
   const lastToken = useRef(null);
 
   // Use environment variable for server URL from .env
-  const SERVER_URL = 'https://zoom-clone.onrender.com';
+  const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
   const fetchUser = async (token, caller = 'unknown') => {
     if (lastToken.current === token) {

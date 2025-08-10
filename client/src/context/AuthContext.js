@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
   const lastToken = useRef(null);
 
   // Use environment variable for server URL from .env
-  const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+  const SERVER_URL = 'https://zoom-clone.onrender.com';
 
   const fetchUser = async (token, caller = 'unknown') => {
     if (lastToken.current === token) {

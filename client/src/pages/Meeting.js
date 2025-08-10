@@ -12,7 +12,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
 
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+const SERVER_URL = 'https://zoom-clone.onrender.com';
 
 const Meeting = () => {
   const { roomId } = useParams();

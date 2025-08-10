@@ -6,7 +6,7 @@ import axios from 'axios';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Navbar from '../components/Navbar';
 
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+const SERVER_URL = 'https://zoom-clone.onrender.com';
 
 const Home = () => {
   const { user, isAuthenticated, isLoading } = useAuth();

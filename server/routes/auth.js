@@ -28,7 +28,7 @@ router.get('/google/callback', passport.authenticate('google', { session: false 
   try {
     const { flow } = JSON.parse(req.query.state || '{}');
     const { user, token } = req.user;
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientUrl = process.env.CLIENT_URL ;
 
     if (!user) {
       info(`Authentication failed for flow: ${flow}, IP: ${req.ip}`);

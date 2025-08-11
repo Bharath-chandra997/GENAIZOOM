@@ -13,7 +13,7 @@ router.get('/google', (req, res, next) => {
   info(`Initiating Google OAuth with flow: ${flow}, IP: ${req.ip}`);
   if (!['login', 'register'].includes(flow)) {
     info(`Invalid flow parameter: ${flow}, IP: ${req.ip}`);
-    return res.redirect(`${process.env.CLIENT_URL || 'http://localhost:3000'}/auth/callback?error=invalid_flow`);
+    return res.redirect(`${process.env.CLIENT_URL}/auth/callback?error=invalid_flow`);
   }
   passport.authenticate('google', {
     scope: ['profile', 'email'],
@@ -39,7 +39,7 @@ router.get('/google/callback', passport.authenticate('google', { session: false 
     return res.redirect(`${clientUrl}/auth/callback?token=${token}`);
   } catch (error) {
     logError(`Google auth callback error for IP: ${req.ip}`, error);
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientUrl = process.env.CLIENT_URL;
     return res.redirect(`${clientUrl}/auth/callback?error=server_error`);
   }
 });

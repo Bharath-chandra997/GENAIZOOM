@@ -32,8 +32,8 @@ const express = require('express');
        process.exit(1);
      }
 
-     const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
-     const SERVER_URL = process.env.SERVER_URL || 'http://localhost:5000';
+     const CLIENT_URL = process.env.CLIENT_URL;
+     const SERVER_URL = process.env.REACT_APP_SERVER_URL;
 
      // App & Server Setup
      const app = express();

@@ -13,7 +13,7 @@ router.get('/google', (req, res, next) => {
   info(`Initiating Google OAuth with flow: ${flow}, IP: ${req.ip}`);
   if (!['login', 'register'].includes(flow)) {
     info(`Invalid flow parameter: ${flow}, IP: ${req.ip}`);
-    return res.redirect(`${process.env.CLIENT_URL}/auth/callback?error=invalid_flow`);
+    return res.redirect(`https://genaizoom123.onrender.com/auth/callback?error=invalid_flow`);
   }
   passport.authenticate('google', {
     scope: ['profile', 'email'],

@@ -32,22 +32,21 @@ const express = require('express');
        process.exit(1);
      }
 
-     const CLIENT_URL = process.env.CLIENT_URL;
-     const SERVER_URL = "https://genaizoomserver-0yn4.onrender.com";
+ 
 
      // App & Server Setup
      const app = express();
      const server = http.createServer(app);
      const io = new Server(server, {
        cors: {
-         origin: [CLIENT_URL],
+         origin: ['https://genaizoom123.onrender.com'],
          methods: ['GET', 'POST'],
        },
      });
 
      // Middleware
      app.use(helmet());
-     app.use(cors({ origin: [CLIENT_URL] }));
+     app.use(cors({ origin: ['https://genaizoom123.onrender.com'] }));
      app.use(express.json());
      app.use(passport.initialize());
 
@@ -63,7 +62,7 @@ const express = require('express');
          {
            clientID: process.env.GOOGLE_CLIENT_ID,
            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-           callbackURL: `${SERVER_URL}/api/auth/google/callback`,
+           callbackURL: `https://genaizoomserver-0yn4.onrender.com/api/auth/google/callback`,
          },
          async (accessToken, refreshToken, profile, done) => {
            try {

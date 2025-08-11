@@ -33,21 +33,21 @@ const express = require('express');
      }
 
      const CLIENT_URL = process.env.CLIENT_URL;
-     const SERVER_URL = process.env.REACT_APP_SERVER_URL;
+     const SERVER_URL = "https://genaizoomserver-0yn4.onrender.com";
 
      // App & Server Setup
      const app = express();
      const server = http.createServer(app);
      const io = new Server(server, {
        cors: {
-         origin: [CLIENT_URL, SERVER_URL, 'https://*.onrender.com'],
+         origin: [CLIENT_URL],
          methods: ['GET', 'POST'],
        },
      });
 
      // Middleware
      app.use(helmet());
-     app.use(cors({ origin: [CLIENT_URL, SERVER_URL, 'https://*.onrender.com'] }));
+     app.use(cors({ origin: [CLIENT_URL] }));
      app.use(express.json());
      app.use(passport.initialize());
 

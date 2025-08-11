@@ -32,15 +32,15 @@ router.get('/google/callback', passport.authenticate('google', { session: false 
 
     if (!user) {
       info(`Authentication failed for flow: ${flow}, IP: ${req.ip}`);
-      return res.redirect(`${clientUrl}/auth/callback?error=authentication_failed`);
+      return res.redirect(`https://genaizoom123.onrender.com/auth/callback?error=authentication_failed`);
     }
 
     info(`Authentication successful for user: ${user.email}, flow: ${flow}, IP: ${req.ip}, token: ${token.slice(0, 10)}...`);
-    return res.redirect(`${clientUrl}/auth/callback?token=${token}`);
+    return res.redirect(`https://genaizoom123.onrender.com/auth/callback?token=${token}`);
   } catch (error) {
     logError(`Google auth callback error for IP: ${req.ip}`, error);
     const clientUrl = process.env.CLIENT_URL;
-    return res.redirect(`${clientUrl}/auth/callback?error=server_error`);
+    return res.redirect(`https://genaizoom123.onrender.com/auth/callback?error=server_error`);
   }
 });
 

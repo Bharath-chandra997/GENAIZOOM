@@ -1,79 +1,13 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLocal }) => {
   const videoRef = useRef(null);
-  const lastStreamRef = useRef(null);
+  const lastStreamRef = useRef(null); // Track last assigned stream
   const [isStreamLoading, setIsStreamLoading] = useState(true);
   const [isParticipantInvalid, setIsParticipantInvalid] = useState(false);
 
-  const playVideo = useCallback(() => {
-    if (videoRef.current && participant.stream) {
-      if (videoRef.current.srcObject !== participant.stream) {
-        console.log(`Assigning new stream to videoRef for participant: ${participant.userId}`, {
-          isLocal: participant.isLocal,
-          hasStream: !!participant.stream,
-          videoEnabled: participant.videoEnabled ?? true,
-          isScreenSharing: participant.isScreenSharing ?? false,
-          unmirrorApplied: participant.isLocal && !participant.isScreenSharing,
-          videoTracks: participant.stream.getVideoTracks().map((t) => ({
-            id: t.id,
-            enabled: t.enabled,
-            readyState: t.readyState,
-          })),
-          audioTracks: participant.stream.getAudioTracks().map((t) => ({
-            id: t.id,
-            enabled: t.enabled,
-            readyState: t.readyState,
-          })),
-        });
-        videoRef.current.srcObject = participant.stream;
-        lastStreamRef.current = participant.stream;
-      } else {
-        console.log(`Stream already assigned for participant: ${participant.userId}`);
-      }
-
-      const videoTracks = participant.stream.getVideoTracks();
-      const audioTracks = participant.stream.getAudioTracks();
-
-      if (videoTracks.length === 0 || !videoTracks[0].enabled || videoTracks[0].readyState !== 'live') {
-        console.warn('No valid video tracks to play:', {
-          userId: participant.userId,
-          tracks: videoTracks.map((track) => ({
-            id: track.id,
-            enabled: track.enabled,
-            readyState: track.readyState,
-          })),
-        });
-        setIsStreamLoading(false);
-        return;
-      }
-
-      if (audioTracks.length === 0 || !audioTracks[0].enabled || audioTracks[0].readyState !== 'live') {
-        console.warn('No valid audio tracks:', {
-          userId: participant.userId,
-          tracks: audioTracks.map((track) => ({
-            id: track.id,
-            enabled: track.enabled,
-            readyState: track.readyState,
-          })),
-        });
-      }
-
-      videoRef.current.play().catch((error) => {
-        console.error('Video play error:', error, { userId: participant.userId });
-        setIsStreamLoading(false);
-      });
-    } else {
-      console.warn('Cannot play video: missing videoRef or stream', {
-        videoRefExists: !!videoRef.current,
-        streamExists: !!participant.stream,
-        userId: participant.userId,
-      });
-      setIsStreamLoading(false);
-    }
-  }, [participant.userId, participant.stream, participant.isLocal]);
-
   useEffect(() => {
+    // Check for invalid participant
     if (!participant || !participant.userId || participant.isLocal === undefined) {
       console.warn('Invalid participant data:', participant);
       setIsParticipantInvalid(true);
@@ -82,40 +16,114 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
     }
     setIsParticipantInvalid(false);
 
-    if (participant.stream) {
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    const playVideo = () => {
+      if (videoRef.current && participant.stream) {
+        // Only assign stream if it has changed
+        if (videoRef.current.srcObject !== participant.stream) {
+          console.log(`Assigning new stream to videoRef for participant: ${participant.userId}`, {
+            isLocal: participant.isLocal ?? isLocal,
+            hasStream: !!participant.stream,
+            videoEnabled: participant.videoEnabled ?? true,
+            isScreenSharing: participant.isScreenSharing ?? false,
+            unmirrorApplied: participant.isLocal && !participant.isScreenSharing,
+          });
+          videoRef.current.srcObject = participant.stream;
+          lastStreamRef.current = participant.stream;
+        } else {
+          console.log(`Stream already assigned for participant: ${participant.userId}`);
+        }
+
+        // Check track state before playing
+        const videoTracks = participant.stream.getVideoTracks();
+        if (videoTracks.length === 0 || !videoTracks[0].enabled || videoTracks[0].readyState !== 'live') {
+          console.warn('No valid video tracks to play:', {
+            userId: participant.userId,
+            tracks: videoTracks.map((track) => ({
+              id: track.id,
+              enabled: track.enabled,
+              readyState: track.readyState,
+            })),
+          });
+          setIsStreamLoading(false);
+          return;
+        }
+
+        // Delay playback to ensure stream is ready
+        setTimeout(() => {
+          if (videoRef.current && videoRef.current.paused && !videoRef.current.ended) {
+            videoRef.current.play().catch((error) => {
+              console.error('Play error:', error, { retryCount, userId: participant.userId });
+              if (retryCount < maxRetries && error.name === 'AbortError') {
+                retryCount++;
+                setTimeout(playVideo, 500);
+              } else {
+                console.error('Max retries reached or non-recoverable error for video playback:', participant.userId);
+                setIsStreamLoading(false);
+              }
+            });
+          } else {
+            setIsStreamLoading(false);
+          }
+        }, 100); // Small delay to ensure stream is loaded
+      } else {
+        console.warn('Cannot play video: missing videoRef or stream', {
+          videoRefExists: !!videoRef.current,
+          streamExists: !!participant.stream,
+          userId: participant.userId,
+        });
+        setIsStreamLoading(false);
+      }
+    };
+
+    if (participant.stream && videoRef.current) {
+      console.log(`Setting stream for participant: ${participant.userId}`, {
+        username: participant.username,
+        isLocal: participant.isLocal ?? isLocal,
+        hasStream: !!participant.stream,
+        videoEnabled: participant.videoEnabled ?? true,
+        isScreenSharing: participant.isScreenSharing ?? false,
+        videoTracks: participant.stream.getVideoTracks().map((track) => ({
+          id: track.id,
+          enabled: track.enabled,
+          readyState: track.readyState,
+          label: track.label,
+        })),
+        videoRefReadyState: videoRef.current.readyState,
+        videoRefSrcObject: !!videoRef.current.srcObject,
+      });
       setIsStreamLoading(true);
       playVideo();
 
+      // Monitor video element state with loadedmetadata for reliable play
+      const handleLoadedMetadata = () => {
+        console.log('Video loadedmetadata event:', participant.userId);
+        setIsStreamLoading(false);
+        if (videoRef.current && videoRef.current.paused && !videoRef.current.ended) {
+          videoRef.current.play().catch((error) => console.error('Post-loadedmetadata play error:', error));
+        }
+      };
+      videoRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+      // Monitor track changes
       const videoTracks = participant.stream.getVideoTracks();
-      const audioTracks = participant.stream.getAudioTracks();
       const handleTrackChange = () => {
-        console.log('Track changed for participant:', participant.userId, {
-          videoEnabled: videoTracks[0]?.enabled,
-          videoReadyState: videoTracks[0]?.readyState,
-          audioEnabled: audioTracks[0]?.enabled,
-          audioReadyState: audioTracks[0]?.readyState,
+        console.log('Video track changed for participant:', participant.userId, {
+          enabled: videoTracks[0]?.enabled,
+          readyState: videoTracks[0]?.readyState,
         });
         if (videoRef.current && participant.stream && (participant.videoEnabled || participant.isScreenSharing)) {
+          retryCount = 0;
           playVideo();
         }
       };
-
       videoTracks.forEach((track) => {
         track.addEventListener('mute', handleTrackChange);
         track.addEventListener('unmute', handleTrackChange);
         track.addEventListener('ended', handleTrackChange);
       });
-      audioTracks.forEach((track) => {
-        track.addEventListener('mute', handleTrackChange);
-        track.addEventListener('unmute', handleTrackChange);
-        track.addEventListener('ended', handleTrackChange);
-      });
-
-      const handleLoadedMetadata = () => {
-        console.log('Video loadedmetadata event:', participant.userId);
-        setIsStreamLoading(false);
-      };
-      videoRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
 
       return () => {
         videoTracks.forEach((track) => {
@@ -123,27 +131,22 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
           track.removeEventListener('unmute', handleTrackChange);
           track.removeEventListener('ended', handleTrackChange);
         });
-        audioTracks.forEach((track) => {
-          track.removeEventListener('mute', handleTrackChange);
-          track.removeEventListener('unmute', handleTrackChange);
-          track.removeEventListener('ended', handleTrackChange);
-        });
         if (videoRef.current) {
           videoRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
-          videoRef.current.srcObject = null;
+          videoRef.current.srcObject = null; // Clear stream to prevent memory leaks
         }
       };
     } else {
       console.log('Stream not available for participant:', participant.userId, {
         username: participant.username,
-        isLocal: participant.isLocal,
+        isLocal: participant.isLocal ?? isLocal,
         hasStream: !!participant.stream,
         videoEnabled: participant.videoEnabled ?? true,
         isScreenSharing: participant.isScreenSharing ?? false,
       });
       setIsStreamLoading(false);
     }
-  }, [participant.userId, participant.stream, participant.videoEnabled, participant.isScreenSharing, participant.isLocal, playVideo]);
+  }, [participant.userId, participant.stream, participant.videoEnabled, participant.isScreenSharing, isLocal]);
 
   return (
     <div className="video-container relative bg-gray-800">
@@ -151,16 +154,6 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
         {`
           .unmirror {
             transform: scaleX(-1) !important;
-          }
-          .camera-video {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            width: 150px;
-            height: 100px;
-            border: 2px solid white;
-            border-radius: 8px;
-            object-fit: cover;
           }
         `}
       </style>
@@ -175,21 +168,19 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
             <div className="text-sm">Loading...</div>
           </div>
         </div>
-      ) : participant.stream && (participant.videoEnabled || participant.isScreenSharing) ? (
+      ) : (participant.stream && ((participant.videoEnabled ?? true) || (participant.isScreenSharing ?? false))) ? (
         <>
           <video
             ref={videoRef}
-            autoPlay
             playsInline
-            muted={participant.isLocal}
+            muted={participant.isLocal ?? isLocal}
             className={`w-full h-full object-cover ${isPinned ? 'pinned-video' : ''} ${
-              participant.isLocal && !participant.isScreenSharing ? 'unmirror' : ''
+              (participant.isLocal ?? isLocal) && !(participant.isScreenSharing ?? false) ? 'unmirror' : ''
             }`}
           />
-          {participant.isLocal && participant.isScreenSharing && localCameraVideoRef && (
+          {(participant.isLocal ?? isLocal) && (participant.isScreenSharing ?? false) && localCameraVideoRef && (
             <video
               ref={localCameraVideoRef}
-              autoPlay
               playsInline
               muted
               className="camera-video unmirror"
@@ -205,7 +196,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
               </span>
             </div>
             <div className="text-white text-sm font-medium">
-              {participant.username || 'Participant'} {participant.isLocal ? '(You)' : ''}
+              {participant.username || 'Participant'} {participant.isLocal ?? isLocal ? '(You)' : ''}
             </div>
           </div>
         </div>
@@ -214,21 +205,21 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-3">
         <div className="flex items-center justify-between">
           <span className="text-white text-sm font-medium truncate">
-            {participant.username || 'Participant'} {participant.isLocal ? '(You)' : ''}
+            {participant.username || 'Participant'} {participant.isLocal ?? isLocal ? '(You)' : ''}
             {participant.isHost && <span className="host-badge ml-2">Host</span>}
           </span>
           <div className="flex items-center space-x-1">
-            {!participant.audioEnabled && (
+            {!(participant.audioEnabled ?? true) && (
               <div className="bg-red-500 p-1 rounded-full" title="Microphone muted">
                 <span className="text-white text-xs">🔇</span>
               </div>
             )}
-            {!(participant.videoEnabled || participant.isScreenSharing) && (
+            {!(participant.videoEnabled ?? true) && !(participant.isScreenSharing ?? false) && (
               <div className="bg-gray-600 p-1 rounded-full" title="Camera off">
                 <span className="text-white text-xs">📷</span>
               </div>
             )}
-            {participant.isScreenSharing && (
+            {(participant.isScreenSharing ?? false) && (
               <div className="bg-blue-500 p-1 rounded-full" title="Screen sharing">
                 <span className="text-white text-xs">🖥</span>
               </div>

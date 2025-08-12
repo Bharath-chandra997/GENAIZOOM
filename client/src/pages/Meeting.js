@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import io from 'socket.io-client';
 import axios from 'axios';
-import debounce from 'lodash/debounce';
 
 // Import Components
 import Chat from '../components/Chat';
@@ -38,7 +37,6 @@ const Meeting = () => {
   const socketRef = useRef(null);
   const localStreamRef = useRef(null);
   const localCameraTrackRef = useRef(null);
-  const localCameraVideoRef = useRef(null);
   const screenStreamRef = useRef(null);
   const peerConnections = useRef(new Map());
   const annotationCanvasRef = useRef(null);
@@ -57,31 +55,13 @@ const Meeting = () => {
       return response.data;
     } catch (error) {
       console.error('Failed to get ICE servers from Twilio:', error);
-      toast.error('Unable to fetch ICE servers. Using fallback servers.');
-      return [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478' },
-        {
-          urls: 'turn:openrelay.metered.ca:80',
-          username: 'openrelayproject',
-          credential: 'openrelayprojectsecret',
-        },
-        {
-          urls: 'turn:openrelay.metered.ca:443',
-          username: 'openrelayproject',
-          credential: 'openrelayprojectsecret',
-        },
-        {
-          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-          username: 'openrelayproject',
-          credential: 'openrelayprojectsecret',
-        },
-      ];
+      toast.error('Unable to fetch ICE servers from Twilio. Using fallback STUN server.');
+      return [{ urls: 'stun:stun.l.google.com:19302' }];
     }
   }, []);
 
   const createPeerConnection = useCallback(
-    async (remoteSocketId, username) => {
+    async (remoteSocketId) => {
       if (!localStreamRef.current) {
         console.warn('No local stream available for peer connection');
         return null;
@@ -95,12 +75,6 @@ const Meeting = () => {
       const pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: 'all' });
 
       localStreamRef.current.getTracks().forEach((track) => {
-        console.log(`Adding track to peer connection for ${remoteSocketId}:`, {
-          kind: track.kind,
-          id: track.id,
-          enabled: track.enabled,
-          readyState: track.readyState,
-        });
         pc.addTrack(track, localStreamRef.current);
       });
 
@@ -108,11 +82,8 @@ const Meeting = () => {
         try {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
-          socketRef.current.emit('offer', {
-            to: remoteSocketId,
-            offer: pc.localDescription,
-            username: user.username,
-          });
+          socketRef.current.emit('offer', { to: remoteSocketId, offer: pc.localDescription });
+          // Set encoding parameters
           pc.getSenders().forEach((sender) => {
             if (sender.track && sender.track.kind === 'video') {
               try {
@@ -131,18 +102,7 @@ const Meeting = () => {
       };
 
       pc.ontrack = (event) => {
-        console.log(`Received remote stream for ${remoteSocketId}:`, event.streams[0], {
-          videoTracks: event.streams[0].getVideoTracks().map((t) => ({
-            id: t.id,
-            enabled: t.enabled,
-            readyState: t.readyState,
-          })),
-          audioTracks: event.streams[0].getAudioTracks().map((t) => ({
-            id: t.id,
-            enabled: t.enabled,
-            readyState: t.readyState,
-          })),
-        });
+        console.log(`Received remote stream for ${remoteSocketId}:`, event.streams[0]);
         setParticipants((prev) =>
           prev.map((p) =>
             p.userId === remoteSocketId
@@ -160,9 +120,7 @@ const Meeting = () => {
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log(
-            `ICE candidate for ${remoteSocketId}: type=${event.candidate.type}, protocol=${event.candidate.protocol}`
-          );
+          console.log(`ICE candidate for ${remoteSocketId}: type=${event.candidate.type}, protocol=${event.candidate.protocol}`);
           socketRef.current.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
         }
       };
@@ -172,49 +130,39 @@ const Meeting = () => {
         if (pc.iceConnectionState === 'failed') {
           console.warn(`ICE failed for ${remoteSocketId}, restarting ICE`);
           pc.restartIce();
-        } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'closed') {
-          setParticipants((prev) => prev.filter((p) => p.userId !== remoteSocketId));
-          peerConnections.current.delete(remoteSocketId);
         }
       };
 
+      // Monitor connection quality
       const monitorConnection = async () => {
-        try {
-          const stats = await pc.getStats();
-          stats.forEach((report) => {
-            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-              console.log(`Network stats for ${remoteSocketId}:`, {
-                roundTripTime: report.currentRoundTripTime,
-                availableOutgoingBitrate: report.availableOutgoingBitrate,
-              });
-              setParticipants((prev) =>
-                prev.map((p) =>
-                  p.userId === remoteSocketId
-                    ? {
-                        ...p,
-                        connectionQuality: report.currentRoundTripTime > 0.3 ? 'poor' : 'good',
-                      }
-                    : p
-                )
-              );
-            }
-          });
-        } catch (err) {
-          console.error(`Failed to get stats for ${remoteSocketId}:`, err);
-        }
+        const stats = await pc.getStats();
+        stats.forEach((report) => {
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            console.log(`Network stats for ${remoteSocketId}:`, {
+              roundTripTime: report.currentRoundTripTime,
+              availableOutgoingBitrate: report.availableOutgoingBitrate,
+            });
+            setParticipants((prev) =>
+              prev.map((p) =>
+                p.userId === remoteSocketId
+                  ? { ...p, connectionQuality: report.currentRoundTripTime > 0.3 ? 'poor' : 'good' }
+                  : p
+              )
+            );
+          }
+        });
       };
       setInterval(monitorConnection, 5000);
 
       peerConnections.current.set(remoteSocketId, pc);
       return pc;
     },
-    [getIceServers, user]
+    [getIceServers]
   );
 
   const setupSocketListeners = useCallback(
     (socket) => {
       socket.on('user-joined', ({ userId, username }) => {
-        console.log(`User joined: ${userId} (${username})`);
         toast.info(`${username} joined.`);
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === userId)) return prev;
@@ -232,11 +180,9 @@ const Meeting = () => {
             },
           ];
         });
-        createPeerConnection(userId, username);
       });
 
       socket.on('offer', async ({ from, offer, username }) => {
-        console.log(`Received offer from ${from} (${username})`);
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === from)) return prev;
           return [
@@ -253,42 +199,33 @@ const Meeting = () => {
             },
           ];
         });
-        const pc = await createPeerConnection(from, username);
+        const pc = await createPeerConnection(from);
         if (!pc) return;
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          socket.emit('answer', { to: from, answer: pc.localDescription });
-        } catch (err) {
-          console.error(`Failed to handle offer from ${from}:`, err);
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('answer', { to: from, answer });
+      });
+
+      socket.on('answer', ({ from, answer }) => {
+        const pc = peerConnections.current.get(from);
+        if (pc) {
+          pc.setRemoteDescription(new RTCSessionDescription(answer)).catch((err) =>
+            console.error(`Failed to set remote description for ${from}:`, err)
+          );
         }
       });
 
-      socket.on('answer', async ({ from, answer }) => {
+      socket.on('ice-candidate', ({ from, candidate }) => {
         const pc = peerConnections.current.get(from);
         if (pc) {
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(answer));
-          } catch (err) {
-            console.error(`Failed to set remote description for ${from}:`, err);
-          }
-        }
-      });
-
-      socket.on('ice-candidate', async ({ from, candidate }) => {
-        const pc = peerConnections.current.get(from);
-        if (pc) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (err) {
-            console.error(`Failed to add ICE candidate for ${from}:`, err);
-          }
+          pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) =>
+            console.error(`Failed to add ICE candidate for ${from}:`, err)
+          );
         }
       });
 
       socket.on('user-left', (userId) => {
-        console.log(`User left: ${userId}`);
         const pc = peerConnections.current.get(userId);
         if (pc) {
           pc.close();
@@ -298,9 +235,7 @@ const Meeting = () => {
         toast.info(`User ${userId} left the meeting.`);
       });
 
-      socket.on('chat-message', (payload) => {
-        setMessages((prev) => [...prev, payload]);
-      });
+      socket.on('chat-message', (payload) => setMessages((prev) => [...prev, payload]));
 
       socket.on('drawing-start', ({ from, x, y, color, size, tool }) => {
         remoteDrawingStates.current.set(from, { color, size, tool });
@@ -370,33 +305,22 @@ const Meeting = () => {
         if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       });
     },
-    [createPeerConnection, user]
+    [createPeerConnection]
   );
 
   const replaceTrack = useCallback(
-    async (newTrack, isScreenShare = false, dontStopOld = false) => {
-      console.log('Replacing track:', {
-        kind: newTrack.kind,
-        id: newTrack.id,
-        enabled: newTrack.enabled,
-        readyState: newTrack.readyState,
-        isScreenShare,
-      });
-      for (const [remoteSocketId, pc] of peerConnections.current) {
+    async (newTrack, isScreenShare = false) => {
+      for (const pc of peerConnections.current.values()) {
         const sender = pc.getSenders().find((s) => s.track && s.track.kind === newTrack.kind);
         if (sender) {
-          try {
-            await sender.replaceTrack(newTrack);
-          } catch (err) {
-            console.error(`Failed to replace track for ${remoteSocketId}:`, err);
-          }
+          await sender.replaceTrack(newTrack).catch((err) => console.error('Failed to replace track:', err));
         }
       }
       if (localStreamRef.current) {
         const oldTrack = localStreamRef.current.getTracks().find((t) => t.kind === newTrack.kind);
         if (oldTrack) {
           localStreamRef.current.removeTrack(oldTrack);
-          if (!dontStopOld) oldTrack.stop();
+          oldTrack.stop();
         }
         localStreamRef.current.addTrack(newTrack);
         setParticipants((prev) =>
@@ -426,6 +350,7 @@ const Meeting = () => {
 
     const initialize = async () => {
       try {
+        // Validate roomId
         if (!roomId) {
           toast.error('Invalid meeting ID');
           navigate('/home');
@@ -446,18 +371,6 @@ const Meeting = () => {
             channelCount: 1,
           },
         });
-        console.log('Local stream initialized:', {
-          videoTracks: stream.getVideoTracks().map((t) => ({
-            id: t.id,
-            enabled: t.enabled,
-            readyState: t.readyState,
-          })),
-          audioTracks: stream.getAudioTracks().map((t) => ({
-            id: t.id,
-            enabled: t.enabled,
-            readyState: t.readyState,
-          })),
-        });
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
         setParticipants([
@@ -473,18 +386,21 @@ const Meeting = () => {
           },
         ]);
 
-        const socket = io(SERVER_URL, {
-          auth: { token: user.token },
-          transports: ['websocket'],
-          reconnectionAttempts: 5,
-        });
+        // Trigger initial playback
+        setTimeout(() => {
+          setParticipants((prev) =>
+            prev.map((p) =>
+              p.isLocal ? { ...p, stream: localStreamRef.current } : p
+            )
+          );
+        }, 100);
+
+        const socket = io(SERVER_URL, { auth: { token: user.token } });
         socketRef.current = socket;
         setupSocketListeners(socket);
 
-        socket.on('connect', () => {
-          console.log('Socket connected:', socket.id);
-          socket.emit('join-room', { roomId }, (otherUsers) => {
-            console.log('Joined room, other users:', otherUsers);
+        socket.emit('join-room', { roomId }, (otherUsers) => {
+          setTimeout(() => {
             otherUsers.forEach((otherUser) => {
               setParticipants((prev) => {
                 if (prev.some((p) => p.userId === otherUser.userId)) return prev;
@@ -502,16 +418,10 @@ const Meeting = () => {
                   },
                 ];
               });
-              createPeerConnection(otherUser.userId, otherUser.username);
+              createPeerConnection(otherUser.userId);
             });
-          });
+          }, 1000);
         });
-
-        socket.on('connect_error', (err) => {
-          console.error('Socket connection error:', err);
-          toast.error('Failed to connect to server. Retrying...');
-        });
-
         setIsLoading(false);
       } catch (error) {
         console.error('Initialization error:', error);
@@ -531,6 +441,7 @@ const Meeting = () => {
     };
   }, [roomId, user, navigate, createPeerConnection, setupSocketListeners]);
 
+  // Monitor local stream track changes
   useEffect(() => {
     const stream = localStreamRef.current;
     if (!stream) return;
@@ -539,12 +450,6 @@ const Meeting = () => {
     const audioTracks = stream.getAudioTracks();
 
     const handleTrackChange = () => {
-      console.log('Local track changed:', {
-        videoEnabled: videoTracks[0]?.enabled,
-        videoReadyState: videoTracks[0]?.readyState,
-        audioEnabled: audioTracks[0]?.enabled,
-        audioReadyState: audioTracks[0]?.readyState,
-      });
       setParticipants((prev) =>
         prev.map((p) =>
           p.isLocal
@@ -583,15 +488,7 @@ const Meeting = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (isSharingScreen && localCameraVideoRef.current && localCameraTrackRef.current) {
-      localCameraVideoRef.current.srcObject = new MediaStream([localCameraTrackRef.current]);
-      localCameraVideoRef.current.play().catch((err) => console.error('Failed to play local camera preview:', err));
-    } else if (!isSharingScreen && localCameraVideoRef.current) {
-      localCameraVideoRef.current.srcObject = null;
-    }
-  }, [isSharingScreen]);
-
+  // --- Media Control Handlers ---
   const toggleAudio = () => {
     const audioTrack = localStreamRef.current?.getAudioTracks()[0];
     if (audioTrack) {
@@ -600,7 +497,6 @@ const Meeting = () => {
       setParticipants((prev) =>
         prev.map((p) => (p.isLocal ? { ...p, audioEnabled: audioTrack.enabled } : p))
       );
-      console.log('Toggled audio:', { enabled: audioTrack.enabled });
     }
   };
 
@@ -612,12 +508,12 @@ const Meeting = () => {
       setParticipants((prev) =>
         prev.map((p) => (p.isLocal ? { ...p, videoEnabled: videoTrack.enabled } : p))
       );
-      console.log('Toggled video:', { enabled: videoTrack.enabled });
     }
   };
 
   const handleScreenShare = async () => {
     if (isSharingScreen) {
+      // Stop screen sharing
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
       if (localCameraTrackRef.current) {
@@ -636,11 +532,10 @@ const Meeting = () => {
             width: { max: 1280 },
             height: { max: 720 },
           },
-          audio: true, // Enable audio sharing if available
         });
         screenStreamRef.current = screenStream;
         const screenTrack = screenStream.getVideoTracks()[0];
-        await replaceTrack(screenTrack, true, true);
+        await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
         setParticipants((prev) =>
           prev.map((p) => (p.isLocal ? { ...p, isScreenSharing: true } : p))
@@ -661,20 +556,12 @@ const Meeting = () => {
     }
   };
 
-  const debouncedDrawingMove = useCallback(
-    debounce((data) => {
-      socketRef.current.emit('drawing-move', data);
-    }, 50),
-    []
-  );
-
+  // --- Annotation Handlers ---
   useEffect(() => {
     const canvas = annotationCanvasRef.current;
     if (!canvas || !isAnnotationActive) return;
 
     const ctx = canvas.getContext('2d');
-    let previewImage = null;
-
     const resizeCanvas = () => {
       if (videoContainerRef.current) {
         canvas.width = videoContainerRef.current.clientWidth;
@@ -684,20 +571,16 @@ const Meeting = () => {
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    const getCoords = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
-    };
+    const getCoords = (e) => ({
+      x: e.clientX - canvas.getBoundingClientRect().left,
+      y: e.clientY - canvas.getBoundingClientRect().top,
+    });
 
     const startDrawing = (e) => {
       drawingStateRef.current.isDrawing = true;
       const { x, y } = getCoords(e);
       drawingStateRef.current.startX = x;
       drawingStateRef.current.startY = y;
-      previewImage = null;
       if (currentTool === 'pen' || currentTool === 'eraser') {
         ctx.beginPath();
         ctx.moveTo(x, y);
@@ -714,35 +597,17 @@ const Meeting = () => {
     };
 
     const draw = (e) => {
-      if (!drawingStateRef.current.isDrawing) return;
+      if (!drawingStateRef.current.isDrawing || (currentTool !== 'pen' && currentTool !== 'eraser')) return;
       const { x, y } = getCoords(e);
-      if (currentTool === 'pen' || currentTool === 'eraser') {
-        ctx.lineWidth = currentBrushSize;
-        ctx.strokeStyle = myColor;
-        ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-        ctx.lineCap = 'round';
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        const relX = x / canvas.width;
-        const relY = y / canvas.height;
-        debouncedDrawingMove({ x: relX, y: relY });
-      } else {
-        if (previewImage) {
-          ctx.putImageData(previewImage, 0, 0);
-        } else {
-          previewImage = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        }
-        const localShapeData = {
-          tool: currentTool,
-          color: myColor,
-          size: currentBrushSize,
-          startX: drawingStateRef.current.startX,
-          startY: drawingStateRef.current.startY,
-          endX: x,
-          endY: y,
-        };
-        drawShape(localShapeData, ctx);
-      }
+      ctx.lineWidth = currentBrushSize;
+      ctx.strokeStyle = myColor;
+      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.lineCap = 'round';
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      const relX = x / canvas.width;
+      const relY = y / canvas.height;
+      socketRef.current.emit('drawing-move', { x: relX, y: relY });
     };
 
     const stopDrawing = (e) => {
@@ -767,8 +632,17 @@ const Meeting = () => {
           endX: relEndX,
           endY: relEndY,
         };
+        const localShapeData = {
+          tool: currentTool,
+          color: myColor,
+          size: currentBrushSize,
+          startX: drawingStateRef.current.startX,
+          startY: drawingStateRef.current.startY,
+          endX,
+          endY,
+        };
+        drawShape(localShapeData, ctx);
         socketRef.current.emit('draw-shape', shapeData);
-        previewImage = null;
       }
     };
 
@@ -784,7 +658,7 @@ const Meeting = () => {
       canvas.removeEventListener('mouseup', stopDrawing);
       canvas.removeEventListener('mouseleave', stopDrawing);
     };
-  }, [isAnnotationActive, myColor, currentBrushSize, currentTool, debouncedDrawingMove]);
+  }, [isAnnotationActive, myColor, currentBrushSize, currentTool]);
 
   const drawShape = (data, ctx) => {
     ctx.lineWidth = data.size;
@@ -852,7 +726,13 @@ const Meeting = () => {
           <div className="w-full h-full grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(300px, 1fr))` }}>
             {memoizedParticipants.map((p) => (
               <div key={p.userId} className="relative w-full h-full">
-                <VideoPlayer participant={p} isLocal={p.isLocal} localCameraVideoRef={localCameraVideoRef} />
+                {p.stream ? (
+                  <VideoPlayer participant={p} isLocal={p.isLocal} />
+                ) : (
+                  <div className="w-full h-full bg-black flex items-center justify-center text-white">
+                    {p.isLocal ? 'Your video loading...' : `Connecting to ${p.username}...`}
+                  </div>
+                )}
               </div>
             ))}
           </div>

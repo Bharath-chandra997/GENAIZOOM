@@ -24,7 +24,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
         // Only assign stream if it has changed
         if (videoRef.current.srcObject !== participant.stream) {
           console.log(`Assigning new stream to videoRef for participant: ${participant.userId}`, {
-            isLocal: participant.isLocal ?? isLocal,
+            isLocal: participant.isLocal,
             hasStream: !!participant.stream,
             videoEnabled: participant.videoEnabled ?? true,
             isScreenSharing: participant.isScreenSharing ?? false,
@@ -47,8 +47,6 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
               readyState: track.readyState,
             })),
           });
-          setIsStreamLoading(false);
-          return;
         }
 
         // Delay playback to ensure stream is ready
@@ -81,7 +79,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
     if (participant.stream && videoRef.current) {
       console.log(`Setting stream for participant: ${participant.userId}`, {
         username: participant.username,
-        isLocal: participant.isLocal ?? isLocal,
+        isLocal: participant.isLocal,
         hasStream: !!participant.stream,
         videoEnabled: participant.videoEnabled ?? true,
         isScreenSharing: participant.isScreenSharing ?? false,
@@ -139,14 +137,14 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
     } else {
       console.log('Stream not available for participant:', participant.userId, {
         username: participant.username,
-        isLocal: participant.isLocal ?? isLocal,
+        isLocal: participant.isLocal,
         hasStream: !!participant.stream,
         videoEnabled: participant.videoEnabled ?? true,
         isScreenSharing: participant.isScreenSharing ?? false,
       });
       setIsStreamLoading(false);
     }
-  }, [participant.userId, participant.stream, participant.videoEnabled, participant.isScreenSharing, isLocal]);
+  }, [participant.userId, participant.stream, participant.videoEnabled, participant.isScreenSharing, participant.isLocal]);
 
   return (
     <div className="video-container relative bg-gray-800">
@@ -168,23 +166,39 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
             <div className="text-sm">Loading...</div>
           </div>
         </div>
-      ) : (participant.stream && ((participant.videoEnabled ?? true) || (participant.isScreenSharing ?? false))) ? (
+      ) : participant.stream ? (
         <>
           <video
             ref={videoRef}
+            autoPlay
             playsInline
-            muted={participant.isLocal ?? isLocal}
+            muted={participant.isLocal}
             className={`w-full h-full object-cover ${isPinned ? 'pinned-video' : ''} ${
-              (participant.isLocal ?? isLocal) && !(participant.isScreenSharing ?? false) ? 'unmirror' : ''
-            }`}
+              !(participant.videoEnabled || participant.isScreenSharing) ? 'hidden' : ''
+            } ${participant.isLocal && !participant.isScreenSharing ? 'unmirror' : ''}`}
           />
-          {(participant.isLocal ?? isLocal) && (participant.isScreenSharing ?? false) && localCameraVideoRef && (
+          {participant.isLocal && participant.isScreenSharing && localCameraVideoRef && (
             <video
               ref={localCameraVideoRef}
+              autoPlay
               playsInline
               muted
               className="camera-video unmirror"
             />
+          )}
+          {!(participant.videoEnabled || participant.isScreenSharing) && (
+            <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <span className="text-xl sm:text-2xl font-bold text-white">
+                    {participant.username?.charAt(0)?.toUpperCase() || 'U'}
+                  </span>
+                </div>
+                <div className="text-white text-sm font-medium">
+                  {participant.username || 'Participant'} {participant.isLocal ? '(You)' : ''}
+                </div>
+              </div>
+            </div>
           )}
         </>
       ) : (
@@ -196,7 +210,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
               </span>
             </div>
             <div className="text-white text-sm font-medium">
-              {participant.username || 'Participant'} {participant.isLocal ?? isLocal ? '(You)' : ''}
+              {participant.username || 'Participant'} {participant.isLocal ? '(You)' : ''}
             </div>
           </div>
         </div>
@@ -205,21 +219,21 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-3">
         <div className="flex items-center justify-between">
           <span className="text-white text-sm font-medium truncate">
-            {participant.username || 'Participant'} {participant.isLocal ?? isLocal ? '(You)' : ''}
+            {participant.username || 'Participant'} {participant.isLocal ? '(You)' : ''}
             {participant.isHost && <span className="host-badge ml-2">Host</span>}
           </span>
           <div className="flex items-center space-x-1">
-            {!(participant.audioEnabled ?? true) && (
+            {!participant.audioEnabled && (
               <div className="bg-red-500 p-1 rounded-full" title="Microphone muted">
                 <span className="text-white text-xs">🔇</span>
               </div>
             )}
-            {!(participant.videoEnabled ?? true) && !(participant.isScreenSharing ?? false) && (
+            {!(participant.videoEnabled || participant.isScreenSharing) && (
               <div className="bg-gray-600 p-1 rounded-full" title="Camera off">
                 <span className="text-white text-xs">📷</span>
               </div>
             )}
-            {(participant.isScreenSharing ?? false) && (
+            {participant.isScreenSharing && (
               <div className="bg-blue-500 p-1 rounded-full" title="Screen sharing">
                 <span className="text-white text-xs">🖥</span>
               </div>

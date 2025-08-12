@@ -27,7 +27,6 @@ const Meeting = () => {
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
   const [mediaState, setMediaState] = useState({ audio: true, video: true });
   const [isSharingScreen, setIsSharingScreen] = useState(false);
-  // RESTORED: Annotation state
   const [isAnnotationActive, setIsAnnotationActive] = useState(false);
   const [currentTool, setCurrentTool] = useState('pen');
   const [currentBrushSize, setCurrentBrushSize] = useState(5);
@@ -38,7 +37,6 @@ const Meeting = () => {
   const localStreamRef = useRef(null);
   const localCameraTrackRef = useRef(null);
   const peerConnections = useRef(new Map());
-  // RESTORED: Annotation refs
   const annotationCanvasRef = useRef(null);
   const videoContainerRef = useRef(null);
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
@@ -56,47 +54,49 @@ const Meeting = () => {
     }
   }, []);
 
-  // CORRECTED LOGIC: Stable WebRTC connection setup
   const createPeerConnection = useCallback(async (remoteSocketId, remoteUsername) => {
-      try {
-        const iceServers = await getIceServers();
-        const pc = new RTCPeerConnection({ iceServers });
-
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            socketRef.current.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
-          }
-        };
-
-        pc.ontrack = (event) => {
-          console.log(`Received remote stream from ${remoteUsername} (${remoteSocketId})`);
-          setParticipants((prev) =>
-            prev.map((p) =>
-              p.userId === remoteSocketId ? { ...p, stream: event.streams[0] } : p
-            )
-          );
-        };
-
-        if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach(track => {
-            pc.addTrack(track, localStreamRef.current);
-          });
-        }
-
-        peerConnections.current.set(remoteSocketId, pc);
-        return pc;
-      } catch (error) {
-        console.error('Failed to create peer connection:', error);
-        return null;
+    try {
+      if (peerConnections.current.has(remoteSocketId)) {
+        return peerConnections.current.get(remoteSocketId);
       }
-    }, [getIceServers]);
+      const iceServers = await getIceServers();
+      const pc = new RTCPeerConnection({ iceServers });
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          socketRef.current.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
+        }
+      };
+
+      pc.ontrack = (event) => {
+        console.log(`Received remote stream from ${remoteUsername} (${remoteSocketId})`);
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.userId === remoteSocketId ? { ...p, stream: event.streams[0] } : p
+          )
+        );
+      };
+
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          pc.addTrack(track, localStreamRef.current);
+        });
+      }
+
+      peerConnections.current.set(remoteSocketId, pc);
+      return pc;
+    } catch (error) {
+      console.error('Failed to create peer connection:', error);
+      return null;
+    }
+  }, [getIceServers]);
 
   useEffect(() => {
     if (!user || !roomId) {
       navigate('/home');
       return;
     }
-    setMyColor(`hsl(${Math.random() * 360}, 80%, 60%)`);
+    setMyColor(`hsl(${Math.random() * 360}, 80%, 60%)`);
 
     const init = async () => {
       try {
@@ -105,49 +105,39 @@ const Meeting = () => {
           audio: { echoCancellation: true, noiseSuppression: true },
         });
         localStreamRef.current = stream;
-        localCameraTrackRef.current = stream.getVideoTracks()[0];
-        
-        setParticipants([{ 
-            userId: 'local-placeholder', 
-            username: `${user.username} (You)`, 
-            stream, 
-            isLocal: true 
-        }]);
+        localCameraTrackRef.current = stream.getVideoTracks()[0];
 
         const socket = io(SERVER_URL, { auth: { token: user.token } });
         socketRef.current = socket;
 
         socket.on('connect', () => {
-          setParticipants(prev => prev.map(p => 
-            p.userId === 'local-placeholder' ? { ...p, userId: socket.id } : p
-          ));
+          setParticipants([{ userId: socket.id, username: `${user.username} (You)`, stream, isLocal: true }]);
           socket.emit('join-room', { roomId }, (otherUsers) => {
             otherUsers.forEach(async (otherUser) => {
-              const pc = await createPeerConnection(otherUser.userId, otherUser.username);
-              if (pc) {
-                setParticipants(prev => [...prev, { userId: otherUser.userId, username: otherUser.username, stream: null, isLocal: false }]);
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit('offer', { to: otherUser.userId, offer });
-              }
+              setParticipants((prev) => [...prev, { userId: otherUser.userId, username: otherUser.username, stream: null, isLocal: false }]);
+              const pc = await createPeerConnection(otherUser.userId, otherUser.username);
+              if (pc) {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit('offer', { to: otherUser.userId, offer });
+              }
             });
           });
-        });
+        });
 
-        socket.on('user-joined', async ({ userId, username }) => {
+        socket.on('user-joined', ({ userId, username }) => {
           toast.info(`${username} joined.`);
-          // This user has joined, we will wait for their offer
-          setParticipants(prev => [...prev, { userId, username, stream: null, isLocal: false }]);
+          setParticipants((prev) => [...prev, { userId, username, stream: null, isLocal: false }]);
         });
 
         socket.on('offer', async ({ from, offer, username }) => {
-          const pc = await createPeerConnection(from, username);
-          if (pc) {
-            await pc.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            socket.emit('answer', { to: from, answer });
-          }
+          const pc = await createPeerConnection(from, username);
+          if (pc) {
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit('answer', { to: from, answer });
+          }
         });
 
         socket.on('answer', async ({ from, answer }) => {
@@ -159,7 +149,7 @@ const Meeting = () => {
 
         socket.on('ice-candidate', ({ from, candidate }) => {
           const pc = peerConnections.current.get(from);
-          if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate));
+          if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.error("Error adding ICE candidate:", e));
         });
 
         socket.on('user-left', (userId) => {
@@ -168,40 +158,40 @@ const Meeting = () => {
           if (pc) { pc.close(); peerConnections.current.delete(userId); }
           setParticipants((prev) => prev.filter((p) => p.userId !== userId));
         });
-        
-        // Chat and Annotation Listeners (Unchanged)
-        socket.on('chat-message', (payload) => setMessages((prev) => [...prev, payload]));
-        socket.on('drawing-start', ({ from, x, y, color, size, tool }) => {
-            remoteDrawingStates.current.set(from, { color, size, tool });
-            const canvas = annotationCanvasRef.current;
-            const ctx = canvas?.getContext('2d');
-            if (ctx && canvas) {
-                const absX = x * canvas.width;
-                const absY = y * canvas.height;
-                ctx.beginPath();
-                ctx.moveTo(absX, absY);
-            }
-        });
-        socket.on('drawing-move', ({ from, x, y }) => {
-            const state = remoteDrawingStates.current.get(from);
-            const canvas = annotationCanvasRef.current;
-            const ctx = canvas?.getContext('2d');
-            if (!state || !ctx || !canvas) return;
-            const absX = x * canvas.width;
-            const absY = y * canvas.height;
-            ctx.lineWidth = state.size;
-            ctx.strokeStyle = state.color;
-            ctx.globalCompositeOperation = state.tool === 'eraser' ? 'destination-out' : 'source-over';
-            ctx.lineCap = 'round';
-            ctx.lineTo(absX, absY);
-            ctx.stroke();
-        });
-        socket.on('drawing-end', ({ from }) => { remoteDrawingStates.current.delete(from); });
-        socket.on('clear-canvas', () => {
-            const canvas = annotationCanvasRef.current;
-            const ctx = canvas?.getContext('2d');
-            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-        });
+
+        // Chat and Annotation listeners remain
+        socket.on('chat-message', (payload) => setMessages((prev) => [...prev, payload]));
+        socket.on('drawing-start', ({ from, x, y, color, size, tool }) => {
+            remoteDrawingStates.current.set(from, { color, size, tool });
+            const canvas = annotationCanvasRef.current;
+            const ctx = canvas?.getContext('2d');
+            if (ctx && canvas) {
+                const absX = x * canvas.width;
+                const absY = y * canvas.height;
+                ctx.beginPath();
+                ctx.moveTo(absX, absY);
+            }
+        });
+        socket.on('drawing-move', ({ from, x, y }) => {
+            const state = remoteDrawingStates.current.get(from);
+            const canvas = annotationCanvasRef.current;
+            const ctx = canvas?.getContext('2d');
+            if (!state || !ctx || !canvas) return;
+            const absX = x * canvas.width;
+            const absY = y * canvas.height;
+            ctx.lineWidth = state.size;
+            ctx.strokeStyle = state.color;
+            ctx.globalCompositeOperation = state.tool === 'eraser' ? 'destination-out' : 'source-over';
+            ctx.lineCap = 'round';
+            ctx.lineTo(absX, absY);
+            ctx.stroke();
+        });
+        socket.on('drawing-end', ({ from }) => { remoteDrawingStates.current.delete(from); });
+        socket.on('clear-canvas', () => {
+            const canvas = annotationCanvasRef.current;
+            const ctx = canvas?.getContext('2d');
+            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
 
         setIsLoading(false);
       } catch (error) {
@@ -221,138 +211,132 @@ const Meeting = () => {
   }, [roomId, user, navigate, createPeerConnection]);
 
   const toggleMedia = (kind) => {
-      const track = kind === 'audio' 
-          ? localStreamRef.current?.getAudioTracks()[0]
-          : localStreamRef.current?.getVideoTracks()[0];
-      if (track) {
-          track.enabled = !track.enabled;
-          setMediaState(prev => ({ ...prev, [kind]: track.enabled }));
+      const track = kind === 'audio'
+          ? localStreamRef.current?.getAudioTracks()[0]
+          : localStreamRef.current?.getVideoTracks()[0];
+      if (track && !isSharingScreen) { // Don't allow toggling video during screen share
+          track.enabled = !track.enabled;
+          setMediaState(prev => ({ ...prev, [kind]: track.enabled }));
+      } else if (kind === 'audio' && track) { // Allow toggling audio during screen share
+        track.enabled = !track.enabled;
+        setMediaState(prev => ({...prev, audio: track.enabled}));
       }
-  };
+  };
 
-  const handleScreenShare = async () => {
-    const videoTrack = localStreamRef.current.getVideoTracks()[0];
-    if (isSharingScreen) {
-        // Stop sharing
-        const newTrack = localCameraTrackRef.current;
-        await videoTrack.stop(); // Stop the screen track
-        for (const pc of peerConnections.current.values()) {
-            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-            if (sender) await sender.replaceTrack(newTrack);
-        }
-        localStreamRef.current.removeTrack(videoTrack);
-        localStreamRef.current.addTrack(newTrack);
-        setIsSharingScreen(false);
-        setMediaState(prev => ({ ...prev, video: true }));
-    } else {
-        // Start sharing
-        try {
-            const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-            const newTrack = screenStream.getVideoTracks()[0];
-            localCameraTrackRef.current = videoTrack; // Save camera track
-            for (const pc of peerConnections.current.values()) {
-                const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-                if (sender) await sender.replaceTrack(newTrack);
-            }
-            localStreamRef.current.removeTrack(videoTrack);
-            localStreamRef.current.addTrack(newTrack);
-            setIsSharingScreen(true);
-            newTrack.onended = () => handleScreenShare(); // Revert when user stops sharing via browser UI
-        } catch (error) {
-            console.error("Screen share error:", error);
-            toast.error("Could not start screen share.");
-        }
-    }
-  };
+  const handleScreenShare = async () => {
+    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+    if (isSharingScreen) {
+        const newTrack = localCameraTrackRef.current;
+        await videoTrack.stop();
+        for (const pc of peerConnections.current.values()) {
+            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+            if (sender) await sender.replaceTrack(newTrack);
+        }
+        localStreamRef.current.removeTrack(videoTrack);
+        localStreamRef.current.addTrack(newTrack);
+        setIsSharingScreen(false);
+        setMediaState(prev => ({ ...prev, video: true }));
+    } else {
+        try {
+            const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const newTrack = screenStream.getVideoTracks()[0];
+            localCameraTrackRef.current = videoTrack; 
+            for (const pc of peerConnections.current.values()) {
+                const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                if (sender) await sender.replaceTrack(newTrack);
+            }
+            localStreamRef.current.removeTrack(videoTrack);
+            localStreamRef.current.addTrack(newTrack);
+            setIsSharingScreen(true);
+            newTrack.onended = () => handleScreenShare();
+        } catch (error) {
+            console.error("Screen share error:", error);
+            toast.error("Could not start screen share.");
+        }
+    }
+  };
 
   const sendMessage = (message) => {
     const payload = { message, username: user.username, userId: socketRef.current.id, timestamp: new Date().toISOString() };
     socketRef.current.emit('send-chat-message', payload);
     setMessages((prev) => [...prev, payload]);
   };
-  
-  // RESTORED: All annotation handlers and useEffect
-  useEffect(() => {
-    const canvas = annotationCanvasRef.current;
-    if (!canvas || !isAnnotationActive) return;
 
-    const ctx = canvas.getContext('2d');
-    const resizeCanvas = () => {
-      if (videoContainerRef.current) {
-        canvas.width = videoContainerRef.current.clientWidth;
-        canvas.height = videoContainerRef.current.clientHeight;
-      }
-    };
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+  // Annotation Handlers
+  useEffect(() => {
+    const canvas = annotationCanvasRef.current;
+    if (!canvas || !isAnnotationActive) return;
 
-    const getCoords = (e) => ({
-      x: e.clientX - canvas.getBoundingClientRect().left,
-      y: e.clientY - canvas.getBoundingClientRect().top,
-    });
+    const ctx = canvas.getContext('2d');
+    const resizeCanvas = () => {
+      if (videoContainerRef.current) {
+        canvas.width = videoContainerRef.current.clientWidth;
+        canvas.height = videoContainerRef.current.clientHeight;
+      }
+    };
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
 
-    const startDrawing = (e) => {
-      drawingStateRef.current.isDrawing = true;
-      const { x, y } = getCoords(e);
-      drawingStateRef.current.startX = x;
-      drawingStateRef.current.startY = y;
-      if (currentTool === 'pen' || currentTool === 'eraser') {
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        const relX = x / canvas.width;
-        const relY = y / canvas.height;
-        socketRef.current.emit('drawing-start', { x: relX, y: relY, color: myColor, size: currentBrushSize, tool: currentTool });
-      }
-    };
+    const getCoords = (e) => ({
+      x: e.clientX - canvas.getBoundingClientRect().left,
+      y: e.clientY - canvas.getBoundingClientRect().top,
+    });
 
-    const draw = (e) => {
-      if (!drawingStateRef.current.isDrawing || (currentTool !== 'pen' && currentTool !== 'eraser')) return;
-      const { x, y } = getCoords(e);
-      ctx.lineWidth = currentBrushSize;
-      ctx.strokeStyle = myColor;
-      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-      ctx.lineCap = 'round';
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      const relX = x / canvas.width;
-      const relY = y / canvas.height;
-      socketRef.current.emit('drawing-move', { x: relX, y: relY });
-    };
+    const startDrawing = (e) => {
+      drawingStateRef.current.isDrawing = true;
+      const { x, y } = getCoords(e);
+      if (currentTool === 'pen' || currentTool === 'eraser') {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        socketRef.current.emit('drawing-start', { x: x / canvas.width, y: y / canvas.height, color: myColor, size: currentBrushSize, tool: currentTool });
+      }
+    };
 
-    const stopDrawing = (e) => {
-      if (!drawingStateRef.current.isDrawing) return;
-      drawingStateRef.current.isDrawing = false;
-      ctx.closePath();
-      socketRef.current.emit('drawing-end');
-    };
+    const draw = (e) => {
+      if (!drawingStateRef.current.isDrawing || (currentTool !== 'pen' && currentTool !== 'eraser')) return;
+      const { x, y } = getCoords(e);
+      ctx.lineWidth = currentBrushSize;
+      ctx.strokeStyle = myColor;
+      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.lineCap = 'round';
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      socketRef.current.emit('drawing-move', { x: x / canvas.width, y: y / canvas.height });
+    };
 
-    canvas.addEventListener('mousedown', startDrawing);
-    canvas.addEventListener('mousemove', draw);
-    canvas.addEventListener('mouseup', stopDrawing);
-    canvas.addEventListener('mouseleave', stopDrawing);
+    const stopDrawing = () => {
+      if (!drawingStateRef.current.isDrawing) return;
+      drawingStateRef.current.isDrawing = false;
+      ctx.closePath();
+      socketRef.current.emit('drawing-end');
+    };
 
-    return () => {
-      window.removeEventListener('resize', resizeCanvas);
-      canvas.removeEventListener('mousedown', startDrawing);
-      canvas.removeEventListener('mousemove', draw);
-      canvas.removeEventListener('mouseup', stopDrawing);
-      canvas.removeEventListener('mouseleave', stopDrawing);
-    };
-  }, [isAnnotationActive, myColor, currentBrushSize, currentTool]);
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseleave', stopDrawing);
 
-  const clearCanvas = () => {
-    const canvas = annotationCanvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      socketRef.current.emit('clear-canvas');
-    }
-  };
+    return () => {
+      window.removeEventListener('resize', resizeCanvas);
+      canvas.removeEventListener('mousedown', startDrawing);
+      canvas.removeEventListener('mousemove', draw);
+      canvas.removeEventListener('mouseup', stopDrawing);
+      canvas.removeEventListener('mouseleave', stopDrawing);
+    };
+  }, [isAnnotationActive, myColor, currentBrushSize, currentTool]);
+
+  const clearCanvas = () => {
+    const canvas = annotationCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      socketRef.current.emit('clear-canvas');
+    }
+  };
 
   if (isLoading) return <div className="h-screen bg-gray-900 flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
   return (
-    // RESTORED: Original UI structure and class names
     <div className="h-screen bg-gray-900 flex flex-col overflow-hidden">
       <div className="bg-gray-800 text-white p-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Meeting: {roomId}</h1>
@@ -361,7 +345,6 @@ const Meeting = () => {
 
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 relative p-2" ref={videoContainerRef}>
-          {/* RESTORED: Annotation toolbar and canvas */}
           <AnnotationToolbar
             isAnnotationActive={isAnnotationActive}
             toggleAnnotations={() => setIsAnnotationActive((prev) => !prev)}
@@ -393,8 +376,8 @@ const Meeting = () => {
         <button onClick={() => toggleMedia('audio')} className="p-2 rounded text-white bg-gray-600">
           {mediaState.audio ? 'Mute 🎤' : 'Unmute 🔇'}
         </button>
-        <button onClick={() => toggleMedia('video')} className="p-2 rounded text-white bg-gray-600">
-          {mediaState.video && !isSharingScreen ? 'Stop Video 📷' : 'Start Video 📹'}
+        <button onClick={() => toggleMedia('video')} className="p-2 rounded text-white bg-gray-600" disabled={isSharingScreen}>
+          {mediaState.video ? 'Stop Video 📷' : 'Start Video 📹'}
         </button>
         <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-600">
           {isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}

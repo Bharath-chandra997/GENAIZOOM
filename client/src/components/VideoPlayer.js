@@ -2,12 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 
 const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLocal }) => {
   const videoRef = useRef(null);
-  const lastStreamRef = useRef(null); // Track last assigned stream
+  const lastStreamRef = useRef(null);
   const [isStreamLoading, setIsStreamLoading] = useState(true);
   const [isParticipantInvalid, setIsParticipantInvalid] = useState(false);
 
   useEffect(() => {
-    // Check for invalid participant
     if (!participant || !participant.userId || participant.isLocal === undefined) {
       console.warn('Invalid participant data:', participant);
       setIsParticipantInvalid(true);
@@ -16,12 +15,8 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
     }
     setIsParticipantInvalid(false);
 
-    let retryCount = 0;
-    const maxRetries = 3;
-
-    const playVideo = () => {
+    const playVideo = async () => {
       if (videoRef.current && participant.stream) {
-        // Only assign stream if it has changed
         if (videoRef.current.srcObject !== participant.stream) {
           console.log(`Assigning new stream to videoRef for participant: ${participant.userId}`, {
             isLocal: participant.isLocal ?? isLocal,
@@ -36,7 +31,6 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
           console.log(`Stream already assigned for participant: ${participant.userId}`);
         }
 
-        // Check track state before playing
         const videoTracks = participant.stream.getVideoTracks();
         if (videoTracks.length === 0 || !videoTracks[0].enabled || videoTracks[0].readyState !== 'live') {
           console.warn('No valid video tracks to play:', {
@@ -51,23 +45,13 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
           return;
         }
 
-        // Delay playback to ensure stream is ready
-        setTimeout(() => {
-          if (videoRef.current && videoRef.current.paused && !videoRef.current.ended) {
-            videoRef.current.play().catch((error) => {
-              console.error('Play error:', error, { retryCount, userId: participant.userId });
-              if (retryCount < maxRetries && error.name === 'AbortError') {
-                retryCount++;
-                setTimeout(playVideo, 500);
-              } else {
-                console.error('Max retries reached or non-recoverable error for video playback:', participant.userId);
-                setIsStreamLoading(false);
-              }
-            });
-          } else {
-            setIsStreamLoading(false);
-          }
-        }, 100); // Small delay to ensure stream is loaded
+        try {
+          await videoRef.current.play();
+          setIsStreamLoading(false);
+        } catch (error) {
+          console.error('Video play error:', error, { userId: participant.userId });
+          setIsStreamLoading(false);
+        }
       } else {
         console.warn('Cannot play video: missing videoRef or stream', {
           videoRefExists: !!videoRef.current,
@@ -97,17 +81,6 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
       setIsStreamLoading(true);
       playVideo();
 
-      // Monitor video element state with loadedmetadata for reliable play
-      const handleLoadedMetadata = () => {
-        console.log('Video loadedmetadata event:', participant.userId);
-        setIsStreamLoading(false);
-        if (videoRef.current && videoRef.current.paused && !videoRef.current.ended) {
-          videoRef.current.play().catch((error) => console.error('Post-loadedmetadata play error:', error));
-        }
-      };
-      videoRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
-
-      // Monitor track changes
       const videoTracks = participant.stream.getVideoTracks();
       const handleTrackChange = () => {
         console.log('Video track changed for participant:', participant.userId, {
@@ -115,7 +88,6 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
           readyState: videoTracks[0]?.readyState,
         });
         if (videoRef.current && participant.stream && (participant.videoEnabled || participant.isScreenSharing)) {
-          retryCount = 0;
           playVideo();
         }
       };
@@ -132,8 +104,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
           track.removeEventListener('ended', handleTrackChange);
         });
         if (videoRef.current) {
-          videoRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
-          videoRef.current.srcObject = null; // Clear stream to prevent memory leaks
+          videoRef.current.srcObject = null;
         }
       };
     } else {
@@ -146,7 +117,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
       });
       setIsStreamLoading(false);
     }
-  }, [participant.userId, participant.stream, participant.videoEnabled, participant.isScreenSharing, isLocal]);
+  }, [participant]);
 
   return (
     <div className="video-container relative bg-gray-800">

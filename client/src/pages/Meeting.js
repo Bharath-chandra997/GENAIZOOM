@@ -55,8 +55,11 @@ const Meeting = () => {
       return response.data;
     } catch (error) {
       console.error('Failed to get ICE servers from Twilio:', error);
-      toast.error('Unable to fetch ICE servers from Twilio. Using fallback STUN server.');
-      return [{ urls: 'stun:stun.l.google.com:19302' }];
+      toast.error('Unable to fetch ICE servers from Twilio. Using fallback servers.');
+      return [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'turn:turn.example.com:3478', username: 'user', credential: 'pass' }, // Replace with your TURN server
+      ];
     }
   }, []);
 
@@ -72,7 +75,12 @@ const Meeting = () => {
         toast.error(`Cannot connect to ${remoteSocketId} without ICE servers.`);
         return null;
       }
-      const pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: 'all' });
+      const pc = new RTCPeerConnection({
+        iceServers,
+        iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
+      });
 
       localStreamRef.current.getTracks().forEach((track) => {
         pc.addTrack(track, localStreamRef.current);
@@ -89,7 +97,9 @@ const Meeting = () => {
               try {
                 const params = sender.getParameters();
                 params.encodings = params.encodings || [{}];
-                params.encodings[0].maxBitrate = 800000;
+                params.encodings[0].maxBitrate = 2000000; // Increased to 2Mbps
+                params.encodings[0].scaleResolutionDownBy = 1;
+                params.encodings[0].maxFramerate = 30;
                 sender.setParameters(params);
               } catch (err) {
                 console.error(`Failed to set parameters for sender:`, err);
@@ -127,9 +137,10 @@ const Meeting = () => {
 
       pc.oniceconnectionstatechange = () => {
         console.log(`ICE connection state for ${remoteSocketId}: ${pc.iceConnectionState}`);
-        if (pc.iceConnectionState === 'failed') {
-          console.warn(`ICE failed for ${remoteSocketId}, restarting ICE`);
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          console.warn(`ICE connection issue for ${remoteSocketId}, restarting ICE`);
           pc.restartIce();
+          toast.warn(`Connection issue with ${remoteSocketId}, attempting to reconnect...`);
         }
       };
 
@@ -141,18 +152,23 @@ const Meeting = () => {
             console.log(`Network stats for ${remoteSocketId}:`, {
               roundTripTime: report.currentRoundTripTime,
               availableOutgoingBitrate: report.availableOutgoingBitrate,
+              packetsLost: report.packetsLost,
             });
             setParticipants((prev) =>
               prev.map((p) =>
                 p.userId === remoteSocketId
-                  ? { ...p, connectionQuality: report.currentRoundTripTime > 0.3 ? 'poor' : 'good' }
+                  ? {
+                      ...p,
+                      connectionQuality:
+                        report.currentRoundTripTime > 0.3 || report.packetsLost > 0 ? 'poor' : 'good',
+                    }
                   : p
               )
             );
           }
         });
       };
-      setInterval(monitorConnection, 5000);
+      setInterval(monitorConnection, 3000);
 
       peerConnections.current.set(remoteSocketId, pc);
       return pc;
@@ -359,16 +375,17 @@ const Meeting = () => {
 
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { min: 640, ideal: 1280, max: 1920 },
-            height: { min: 360, ideal: 720, max: 1080 },
-            frameRate: { min: 15, ideal: 24, max: 30 },
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 60 },
+            facingMode: 'user',
           },
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
-            sampleRate: 44100,
-            channelCount: 1,
+            sampleRate: 48000,
+            channelCount: 2,
           },
         });
         localStreamRef.current = stream;
@@ -461,6 +478,9 @@ const Meeting = () => {
             : p
         )
       );
+      if (!audioTracks[0]?.enabled) {
+        toast.warn('Microphone is muted or disconnected.');
+      }
     };
 
     videoTracks.forEach((track) => {
@@ -513,7 +533,6 @@ const Meeting = () => {
 
   const handleScreenShare = async () => {
     if (isSharingScreen) {
-      // Stop screen sharing
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
       if (localCameraTrackRef.current) {
@@ -528,10 +547,11 @@ const Meeting = () => {
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             cursor: 'always',
-            frameRate: { min: 10, ideal: 15, max: 20 },
-            width: { max: 1280 },
-            height: { max: 720 },
+            frameRate: { ideal: 30, max: 60 },
+            width: { ideal: 1920, max: 2560 },
+            height: { ideal: 1080, max: 1440 },
           },
+          audio: true,
         });
         screenStreamRef.current = screenStream;
         const screenTrack = screenStream.getVideoTracks()[0];

@@ -1,7 +1,6 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 
-// Add default empty arrays for props to prevent crash
 const Participants = ({ 
     participants = [], 
     pendingRequests = [], 
@@ -26,7 +25,6 @@ const Participants = ({
         </button>
       </div>
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {/* Waiting Room Section (will only show if pendingRequests has items) */}
         {pendingRequests.length > 0 && meetingInfo?.isHost && (
           <div className="p-4 border-b border-gray-700">
             <h4 className="text-md font-semibold text-white mb-2">Pending Join Requests</h4>
@@ -34,11 +32,10 @@ const Participants = ({
           </div>
         )}
 
-        {/* Main Participant List */}
         <div className="p-4 space-y-2">
           {participants.map((participant) => (
             <div
-              key={participant.userId || participant.peerId} // Use a key that is guaranteed to be there
+              key={participant.userId || participant.peerId}
               className="flex items-center justify-between p-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors duration-200"
             >
               <div className="flex items-center space-x-3">

@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import io from 'socket.io-client';
 import axios from 'axios';
-// Import Components
 import Chat from '../components/Chat';
 import Participants from '../components/Participants';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -45,19 +44,18 @@ const Meeting = () => {
   const videoContainerRef = useRef(null);
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
   const remoteDrawingStates = useRef(new Map());
-  const localVideoRef = useRef(null); // Ref for local video element to solve Issue #1
+  const localVideoRef = useRef(null); // Added for Issue 1: Local video display
 
-  // Memoize participants to prevent unnecessary re-renders
+  // Memoize participants
   const memoizedParticipants = useMemo(() => participants, [participants]);
-  
-  // Memoize local participant for easy access
-  const localParticipant = useMemo(() => memoizedParticipants.find(p => p.isLocal), [memoizedParticipants]);
-
 
   // Paginated participants with swipe logic
   const totalPages = Math.ceil(memoizedParticipants.length / gridSize);
-  const smallParticipants = useMemo(() => 
-    pinnedParticipantId ? memoizedParticipants.filter(p => p.userId !== pinnedParticipantId) : [], 
+  const smallParticipants = useMemo(
+    () =>
+      pinnedParticipantId
+        ? memoizedParticipants.filter((p) => p.userId !== pinnedParticipantId)
+        : memoizedParticipants,
     [pinnedParticipantId, memoizedParticipants]
   );
   const totalSmallPages = Math.ceil(smallParticipants.length / gridSize);
@@ -82,11 +80,19 @@ const Meeting = () => {
       const iceServers = await getIceServers();
       const pc = new RTCPeerConnection({ iceServers });
       pc.ontrack = (event) => {
-        setParticipants((prev) => prev.map((p) =>
-          p.userId === remoteSocketId
-            ? { ...p, stream: event.streams[0], videoEnabled: event.streams[0].getVideoTracks()[0]?.enabled ?? false, audioEnabled: event.streams[0].getAudioTracks()[0]?.enabled ?? false }
-            : p
-        ));
+        console.log(`Received remote stream for ${remoteSocketId}:`, event.streams[0]);
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.userId === remoteSocketId
+              ? {
+                  ...p,
+                  stream: event.streams[0],
+                  videoEnabled: event.streams[0].getVideoTracks()[0]?.enabled ?? false,
+                  audioEnabled: event.streams[0].getAudioTracks()[0]?.enabled ?? false,
+                }
+              : p
+          )
+        );
       };
       pc.onicecandidate = (event) => {
         if (event.candidate) {
@@ -94,6 +100,7 @@ const Meeting = () => {
         }
       };
       pc.oniceconnectionstatechange = () => {
+        console.log(`ICE state for ${remoteSocketId}: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === 'failed') {
           pc.restartIce();
         }
@@ -106,28 +113,43 @@ const Meeting = () => {
 
   const setupSocketListeners = useCallback(
     (socket) => {
-      // Set socket ID for local user to fix host assignment and key issues
-      socket.on('connect', () => {
-        setParticipants(prev => prev.map(p =>
-          p.userId === 'local' ? { ...p, userId: socket.id } : p
-        ));
-      });
-
       socket.on('user-joined', ({ userId, username, isHost }) => {
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === userId)) return prev;
-          return [
+          const updatedParticipants = [
             ...prev,
-            { userId, username, stream: null, isLocal: false, isHost, videoEnabled: false, audioEnabled: false, isScreenSharing: false, connectionQuality: 'good' },
+            {
+              userId,
+              username,
+              stream: null,
+              isLocal: false,
+              isHost,
+              videoEnabled: false,
+              audioEnabled: false,
+              isScreenSharing: false,
+              connectionQuality: 'good',
+            },
           ];
+          return updatedParticipants;
         });
       });
+
       socket.on('offer', async ({ from, offer, username, isHost }) => {
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === from)) return prev;
           return [
             ...prev,
-            { userId: from, username, stream: null, isLocal: false, isHost, videoEnabled: false, audioEnabled: false, isScreenSharing: false, connectionQuality: 'good' },
+            {
+              userId: from,
+              username,
+              stream: null,
+              isLocal: false,
+              isHost,
+              videoEnabled: false,
+              audioEnabled: false,
+              isScreenSharing: false,
+              connectionQuality: 'good',
+            },
           ];
         });
         const pc = await createPeerConnection(from);
@@ -140,18 +162,25 @@ const Meeting = () => {
         await pc.setLocalDescription(answer);
         socket.emit('answer', { to: from, answer: pc.localDescription });
       });
+
       socket.on('answer', ({ from, answer }) => {
         const pc = peerConnections.current.get(from);
         if (pc) {
-          pc.setRemoteDescription(new RTCSessionDescription(answer)).catch((err) => console.error(`Failed to set remote description: ${err}`));
+          pc.setRemoteDescription(new RTCSessionDescription(answer)).catch((err) =>
+            console.error(`Failed to set remote description: ${err}`)
+          );
         }
       });
+
       socket.on('ice-candidate', ({ from, candidate }) => {
         const pc = peerConnections.current.get(from);
         if (pc) {
-          pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) => console.error(`Failed to add ICE candidate: ${err}`));
+          pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) =>
+            console.error(`Failed to add ICE candidate: ${err}`)
+          );
         }
       });
+
       socket.on('user-left', (userId) => {
         const pc = peerConnections.current.get(userId);
         if (pc) {
@@ -161,46 +190,156 @@ const Meeting = () => {
         setParticipants((prev) => prev.filter((p) => p.userId !== userId));
         if (pinnedParticipantId === userId) {
           setPinnedParticipantId(null);
+          socketRef.current.emit('unpin-participant');
         }
       });
-      socket.on('chat-message', (payload) => setMessages((prev) => [...prev, payload]));
-      
-      // ISSUE 2 & 4 FIX: Pinning events handled to sync state across clients.
-      socket.on('pin-participant', ({ userId }) => setPinnedParticipantId(userId));
-      socket.on('unpin-participant', () => setPinnedParticipantId(null));
 
-      // ISSUE 2 & 4 FIX: Auto-pin screen share for better focus.
+      socket.on('chat-message', (payload) => setMessages((prev) => [...prev, payload]));
+
+      socket.on('pin-participant', ({ userId }) => {
+        setPinnedParticipantId(userId);
+        setCurrentOffset(0); // Reset offset when pinning
+      });
+
+      socket.on('unpin-participant', () => {
+        setPinnedParticipantId(null);
+        setCurrentOffset(0);
+      });
+
       socket.on('screen-share-start', ({ userId }) => {
-        setParticipants((prev) => prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: true } : p)));
-        setPinnedParticipantId(userId); // Automatically pin the screen sharer
+        setParticipants((prev) =>
+          prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: true } : p))
+        );
+        const localIsHost = participants.find((p) => p.isLocal)?.isHost;
+        if (localIsHost && !pinnedParticipantId) {
+          setPinnedParticipantId(userId);
+          socket.emit('pin-participant', { userId });
+        }
       });
 
       socket.on('screen-share-stop', ({ userId }) => {
-        setParticipants((prev) => prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false } : p)));
+        setParticipants((prev) =>
+          prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false } : p))
+        );
         if (pinnedParticipantId === userId) {
-            setPinnedParticipantId(null); // Unpin if they were the pinned one
+          setPinnedParticipantId(null);
+          const localIsHost = participants.find((p) => p.isLocal)?.isHost;
+          if (localIsHost) {
+            socket.emit('unpin-participant');
+          }
         }
       });
-      
-      // Drawing and annotation events (unchanged)
-      socket.on('drawing-start',({ from, x, y, color, size, tool }) => {/* ... */});
-      socket.on('drawing-move', ({ from, x, y }) => {/* ... */});
-      socket.on('drawing-end', ({ from }) => {/* ... */});
-      socket.on('draw-shape', (data) => {/* ... */});
-      socket.on('clear-canvas', () => {/* ... */});
+
+      socket.on('drawing-start', ({ from, x, y, color, size, tool }) => {
+        remoteDrawingStates.current.set(from, { color, size, tool });
+        const canvas = annotationCanvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (ctx && canvas) {
+          ctx.beginPath();
+          ctx.moveTo(x * canvas.width, y * canvas.height);
+        }
+      });
+
+      socket.on('drawing-move', ({ from, x, y }) => {
+        const state = remoteDrawingStates.current.get(from);
+        const canvas = annotationCanvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!state || !ctx || !canvas) return;
+        ctx.lineWidth = state.size;
+        ctx.strokeStyle = state.color;
+        ctx.globalCompositeOperation = state.tool === 'eraser' ? 'destination-out' : 'source-over';
+        ctx.lineCap = 'round';
+        ctx.lineTo(x * canvas.width, y * canvas.height);
+        ctx.stroke();
+      });
+
+      socket.on('drawing-end', ({ from }) => {
+        remoteDrawingStates.current.delete(from);
+      });
+
+      socket.on('draw-shape', (data) => {
+        const canvas = annotationCanvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (ctx && canvas) {
+          const absStartX = data.startX * canvas.width;
+          const absStartY = data.startY * canvas.height;
+          const absEndX = data.endX * canvas.width;
+          const absEndY = data.endY * canvas.height;
+          const absWidth = absEndX - absStartX;
+          const absHeight = absEndY - absStartY;
+          ctx.lineWidth = data.size;
+          ctx.strokeStyle = data.color;
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.beginPath();
+          switch (data.tool) {
+            case 'rectangle':
+              ctx.rect(absStartX, absStartY, absWidth, absHeight);
+              break;
+            case 'circle':
+              const radius = Math.sqrt(absWidth ** 2 + absHeight ** 2);
+              if (radius > 0) {
+                ctx.arc(absStartX, absStartY, radius, 0, 2 * Math.PI);
+              }
+              break;
+            default:
+              break;
+          }
+          ctx.stroke();
+        }
+      });
+
+      socket.on('clear-canvas', () => {
+        const canvas = annotationCanvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      });
     },
-    [createPeerConnection, pinnedParticipantId]
+    [createPeerConnection, pinnedParticipantId, participants]
   );
-  
-  // ISSUE 3 FIX: A robust `replaceTrack` function to update streams for all peers.
-  const replaceTrack = useCallback(async (newTrack) => {
-    for (const pc of peerConnections.current.values()) {
-      const sender = pc.getSenders().find((s) => s.track && s.track.kind === newTrack.kind);
-      if (sender) {
-        await sender.replaceTrack(newTrack).catch((err) => console.error('Failed to replace track:', err));
+
+  const replaceTrack = useCallback(
+    async (newTrack, isScreenShare = false) => {
+      for (const pc of peerConnections.current.values()) {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === newTrack.kind);
+        if (sender) {
+          await sender.replaceTrack(newTrack).catch((err) => console.error('Failed to replace track:', err));
+        }
       }
-    }
-  }, []);
+      if (localStreamRef.current) {
+        const oldTrack = localStreamRef.current.getTracks().find((t) => t.kind === newTrack.kind);
+        if (oldTrack) {
+          localStreamRef.current.removeTrack(oldTrack);
+          oldTrack.stop();
+        }
+        localStreamRef.current.addTrack(newTrack);
+        // Issue 1: Update local video display immediately
+        if (newTrack.kind === 'video' && localVideoRef.current) {
+          localStreamRef.current.getVideoTracks()[0].enabled = isVideoEnabled;
+          localVideoRef.current.srcObject = localStreamRef.current;
+          localVideoRef.current.play().catch((err) => console.error('Local video play error:', err));
+        }
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.isLocal
+              ? {
+                  ...p,
+                  stream: localStreamRef.current,
+                  videoEnabled: newTrack.kind === 'video' ? newTrack.enabled : p.videoEnabled,
+                  audioEnabled: newTrack.kind === 'audio' ? newTrack.enabled : p.audioEnabled,
+                  isScreenSharing: newTrack.kind === 'video' && isScreenShare,
+                }
+              : p
+          )
+        );
+      }
+      if (isScreenShare) {
+        socketRef.current.emit('screen-share-start', { userId: socketRef.current.id });
+      } else {
+        socketRef.current.emit('screen-share-stop', { userId: socketRef.current.id });
+      }
+    },
+    [isVideoEnabled]
+  );
 
   useEffect(() => {
     if (pinnedParticipantId) setCurrentOffset(0);
@@ -212,46 +351,115 @@ const Meeting = () => {
       return;
     }
     setMyColor(`hsl(${Math.random() * 360}, 80%, 60%)`);
-    
+    const checkPermissions = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        return true;
+      } catch (err) {
+        console.error('Permission check failed:', err);
+        toast.error('Please allow camera and microphone access.');
+        return false;
+      }
+    };
+
     const initialize = async () => {
       try {
         setIsLoading(true);
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: true,
-        });
-
+        if (!roomId) {
+          toast.error('Invalid meeting ID');
+          navigate('/home');
+          return;
+        }
+        const hasPermissions = await checkPermissions();
+        if (!hasPermissions) {
+          navigate('/home');
+          return;
+        }
+        let stream;
+        const maxRetries = 3;
+        let attempt = 0;
+        while (!stream && attempt < maxRetries) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+              audio: true,
+            });
+            if (stream.getVideoTracks().length > 0) {
+              stream.getVideoTracks()[0].onmute = () => console.log('Video track muted');
+              stream.getVideoTracks()[0].onunmute = () => console.log('Video track unmuted');
+            }
+          } catch (err) {
+            console.error(`getUserMedia attempt ${attempt + 1} failed:`, err);
+            attempt++;
+            if (attempt < maxRetries) {
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+          }
+        }
+        if (!stream) {
+          throw new Error('Failed to access media devices');
+        }
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
-
-        // ISSUE 1 FIX: Immediately assign stream to the local participant state.
-        // The VideoPlayer component will use this to show the local video preview.
-        // The `userId` is temporary and will be updated to the socket.id on connection.
+        // Issue 1: Assign local stream to video element immediately
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch((err) => console.error('Local video play error:', err));
+        }
+        // Issue 4: Set host based on being the first to join
         setParticipants([
-          { userId: 'local', username: `${user.username} (You)`, stream, isLocal: true, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false, connectionQuality: 'good' },
+          {
+            userId: 'local',
+            username: `${user.username} (You)`,
+            stream,
+            isLocal: true,
+            isHost: false, // Will be updated after join-room response
+            videoEnabled: true,
+            audioEnabled: true,
+            isScreenSharing: false,
+            connectionQuality: 'good',
+          },
         ]);
-
         const socket = io(SERVER_URL, { auth: { token: user.token }, transports: ['websocket'] });
         socketRef.current = socket;
         setupSocketListeners(socket);
-
         socket.emit('join-room', { roomId }, async (otherUsers) => {
-          // ISSUE 4 FIX: Host status is determined by the server (first user in room).
-          // This logic correctly sets the `isHost` flag on the local participant.
-          const isHost = otherUsers.length === 0;
-          setParticipants((prev) => prev.map((p) => p.isLocal ? { ...p, isHost } : p));
-          
+          console.log('Joined room, other users:', otherUsers);
+          // Issue 4: Set isHost true if first to join (no other users)
+          setParticipants((prev) =>
+            prev.map((p) => (p.isLocal ? { ...p, isHost: otherUsers.length === 0 } : p))
+          );
           for (const otherUser of otherUsers) {
             setParticipants((prev) => {
               if (prev.some((p) => p.userId === otherUser.userId)) return prev;
-              return [...prev, { userId: otherUser.userId, username: otherUser.username, stream: null, isLocal: false, isHost: otherUser.isHost || false, videoEnabled: false, audioEnabled: false, isScreenSharing: false, connectionQuality: 'good' }];
+              return [
+                ...prev,
+                {
+                  userId: otherUser.userId,
+                  username: otherUser.username,
+                  stream: null,
+                  isLocal: false,
+                  isHost: otherUser.isHost || false,
+                  videoEnabled: false,
+                  audioEnabled: false,
+                  isScreenSharing: false,
+                  connectionQuality: 'good',
+                },
+              ];
             });
             const pc = await createPeerConnection(otherUser.userId);
             if (!pc || !localStreamRef.current) continue;
-            localStreamRef.current.getTracks().forEach((track) => pc.addTrack(track, localStreamRef.current));
+            localStreamRef.current.getTracks().forEach((track) => {
+              pc.addTrack(track, localStreamRef.current);
+            });
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            socketRef.current.emit('offer', { to: otherUser.userId, offer: pc.localDescription });
+            socketRef.current.emit('offer', {
+              to: otherUser.userId,
+              offer: pc.localDescription,
+              isHost: otherUsers.length === 0,
+            });
           }
         });
         setIsLoading(false);
@@ -276,64 +484,66 @@ const Meeting = () => {
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       setIsAudioMuted(!audioTrack.enabled);
-      setParticipants((prev) => prev.map((p) => (p.isLocal ? { ...p, audioEnabled: audioTrack.enabled } : p)));
+      setParticipants((prev) =>
+        prev.map((p) => (p.isLocal ? { ...p, audioEnabled: audioTrack.enabled } : p))
+      );
     }
   };
 
   const toggleVideo = () => {
-    // ISSUE 1 FIX: This function now correctly enables/disables the video track.
-    // The initial video visibility is handled in the `initialize` effect.
     const videoTrack = localStreamRef.current?.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.enabled = !videoTrack.enabled;
       setIsVideoEnabled(videoTrack.enabled);
-      setParticipants((prev) => prev.map((p) => (p.isLocal ? { ...p, videoEnabled: videoTrack.enabled } : p)));
+      setParticipants((prev) =>
+        prev.map((p) => (p.isLocal ? { ...p, videoEnabled: videoTrack.enabled } : p))
+      );
+      // Issue 1: Update local video display when toggling
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch((err) => console.error('Local video play error:', err));
+      }
     }
   };
 
   const handleScreenShare = async () => {
     if (isSharingScreen) {
-      // --- Stop Sharing ---
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
       if (localCameraTrackRef.current) {
-        await replaceTrack(localCameraTrackRef.current);
-        
-        // ISSUE 3 FIX: Create a new MediaStream to force React to update the video element's srcObject, preventing a frozen frame.
-        const newCameraStream = new MediaStream([localCameraTrackRef.current, ...localStreamRef.current.getAudioTracks()]);
-        localStreamRef.current = newCameraStream;
-
-        setParticipants((prev) => prev.map((p) => (p.isLocal ? { ...p, stream: newCameraStream, isScreenSharing: false } : p)));
+        // Issue 3: Restore camera stream after stopping screen share
+        await replaceTrack(localCameraTrackRef.current, false);
         setIsSharingScreen(false);
-        socketRef.current.emit('screen-share-stop');
+        setParticipants((prev) =>
+          prev.map((p) => (p.isLocal ? { ...p, isScreenSharing: false } : p))
+        );
+        if (pinnedParticipantId === socketRef.current?.id) {
+          setPinnedParticipantId(null);
+          socketRef.current.emit('unpin-participant');
+        }
       }
     } else {
-      // --- Start Sharing ---
       try {
         const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         screenStreamRef.current = screenStream;
         const screenTrack = screenStream.getVideoTracks()[0];
-        await replaceTrack(screenTrack);
-        
-        const newMixedStream = new MediaStream([screenTrack, ...localStreamRef.current.getAudioTracks()]);
-        localStreamRef.current = newMixedStream;
-
-        setParticipants((prev) => prev.map((p) => (p.isLocal ? { ...p, stream: newMixedStream, isScreenSharing: true } : p)));
+        await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
-        socketRef.current.emit('screen-share-start');
-        
+        setParticipants((prev) =>
+          prev.map((p) => (p.isLocal ? { ...p, isScreenSharing: true } : p))
+        );
         screenTrack.onended = async () => {
-          // Triggered by browser's "Stop sharing" button
           if (localCameraTrackRef.current) {
-            await replaceTrack(localCameraTrackRef.current);
-
-            // ISSUE 3 FIX: Same logic as above to prevent frozen frame.
-            const newCameraStream = new MediaStream([localCameraTrackRef.current, ...localStreamRef.current.getAudioTracks()]);
-            localStreamRef.current = newCameraStream;
-
-            setParticipants((prev) => prev.map((p) => (p.isLocal ? { ...p, stream: newCameraStream, isScreenSharing: false } : p)));
+            // Issue 3: Handle screen share stop via browser UI
+            await replaceTrack(localCameraTrackRef.current, false);
             setIsSharingScreen(false);
-            socketRef.current.emit('screen-share-stop');
+            setParticipants((prev) =>
+              prev.map((p) => (p.isLocal ? { ...p, isScreenSharing: false } : p))
+            );
+            if (pinnedParticipantId === socketRef.current?.id) {
+              setPinnedParticipantId(null);
+              socketRef.current.emit('unpin-participant');
+            }
           }
         };
       } catch (err) {
@@ -343,122 +553,413 @@ const Meeting = () => {
     }
   };
 
-  // ISSUE 2 FIX: Simplified pinning logic. The host can pin/unpin any participant.
   const handlePin = (userId) => {
-    if (pinnedParticipantId === userId) {
-      // If already pinned, unpin
-      setPinnedParticipantId(null);
-      socketRef.current.emit('unpin-participant');
-    } else {
-      // Otherwise, pin the user
+    const participant = participants.find((p) => p.userId === userId);
+    const isHost = participants.find((p) => p.isLocal)?.isHost;
+    if (!isHost) {
+      toast.error('Only the host can pin participants.');
+      return;
+    }
+    if (participant && (participant.isScreenSharing || participant.videoEnabled)) {
       setPinnedParticipantId(userId);
       socketRef.current.emit('pin-participant', { userId });
+    } else {
+      toast.error('Can only pin a participant with active video or screen sharing.');
     }
   };
 
-  const handleSwipe = (direction, maxPages = totalPages) => {
+  const handleUnpin = () => {
+    const isHost = participants.find((p) => p.isLocal)?.isHost;
+    if (!isHost) {
+      toast.error('Only the host can unpin participants.');
+      return;
+    }
+    setPinnedParticipantId(null);
+    socketRef.current.emit('unpin-participant');
+  };
+
+  const handleSwipe = (direction) => {
     setCurrentOffset((prev) => {
       const newOffset = prev + direction;
-      return Math.max(0, Math.min(newOffset, maxPages - 1));
+      return Math.max(0, Math.min(newOffset, totalSmallPages - 1));
     });
   };
-  
-  // Canvas and drawing functions (unchanged)
-  const resizeCanvas = () => {/* ... */};
-  useEffect(() => {/* ... */}, []);
-  const handleMouseDown = (e) => {/* ... */};
-  const handleMouseMove = (e) => {/* ... */};
-  const handleMouseUp = () => {/* ... */};
-  const handleMouseMoveForShapes = (e) => {/* ... */};
 
-  if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
+  const resizeCanvas = () => {
+    const canvas = annotationCanvasRef.current;
+    if (canvas && videoContainerRef.current) {
+      const { width, height } = videoContainerRef.current.getBoundingClientRect();
+      canvas.width = width;
+      canvas.height = height;
+    }
+  };
+
+  useEffect(() => {
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    return () => window.removeEventListener('resize', resizeCanvas);
+  }, []);
+
+  const handleMouseDown = (e) => {
+    if (!isAnnotationActive) return;
+    const canvas = annotationCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
+    socketRef.current.emit('drawing-start', { x, y, color: myColor, size: currentBrushSize, tool: currentTool });
+    ctx.beginPath();
+    ctx.moveTo(x * canvas.width, y * canvas.height);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isAnnotationActive || !drawingStateRef.current.isDrawing) return;
+    const canvas = annotationCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    ctx.lineWidth = currentBrushSize;
+    ctx.strokeStyle = myColor;
+    ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.lineCap = 'round';
+    ctx.lineTo(x * canvas.width, y * canvas.height);
+    ctx.stroke();
+    socketRef.current.emit('drawing-move', { x, y });
+  };
+
+  const handleMouseUp = () => {
+    if (!isAnnotationActive || !drawingStateRef.current.isDrawing) return;
+    const canvas = annotationCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+    if (['rectangle', 'circle'].includes(currentTool)) {
+      const { startX, startY } = drawingStateRef.current;
+      const endX = drawingStateRef.current.endX || startX;
+      const endY = drawingStateRef.current.endY || startY;
+      const absStartX = startX * canvas.width;
+      const absStartY = startY * canvas.height;
+      const absEndX = endX * canvas.width;
+      const absEndY = endY * canvas.height;
+      const absWidth = absEndX - absStartX;
+      const absHeight = absEndY - absStartY;
+      ctx.lineWidth = currentBrushSize;
+      ctx.strokeStyle = myColor;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.beginPath();
+      if (currentTool === 'rectangle') {
+        ctx.rect(absStartX, absStartY, absWidth, absHeight);
+      } else if (currentTool === 'circle') {
+        const radius = Math.sqrt(absWidth ** 2 + absHeight ** 2);
+        if (radius > 0) {
+          ctx.arc(absStartX, absStartY, radius, 0, 2 * Math.PI);
+        }
+      }
+      ctx.stroke();
+      socketRef.current.emit('draw-shape', {
+        startX,
+        startY,
+        endX,
+        endY,
+        color: myColor,
+        size: currentBrushSize,
+        tool: currentTool,
+      });
+    }
+    drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
+    socketRef.current.emit('drawing-end');
+  };
+
+  const handleMouseMoveForShapes = (e) => {
+    if (!isAnnotationActive || !drawingStateRef.current.isDrawing || !['rectangle', 'circle'].includes(currentTool))
+      return;
+    const canvas = annotationCanvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    drawingStateRef.current.endX = x;
+    drawingStateRef.current.endY = y;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const absStartX = drawingStateRef.current.startX * canvas.width;
+    const absStartY = drawingStateRef.current.startY * canvas.height;
+    const absEndX = x * canvas.width;
+    const absEndY = y * canvas.height;
+    const absWidth = absEndX - absStartX;
+    const absHeight = absEndY - absStartY;
+    ctx.lineWidth = currentBrushSize;
+    ctx.strokeStyle = myColor;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.beginPath();
+    if (currentTool === 'rectangle') {
+      ctx.rect(absStartX, absStartY, absWidth, absHeight);
+    } else if (currentTool === 'circle') {
+      const radius = Math.sqrt(absWidth ** 2 + absHeight ** 2);
+      if (radius > 0) {
+        ctx.arc(absStartX, absStartY, radius, 0, 2 * Math.PI);
+      }
+    }
+    ctx.stroke();
+  };
+
+  if (isLoading)
+    return (
+      <div className="h-screen bg-black flex items-center justify-center">
+        <LoadingSpinner size="large" />
+      </div>
+    );
 
   return (
     <div className="h-screen bg-black flex flex-col overflow-hidden text-white">
-      <div className="bg-gray-900 p-4 flex items-center justify-between">{/* Header */}</div>
+      <div className="bg-gray-900 p-4 flex items-center justify-between">
+        <h1 className="text-lg font-semibold">Meeting: {roomId}</h1>
+        <div className="flex items-center gap-4">
+          <span>Participants: {participants.length}</span>
+          <select
+            value={gridSize}
+            onChange={(e) => {
+              setGridSize(Number(e.target.value));
+              setCurrentOffset(0);
+            }}
+            className="bg-gray-800 text-white p-1 rounded"
+          >
+            <option value={4}>4 Frames</option>
+            <option value={6}>6 Frames</option>
+          </select>
+        </div>
+      </div>
       <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 relative p-4" ref={videoContainerRef}>
-          <AnnotationToolbar isAnnotationActive={isAnnotationActive} /* ...props */ />
-          <canvas ref={annotationCanvasRef} /* ...props */ />
-
-          {/* ISSUE 2 & 4 FIX: Simplified render logic. If a participant is pinned (for any reason), show the pinned layout. */}
-          {pinnedParticipantId && participants.find(p => p.userId === pinnedParticipantId) ? (
-            // --- Pinned View ---
+          <AnnotationToolbar
+            isAnnotationActive={isAnnotationActive}
+            toggleAnnotations={() => setIsAnnotationActive((prev) => !prev)}
+            currentTool={currentTool}
+            setCurrentTool={setCurrentTool}
+            currentBrushSize={currentBrushSize}
+            setCurrentBrushSize={setCurrentBrushSize}
+            clearCanvas={() => {
+              const canvas = annotationCanvasRef.current;
+              const ctx = canvas?.getContext('2d');
+              if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+              socketRef.current.emit('clear-canvas');
+            }}
+          />
+          <canvas
+            ref={annotationCanvasRef}
+            className="absolute top-0 left-0"
+            style={{ pointerEvents: isAnnotationActive ? 'auto' : 'none', zIndex: 10, width: '100%', height: '100%' }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={(e) => {
+              handleMouseMove(e);
+              handleMouseMoveForShapes(e);
+            }}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          />
+          {/* Issue 2 & 4: Pinned participant or screen share takes main frame */}
+          {pinnedParticipantId && participants.find((p) => p.userId === pinnedParticipantId) ? (
             <div className="h-full flex flex-col">
               <div className="flex-1">
                 <VideoPlayer
                   key={pinnedParticipantId}
                   participant={participants.find((p) => p.userId === pinnedParticipantId)}
                   isPinned={true}
-                  onPin={() => handlePin(pinnedParticipantId)}
-                  isLocal={participants.find((p) => p.userId === pinnedParticipantId)?.isLocal}
-                  isHost={localParticipant?.isHost}
-                  localCameraVideoRef={localParticipant?.isScreenSharing ? localVideoRef : null}
+                  onPin={handleUnpin}
+                  isLocal={participants.find((p) => p.userId === pinnedParticipantId).isLocal}
+                  isHost={participants.find((p) => p.isLocal)?.isHost}
+                  localCameraVideoRef={participants.find((p) => p.userId === pinnedParticipantId).isLocal ? localVideoRef : null}
                 />
               </div>
-              {/* Swipeable row of other participants */}
-              <div className="h-40 relative mt-4">
-                <div className="absolute inset-0 flex transition-transform duration-300" style={{ transform: `translateX(-${currentOffset * 100}%)` }}>
-                  {Array.from({ length: totalSmallPages }, (_, i) => (
-                    <div key={i} className="flex-shrink-0 w-full flex gap-4">
-                      {smallParticipants.slice(i * gridSize, (i + 1) * gridSize).map((p) => (
-                        <div key={p.userId} className="flex-1 h-full">
-                          <VideoPlayer
-                            participant={p}
-                            isPinned={false}
-                            onPin={() => handlePin(p.userId)}
-                            isLocal={p.isLocal}
-                            isHost={localParticipant?.isHost}
-                            localCameraVideoRef={p.isLocal && p.isScreenSharing ? localVideoRef : null}
+              {/* Issue 2 & 4: Swipeable gallery for other participants */}
+              {smallParticipants.length > 0 && (
+                <div className="h-40 relative">
+                  <div
+                    className="absolute inset-0 flex transition-transform duration-300 ease-in-out"
+                    style={{ transform: `translateX(-${currentOffset * 100}%)` }}
+                    onWheel={(e) => {
+                      if (e.deltaY !== 0) {
+                        e.preventDefault();
+                        handleSwipe(e.deltaY > 0 ? 1 : -1);
+                      }
+                    }}
+                  >
+                    {Array.from({ length: totalSmallPages }, (_, i) => (
+                      <div key={i} className={`flex-shrink-0 w-full grid gap-4 ${gridClass}`}>
+                        {smallParticipants.slice(i * gridSize, (i + 1) * gridSize).map((p) => (
+                          <div key={p.userId} className="bg-gray-800">
+                            <VideoPlayer
+                              participant={p}
+                              isPinned={false}
+                              onPin={() => handlePin(p.userId)}
+                              isLocal={p.isLocal}
+                              isHost={participants.find((p) => p.isLocal)?.isHost}
+                              localCameraVideoRef={p.isLocal ? localVideoRef : null}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  {totalSmallPages > 1 && (
+                    <div className="absolute bottom-0 left-0 right-0 flex justify-between items-center px-4">
+                      <button
+                        onClick={() => handleSwipe(-1)}
+                        disabled={currentOffset === 0}
+                        className={`p-2 rounded-full bg-gray-700 text-white ${
+                          currentOffset === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600'
+                        }`}
+                      >
+                        ←
+                      </button>
+                      <div className="flex gap-2">
+                        {Array.from({ length: totalSmallPages }, (_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setCurrentOffset(i)}
+                            className={`w-3 h-3 rounded-full ${currentOffset === i ? 'bg-white' : 'bg-gray-500'}`}
                           />
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => handleSwipe(1)}
+                        disabled={currentOffset === totalSmallPages - 1}
+                        className={`p-2 rounded-full bg-gray-700 text-white ${
+                          currentOffset === totalSmallPages - 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600'
+                        }`}
+                      >
+                        →
+                      </button>
                     </div>
-                  ))}
+                  )}
                 </div>
-                {/* Swipe navigation dots */}
-              </div>
+              )}
             </div>
           ) : (
-            // --- Gallery View ---
             <div className="h-full relative">
-              <div className="absolute inset-0 flex transition-transform duration-300" style={{ transform: `translateX(-${currentOffset * 100}%)` }}>
+              <div
+                className="absolute inset-0 flex transition-transform duration-300 ease-in-out"
+                style={{ transform: `translateX(-${currentOffset * 100}%)` }}
+                onWheel={(e) => {
+                  if (e.deltaY !== 0) {
+                    e.preventDefault();
+                    handleSwipe(e.deltaY > 0 ? 1 : -1);
+                  }
+                }}
+              >
                 {Array.from({ length: totalPages }, (_, i) => (
-                  <div key={i} className={`flex-shrink-0 w-full h-full grid gap-4 ${gridClass}`}>
+                  <div key={i} className={`flex-shrink-0 w-full grid gap-4 ${gridClass}`}>
                     {memoizedParticipants.slice(i * gridSize, (i + 1) * gridSize).map((p) => (
-                      <div key={p.userId} className="bg-gray-800 rounded-lg overflow-hidden">
+                      <div key={p.userId} className="bg-gray-800">
                         <VideoPlayer
                           participant={p}
                           isPinned={false}
                           onPin={() => handlePin(p.userId)}
                           isLocal={p.isLocal}
-                          isHost={localParticipant?.isHost}
-                          localCameraVideoRef={p.isLocal && p.isScreenSharing ? localVideoRef : null}
+                          isHost={participants.find((p) => p.isLocal)?.isHost}
+                          localCameraVideoRef={p.isLocal ? localVideoRef : null}
                         />
                       </div>
                     ))}
                   </div>
                 ))}
               </div>
-              {/* Swipe navigation dots */}
+              {totalPages > 1 && (
+                <div className="absolute bottom-4 left-0 right-0 flex justify-between items-center px-4">
+                  <button
+                    onClick={() => handleSwipe(-1)}
+                    disabled={currentOffset === 0}
+                    className={`p-2 rounded-full bg-gray-700 text-white ${
+                      currentOffset === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600'
+                    }`}
+                  >
+                    ←
+                  </button>
+                  <div className="flex gap-2">
+                    {Array.from({ length: totalPages }, (_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setCurrentOffset(i)}
+                        className={`w-3 h-3 rounded-full ${currentOffset === i ? 'bg-white' : 'bg-gray-500'}`}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => handleSwipe(1)}
+                    disabled={currentOffset === totalPages - 1}
+                    className={`p-2 rounded-full bg-gray-700 text-white ${
+                      currentOffset === totalPages - 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600'
+                    }`}
+                  >
+                    →
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
-        
-        {/* Chat and Participants Side Panel */}
-        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
-          {isChatOpen && <Chat /* ...props */ />}
-          {isParticipantsOpen && <Participants participants={memoizedParticipants} /* ...props */ />}
+        <div
+          className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${
+            isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'
+          } overflow-hidden`}
+        >
+          {isChatOpen && (
+            <Chat
+              messages={messages}
+              onSendMessage={(message) => {
+                const payload = { message, username: user.username, timestamp: new Date().toISOString() };
+                socketRef.current.emit('send-chat-message', payload);
+                setMessages((prev) => [...prev, payload]);
+              }}
+              currentUser={user}
+              onClose={() => setIsChatOpen(false)}
+            />
+          )}
+          {isParticipantsOpen && (
+            <Participants
+              participants={memoizedParticipants}
+              pendingRequests={[]}
+              currentUser={user}
+              onClose={() => setIsParticipantsOpen(false)}
+              roomId={roomId}
+            />
+          )}
         </div>
       </div>
-      {/* Control Bar */}
       <div className="bg-gray-900 border-t border-gray-700 p-4 flex justify-center gap-4">
-        <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</button>
-        <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</button>
-        <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>
-        <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
-        <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
-        <button onClick={() => navigate('/home')} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
+        <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
+          {isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}
+        </button>
+        <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
+          {isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}
+        </button>
+        <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
+          {isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}
+        </button>
+        <button
+          onClick={() => {
+            setIsChatOpen((o) => !o);
+            setIsParticipantsOpen(false);
+          }}
+          className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600"
+        >
+          Chat 💬
+        </button>
+        <button
+          onClick={() => {
+            setIsParticipantsOpen((o) => !o);
+            setIsChatOpen(false);
+          }}
+          className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600"
+        >
+          Participants 👥
+        </button>
+        <button onClick={() => navigate('/home')} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">
+          Exit Room 📞
+        </button>
       </div>
     </div>
   );

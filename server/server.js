@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -100,7 +101,6 @@ passport.use(
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 let cachedIceServers = null;
 let iceServersExpiry = null;
-
 const fetchIceServers = async () => {
   try {
     let iceServers = [];
@@ -116,16 +116,8 @@ const fetchIceServers = async () => {
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
     ];
     cachedIceServers = iceServers;
     iceServersExpiry = Date.now() + 24 * 60 * 60 * 1000;
@@ -137,16 +129,8 @@ const fetchIceServers = async () => {
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
+      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
     ];
   }
 };
@@ -195,11 +179,10 @@ io.use((socket, next) => {
 // Socket.IO Logic
 const socketToRoom = {};
 const socketIdToUsername = {};
-
+const roomHosts = new Map();
 io.on('connection', (socket) => {
   const { username, userId } = socket.user;
   info(`Socket connected: ${socket.id} for user ${username} (${userId})`);
-
   socket.on('join-room', ({ roomId, isHost }, callback) => {
     if (!roomId) {
       socket.emit('error', { message: 'Invalid room ID' });
@@ -209,22 +192,25 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socketToRoom[socket.id] = roomId;
     socketIdToUsername[socket.id] = username;
-
-    const usersInRoom = [];
     const room = io.sockets.adapter.rooms.get(roomId);
-    if (room) {
-      room.forEach((id) => {
-        if (id !== socket.id) {
-          usersInRoom.push({ userId: id, username: socketIdToUsername[id], isHost: false });
-        }
-      });
+    const isFirst = room.size === 1;
+    if (isFirst) {
+      roomHosts.set(roomId, socket.id);
     }
-
-    info(`User ${username} (${socket.id}) joined room ${roomId} with ${usersInRoom.length} other users`);
-    callback(usersInRoom);
-    socket.to(roomId).emit('user-joined', { userId: socket.id, username, isHost });
+    const otherUsers = [];
+    room.forEach((id) => {
+      if (id !== socket.id) {
+        otherUsers.push({
+          userId: id,
+          username: socketIdToUsername[id],
+          isHost: roomHosts.get(roomId) === id,
+        });
+      }
+    });
+    info(`User ${username} (${socket.id}) joined room ${roomId} with ${otherUsers.length} other users`);
+    callback(otherUsers);
+    socket.to(roomId).emit('user-joined', { userId: socket.id, username, isHost: isFirst });
   });
-
   socket.on('offer', (payload) => {
     if (!payload.to || !payload.offer) {
       socket.emit('error', { message: 'Invalid offer payload' });
@@ -239,7 +225,6 @@ io.on('connection', (socket) => {
       isHost: socket.user.isHost || false,
     });
   });
-
   socket.on('answer', (payload) => {
     if (!payload.to || !payload.answer) {
       socket.emit('error', { message: 'Invalid answer payload' });
@@ -247,12 +232,8 @@ io.on('connection', (socket) => {
       return;
     }
     info(`Relaying answer from ${socketIdToUsername[socket.id]} to ${socketIdToUsername[payload.to] || payload.to}`);
-    io.to(payload.to).emit('answer', {
-      from: socket.id,
-      answer: payload.answer,
-    });
+    io.to(payload.to).emit('answer', { from: socket.id, answer: payload.answer });
   });
-
   socket.on('ice-candidate', (payload) => {
     if (!payload.to || !payload.candidate) {
       socket.emit('error', { message: 'Invalid ICE candidate payload' });
@@ -260,12 +241,8 @@ io.on('connection', (socket) => {
       return;
     }
     info(`Relaying ICE candidate from ${socketIdToUsername[socket.id]} to ${socketIdToUsername[payload.to] || payload.to}`);
-    io.to(payload.to).emit('ice-candidate', {
-      from: socket.id,
-      candidate: payload.candidate,
-    });
+    io.to(payload.to).emit('ice-candidate', { from: socket.id, candidate: payload.candidate });
   });
-
   socket.on('send-chat-message', (payload) => {
     const roomId = socketToRoom[socket.id];
     if (!roomId) {
@@ -279,7 +256,6 @@ io.on('connection', (socket) => {
     info(`Broadcasting chat message from ${socketIdToUsername[socket.id]} in room ${roomId}`);
     socket.to(roomId).emit('chat-message', payload);
   });
-
   socket.on('pin-participant', ({ userId }) => {
     const roomId = socketToRoom[socket.id];
     if (!roomId) {
@@ -289,7 +265,6 @@ io.on('connection', (socket) => {
     info(`Broadcasting pin-participant ${userId} from ${socketIdToUsername[socket.id]} in room ${roomId}`);
     socket.to(roomId).emit('pin-participant', { userId });
   });
-
   socket.on('unpin-participant', () => {
     const roomId = socketToRoom[socket.id];
     if (!roomId) {
@@ -299,7 +274,20 @@ io.on('connection', (socket) => {
     info(`Broadcasting unpin-participant from ${socketIdToUsername[socket.id]} in room ${roomId}`);
     socket.to(roomId).emit('unpin-participant');
   });
-
+  socket.on('screen-share-start', () => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting screen-share-start from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('screen-share-start', { userId: socket.id });
+    }
+  });
+  socket.on('screen-share-stop', () => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting screen-share-stop from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('screen-share-stop', { userId: socket.id });
+    }
+  });
   const drawingEvents = ['drawing-start', 'drawing-move', 'drawing-end', 'clear-canvas', 'draw-shape'];
   drawingEvents.forEach((event) => {
     socket.on(event, (data) => {
@@ -313,7 +301,6 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit(event, payload);
     });
   });
-
   const handleDisconnect = () => {
     const disconnectedUser = socketIdToUsername[socket.id] || 'A user';
     const roomId = socketToRoom[socket.id];
@@ -324,7 +311,6 @@ io.on('connection', (socket) => {
     delete socketToRoom[socket.id];
     delete socketIdToUsername[socket.id];
   };
-
   socket.on('leave-room', handleDisconnect);
   socket.on('disconnect', handleDisconnect);
 });

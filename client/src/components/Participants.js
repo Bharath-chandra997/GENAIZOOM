@@ -1,26 +1,13 @@
+// Participants.js
 import React from 'react';
 import { toast } from 'react-toastify';
 
-const Participants = ({ 
-    participants = [], 
-    pendingRequests = [], 
-    currentUser, 
-    meetingInfo, 
-    onClose, 
-    onAcceptJoin, 
-    onRejectJoin, 
-    onPinParticipant, 
-    roomId 
-}) => {
+const Participants = ({ participants = [], pendingRequests = [], currentUser, meetingInfo, onClose, onAcceptJoin, onRejectJoin, onPinParticipant, roomId }) => {
   return (
     <div className="h-full flex flex-col bg-gray-800">
       <div className="flex items-center justify-between p-4 border-b border-gray-700">
         <h3 className="text-lg font-semibold text-white">Participants ({participants.length})</h3>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-white transition-colors duration-200 p-1"
-          title="Close participants"
-        >
+        <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors duration-200 p-1" title="Close participants">
           <span className="text-lg">✕</span>
         </button>
       </div>
@@ -31,7 +18,6 @@ const Participants = ({
             {/* ... rest of the pending requests logic ... */}
           </div>
         )}
-
         <div className="p-4 space-y-2">
           {participants.map((participant) => (
             <div
@@ -68,7 +54,5 @@ const Participants = ({
     </div>
   );
 };
-
-
 
 export default Participants;

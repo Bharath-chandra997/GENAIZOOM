@@ -52,7 +52,8 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
           return;
         }
 
-        videoRef.current.onloadedmetadata = () => {
+        // Directly call play() after assigning srcObject
+        if (videoRef.current.paused) {
           videoRef.current.play()
             .then(() => {
               console.log(`Video playing for participant: ${participant.userId}`);
@@ -62,7 +63,9 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
               console.error('Video play error:', error, { userId: participant.userId });
               setIsStreamLoading(false);
             });
-        };
+        } else {
+          setIsStreamLoading(false);
+        }
       } else {
         console.warn('Cannot play video: missing videoRef or stream', {
           videoRefExists: !!videoRef.current,
@@ -170,6 +173,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
         <>
           <video
             ref={videoRef}
+            autoPlay={true}
             playsInline
             muted={participant.isLocal ?? isLocal}
             className={`w-full h-full object-cover ${isPinned ? 'pinned-video' : ''} ${
@@ -179,6 +183,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
           {(participant.isLocal ?? isLocal) && (participant.isScreenSharing ?? false) && localCameraVideoRef && (
             <video
               ref={localCameraVideoRef}
+              autoPlay={true}
               playsInline
               muted
               className="camera-video unmirror"

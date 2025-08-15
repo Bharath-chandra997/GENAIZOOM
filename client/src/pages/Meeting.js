@@ -31,8 +31,9 @@ const Meeting = () => {
   const [currentBrushSize, setCurrentBrushSize] = useState(5);
   const [myColor, setMyColor] = useState('');
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
-  const [gridSize, setGridSize] = useState(4); // Default to 4 frames
+  const [gridSize, setGridSize] = useState(4);
   const [currentOffset, setCurrentOffset] = useState(0);
+  const [socketError, setSocketError] = useState(null);
 
   // Refs
   const socketRef = useRef(null);
@@ -44,12 +45,12 @@ const Meeting = () => {
   const videoContainerRef = useRef(null);
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
   const remoteDrawingStates = useRef(new Map());
-  const localVideoRef = useRef(null); // Added for Issue 1: Local video display
+  const localVideoRef = useRef(null);
 
   // Memoize participants
   const memoizedParticipants = useMemo(() => participants, [participants]);
 
-  // Paginated participants with swipe logic
+  // Paginated participants
   const totalPages = Math.ceil(memoizedParticipants.length / gridSize);
   const smallParticipants = useMemo(
     () =>
@@ -96,7 +97,7 @@ const Meeting = () => {
       };
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          socketRef.current.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
+          socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
         }
       };
       pc.oniceconnectionstatechange = () => {
@@ -113,10 +114,20 @@ const Meeting = () => {
 
   const setupSocketListeners = useCallback(
     (socket) => {
+      socket.on('connect', () => {
+        console.log('Socket connected:', socket.id);
+        setSocketError(null);
+      });
+
+      socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+        setSocketError('Failed to connect to the server. Retrying...');
+      });
+
       socket.on('user-joined', ({ userId, username, isHost }) => {
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === userId)) return prev;
-          const updatedParticipants = [
+          return [
             ...prev,
             {
               userId,
@@ -130,7 +141,6 @@ const Meeting = () => {
               connectionQuality: 'good',
             },
           ];
-          return updatedParticipants;
         });
       });
 
@@ -190,7 +200,7 @@ const Meeting = () => {
         setParticipants((prev) => prev.filter((p) => p.userId !== userId));
         if (pinnedParticipantId === userId) {
           setPinnedParticipantId(null);
-          socketRef.current.emit('unpin-participant');
+          socketRef.current?.emit('unpin-participant');
         }
       });
 
@@ -198,7 +208,7 @@ const Meeting = () => {
 
       socket.on('pin-participant', ({ userId }) => {
         setPinnedParticipantId(userId);
-        setCurrentOffset(0); // Reset offset when pinning
+        setCurrentOffset(0);
       });
 
       socket.on('unpin-participant', () => {
@@ -312,10 +322,10 @@ const Meeting = () => {
           oldTrack.stop();
         }
         localStreamRef.current.addTrack(newTrack);
-        // Issue 1: Update local video display immediately
         if (newTrack.kind === 'video' && localVideoRef.current) {
           localStreamRef.current.getVideoTracks()[0].enabled = isVideoEnabled;
           localVideoRef.current.srcObject = localStreamRef.current;
+          console.log('Assigning stream to localVideoRef:', localStreamRef.current);
           localVideoRef.current.play().catch((err) => console.error('Local video play error:', err));
         }
         setParticipants((prev) =>
@@ -333,9 +343,9 @@ const Meeting = () => {
         );
       }
       if (isScreenShare) {
-        socketRef.current.emit('screen-share-start', { userId: socketRef.current.id });
+        socketRef.current?.emit('screen-share-start', { userId: socketRef.current.id });
       } else {
-        socketRef.current.emit('screen-share-stop', { userId: socketRef.current.id });
+        socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
       }
     },
     [isVideoEnabled]
@@ -402,31 +412,36 @@ const Meeting = () => {
         }
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
-        // Issue 1: Assign local stream to video element immediately
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
-          localVideoRef.current.play().catch((err) => console.error('Local video play error:', err));
+          console.log('Initial stream assignment to localVideoRef:', stream);
+          localVideoRef.current.play().catch((err) => console.error('Initial local video play error:', err));
         }
-        // Issue 4: Set host based on being the first to join
         setParticipants([
           {
             userId: 'local',
             username: `${user.username} (You)`,
             stream,
             isLocal: true,
-            isHost: false, // Will be updated after join-room response
+            isHost: false,
             videoEnabled: true,
             audioEnabled: true,
             isScreenSharing: false,
             connectionQuality: 'good',
           },
         ]);
-        const socket = io(SERVER_URL, { auth: { token: user.token }, transports: ['websocket'] });
+        const socket = io(SERVER_URL, {
+          auth: { token: user.token },
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+        });
         socketRef.current = socket;
         setupSocketListeners(socket);
         socket.emit('join-room', { roomId }, async (otherUsers) => {
           console.log('Joined room, other users:', otherUsers);
-          // Issue 4: Set isHost true if first to join (no other users)
           setParticipants((prev) =>
             prev.map((p) => (p.isLocal ? { ...p, isHost: otherUsers.length === 0 } : p))
           );
@@ -475,7 +490,10 @@ const Meeting = () => {
       peerConnections.current.clear();
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-      socketRef.current?.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
     };
   }, [roomId, user, navigate, createPeerConnection, setupSocketListeners]);
 
@@ -498,10 +516,10 @@ const Meeting = () => {
       setParticipants((prev) =>
         prev.map((p) => (p.isLocal ? { ...p, videoEnabled: videoTrack.enabled } : p))
       );
-      // Issue 1: Update local video display when toggling
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = localStreamRef.current;
-        localVideoRef.current.play().catch((err) => console.error('Local video play error:', err));
+        console.log('Toggling video, stream assigned:', localStreamRef.current);
+        localVideoRef.current.play().catch((err) => console.error('Toggle video play error:', err));
       }
     }
   };
@@ -511,7 +529,6 @@ const Meeting = () => {
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
       if (localCameraTrackRef.current) {
-        // Issue 3: Restore camera stream after stopping screen share
         await replaceTrack(localCameraTrackRef.current, false);
         setIsSharingScreen(false);
         setParticipants((prev) =>
@@ -519,7 +536,7 @@ const Meeting = () => {
         );
         if (pinnedParticipantId === socketRef.current?.id) {
           setPinnedParticipantId(null);
-          socketRef.current.emit('unpin-participant');
+          socketRef.current?.emit('unpin-participant');
         }
       }
     } else {
@@ -534,7 +551,6 @@ const Meeting = () => {
         );
         screenTrack.onended = async () => {
           if (localCameraTrackRef.current) {
-            // Issue 3: Handle screen share stop via browser UI
             await replaceTrack(localCameraTrackRef.current, false);
             setIsSharingScreen(false);
             setParticipants((prev) =>
@@ -542,7 +558,7 @@ const Meeting = () => {
             );
             if (pinnedParticipantId === socketRef.current?.id) {
               setPinnedParticipantId(null);
-              socketRef.current.emit('unpin-participant');
+              socketRef.current?.emit('unpin-participant');
             }
           }
         };
@@ -562,7 +578,7 @@ const Meeting = () => {
     }
     if (participant && (participant.isScreenSharing || participant.videoEnabled)) {
       setPinnedParticipantId(userId);
-      socketRef.current.emit('pin-participant', { userId });
+      socketRef.current?.emit('pin-participant', { userId });
     } else {
       toast.error('Can only pin a participant with active video or screen sharing.');
     }
@@ -575,7 +591,7 @@ const Meeting = () => {
       return;
     }
     setPinnedParticipantId(null);
-    socketRef.current.emit('unpin-participant');
+    socketRef.current?.emit('unpin-participant');
   };
 
   const handleSwipe = (direction) => {
@@ -609,7 +625,7 @@ const Meeting = () => {
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
-    socketRef.current.emit('drawing-start', { x, y, color: myColor, size: currentBrushSize, tool: currentTool });
+    socketRef.current?.emit('drawing-start', { x, y, color: myColor, size: currentBrushSize, tool: currentTool });
     ctx.beginPath();
     ctx.moveTo(x * canvas.width, y * canvas.height);
   };
@@ -628,7 +644,7 @@ const Meeting = () => {
     ctx.lineCap = 'round';
     ctx.lineTo(x * canvas.width, y * canvas.height);
     ctx.stroke();
-    socketRef.current.emit('drawing-move', { x, y });
+    socketRef.current?.emit('drawing-move', { x, y });
   };
 
   const handleMouseUp = () => {
@@ -659,7 +675,7 @@ const Meeting = () => {
         }
       }
       ctx.stroke();
-      socketRef.current.emit('draw-shape', {
+      socketRef.current?.emit('draw-shape', {
         startX,
         startY,
         endX,
@@ -670,7 +686,7 @@ const Meeting = () => {
       });
     }
     drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
-    socketRef.current.emit('drawing-end');
+    socketRef.current?.emit('drawing-end');
   };
 
   const handleMouseMoveForShapes = (e) => {
@@ -715,6 +731,11 @@ const Meeting = () => {
 
   return (
     <div className="h-screen bg-black flex flex-col overflow-hidden text-white">
+      {socketError && (
+        <div className="bg-red-600 text-white p-2 text-center">
+          {socketError}
+        </div>
+      )}
       <div className="bg-gray-900 p-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Meeting: {roomId}</h1>
         <div className="flex items-center gap-4">
@@ -745,7 +766,7 @@ const Meeting = () => {
               const canvas = annotationCanvasRef.current;
               const ctx = canvas?.getContext('2d');
               if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-              socketRef.current.emit('clear-canvas');
+              socketRef.current?.emit('clear-canvas');
             }}
           />
           <canvas
@@ -760,7 +781,6 @@ const Meeting = () => {
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
           />
-          {/* Issue 2 & 4: Pinned participant or screen share takes main frame */}
           {pinnedParticipantId && participants.find((p) => p.userId === pinnedParticipantId) ? (
             <div className="h-full flex flex-col">
               <div className="flex-1">
@@ -774,7 +794,6 @@ const Meeting = () => {
                   localCameraVideoRef={participants.find((p) => p.userId === pinnedParticipantId).isLocal ? localVideoRef : null}
                 />
               </div>
-              {/* Issue 2 & 4: Swipeable gallery for other participants */}
               {smallParticipants.length > 0 && (
                 <div className="h-40 relative">
                   <div
@@ -911,7 +930,7 @@ const Meeting = () => {
               messages={messages}
               onSendMessage={(message) => {
                 const payload = { message, username: user.username, timestamp: new Date().toISOString() };
-                socketRef.current.emit('send-chat-message', payload);
+                socketRef.current?.emit('send-chat-message', payload);
                 setMessages((prev) => [...prev, payload]);
               }}
               currentUser={user}

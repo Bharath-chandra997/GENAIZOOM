@@ -27,7 +27,7 @@ const Meeting = () => {
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
-  const [filmstripSize] = useState(6); // How many participants to show in the filmstrip per page
+  const [filmstripSize] = useState(6);
   const [currentOffset, setCurrentOffset] = useState(0);
 
   // Annotation & Toolbar State
@@ -42,26 +42,30 @@ const Meeting = () => {
   const peerConnections = useRef(new Map());
   const dragInfo = useRef({ isDragging: false, offsetX: 0, offsetY: 0 });
 
-  // --- NEW DERIVED STATE LOGIC (Replaces pinnedParticipantId state) ---
-  // This is more reliable and calculates the correct view on every render.
+  // --- DERIVED STATE LOGIC (Calculated on every render for accuracy) ---
+  
+  // 1. Determine who should be in the main view based on priority
   const mainViewParticipant = useMemo(() => {
-    // A screen sharer always takes priority for the main view
     const screenSharer = participants.find(p => p.isScreenSharing);
     if (screenSharer) return screenSharer;
 
-    // Otherwise, the host is the main view
     const host = participants.find(p => p.isHost);
     if (host) return host;
 
-    // Fallback if there's no host (e.g., host left)
-    return participants[0] || null;
+    return participants[0] || null; // Fallback
   }, [participants]);
 
+  // 2. The filmstrip is everyone *except* the main view participant
   const filmstripParticipants = useMemo(() => {
     if (!mainViewParticipant) return [];
-    // The filmstrip contains everyone *except* the person in the main view
     return participants.filter(p => p.userId !== mainViewParticipant.userId);
   }, [participants, mainViewParticipant]);
+  
+  // 3. Logic to decide if the annotation toolbar should be visible
+  const isSomeoneScreenSharing = useMemo(() => 
+    participants.some(p => p.isScreenSharing), 
+    [participants]
+  );
 
   const totalFilmstripPages = Math.ceil(filmstripParticipants.length / filmstripSize);
   
@@ -96,7 +100,6 @@ const Meeting = () => {
   );
 
   const setupSocketListeners = useCallback((socket) => {
-    // --- Signaling Handlers ---
     socket.on('offer', async ({ from, offer, username }) => {
       setParticipants(prev => {
         if (prev.some(p => p.userId === from)) return prev;
@@ -127,7 +130,6 @@ const Meeting = () => {
       setParticipants(prev => prev.filter(p => p.userId !== userId));
     });
     
-    // --- State Sync Handlers ---
     socket.on('chat-message', (payload) => setMessages(prev => [...prev, payload]));
     socket.on('screen-share-start', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p)));
     socket.on('screen-share-stop', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p)));
@@ -151,15 +153,23 @@ const Meeting = () => {
         
         socket.emit('join-room', { roomId, username: user.username }, async (otherUsers) => {
             const isHost = otherUsers.length === 0;
+            
+            // Correctly map other users, preserving their `isHost` status from the server
+            const remoteParticipants = otherUsers.map(u => ({
+                userId: u.userId,
+                username: u.username,
+                stream: null,
+                isLocal: false,
+                isHost: u.isHost || false, // Use server's host status
+                videoEnabled: true,
+                audioEnabled: true,
+                isScreenSharing: false
+            }));
+
             const localParticipant = { userId: socket.id, username: `${user.username} (You)`, stream, isLocal: true, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false };
             
-            // Add self and all other users to the state at once
-            setParticipants([
-                localParticipant,
-                ...otherUsers.map(u => ({ userId: u.userId, username: u.username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false }))
-            ]);
+            setParticipants([localParticipant, ...remoteParticipants]);
 
-            // As the new joiner, send an offer to everyone who was already here
             for (const otherUser of otherUsers) {
                 const pc = await createPeerConnection(otherUser.userId);
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -188,12 +198,10 @@ const Meeting = () => {
         const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
         if (sender) await sender.replaceTrack(newTrack);
       }
-      // Visually update your own stream
       const oldTrack = localStreamRef.current.getVideoTracks()[0];
       localStreamRef.current.removeTrack(oldTrack);
       localStreamRef.current.addTrack(newTrack);
       
-      // Update your own state and notify others
       setParticipants((prev) => prev.map((p) => p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p));
       socketRef.current.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop');
     },[]);
@@ -284,11 +292,13 @@ const Meeting = () => {
       <div className="flex-1 flex overflow-hidden relative">
         <div 
             className="flex-1 flex flex-col relative p-4 gap-4"
-            onWheel={(e) => { if (e.deltaY !== 0) { e.preventDefault(); handleSwipe(e.deltaY > 0 ? 1 : -1); } }}
+            onWheel={(e) => { if (e.deltaY !== 0 && totalFilmstripPages > 1) { e.preventDefault(); handleSwipe(e.deltaY > 0 ? 1 : -1); } }}
         >
-          <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
-            <AnnotationToolbar onMouseDown={handleToolbarMouseDown} isAnnotationActive={isAnnotationActive} toggleAnnotations={() => setIsAnnotationActive(p => !p)}/>
-          </div>
+          {isSomeoneScreenSharing && (
+            <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
+              <AnnotationToolbar onMouseDown={handleToolbarMouseDown} isAnnotationActive={isAnnotationActive} toggleAnnotations={() => setIsAnnotationActive(p => !p)}/>
+            </div>
+          )}
 
           {/* Main View Area */}
           <div className="flex-1 min-h-0">

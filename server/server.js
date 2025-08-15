@@ -86,27 +86,56 @@ passport.use(
   )
 );
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/meetings', meetingRoutes);
-
-// Twilio ICE Server Route
+// Twilio ICE Server Caching
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-app.get('/ice-servers', async (req, res) => {
+let cachedIceServers = null;
+let iceServersExpiry = null;
+
+const fetchIceServers = async () => {
   try {
     const token = await twilioClient.tokens.create();
     const iceServers = [
       ...token.iceServers,
       { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
     ];
-    res.json(iceServers);
+    // Set expiry to 24 hours from now (Twilio tokens typically last 24 hours)
+    cachedIceServers = iceServers;
+    iceServersExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+    info('Fetched and cached Twilio ICE servers');
+    return iceServers;
   } catch (error) {
     logError('Twilio ICE server error', error);
-    res.status(500).json([
+    return [
       { urls: 'stun:stun.l.google.com:19302' },
-    ]);
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+    ];
+  }
+};
+
+// ICE Servers Endpoint
+app.get('/ice-servers', async (req, res) => {
+  if (cachedIceServers && iceServersExpiry && Date.now() < iceServersExpiry) {
+    info('Serving cached ICE servers');
+    res.json(cachedIceServers);
+  } else {
+    const iceServers = await fetchIceServers();
+    res.json(iceServers);
   }
 });
+
+// Pre-fetch ICE servers at server startup
+fetchIceServers().then(() => info('Initial ICE servers fetched at startup'));
+
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/meetings', meetingRoutes);
 
 // Socket.IO Authentication
 io.use((socket, next) => {

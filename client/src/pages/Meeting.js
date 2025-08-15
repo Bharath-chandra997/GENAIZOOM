@@ -55,9 +55,13 @@ const Meeting = () => {
       return response.data;
     } catch (error) {
       console.error('Failed to get ICE servers from Twilio:', error);
-      toast.error('Unable to fetch ICE servers from Twilio. Using fallback servers.');
+      toast.error('Unable to fetch ICE servers from Twilio. Using fallback STUN servers.');
       return [
-        { urls: 'stun:stun.l.google.com:19302' }
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
       ];
     }
   }, []);
@@ -363,21 +367,40 @@ const Meeting = () => {
           return;
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-            frameRate: { ideal: 30, max: 60 },
-            facingMode: 'user',
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 48000,
-            channelCount: 2,
-          },
-        });
+        // Attempt to get user media with retries
+        let stream;
+        const maxRetries = 3;
+        let attempt = 0;
+        while (!stream && attempt < maxRetries) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                width: { ideal: 1280, max: 1920 },
+                height: { ideal: 720, max: 1080 },
+                frameRate: { ideal: 30, max: 60 },
+                facingMode: 'user',
+              },
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 48000,
+                channelCount: 2,
+              },
+            });
+          } catch (err) {
+            console.warn(`getUserMedia attempt ${attempt + 1} failed:`, err);
+            attempt++;
+            if (attempt < maxRetries) {
+              await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait 1s before retry
+            }
+          }
+        }
+
+        if (!stream) {
+          throw new Error('Failed to access camera/microphone after retries');
+        }
+
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
         setParticipants([
@@ -446,6 +469,23 @@ const Meeting = () => {
             });
           }, 1000);
         });
+
+        // Wait for stream to be ready before setting isLoading to false
+        if (stream.getVideoTracks().length > 0) {
+          const videoTrack = stream.getVideoTracks()[0];
+          videoTrack.onmute = () => console.log('Local video track muted');
+          videoTrack.onunmute = () => console.log('Local video track unmuted');
+          await new Promise((resolve) => {
+            const checkTrack = () => {
+              if (videoTrack.readyState === 'live') {
+                resolve();
+              } else {
+                setTimeout(checkTrack, 100);
+              }
+            };
+            checkTrack();
+          });
+        }
         setIsLoading(false);
       } catch (error) {
         console.error('Initialization error:', error);

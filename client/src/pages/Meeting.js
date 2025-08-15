@@ -35,7 +35,7 @@ const Meeting = () => {
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
   const [gridSize, setGridSize] = useState(4);
   const [currentPage, setCurrentPage] = useState(0);
-  const [isHost, setIsHost] = useState(false); // Determine if local user is host
+  const [isHost, setIsHost] = useState(false);
 
   // Refs
   const socketRef = useRef(null);
@@ -61,6 +61,18 @@ const Meeting = () => {
   const totalPages = Math.ceil(
     memoizedParticipants.filter((p) => p.userId !== pinnedParticipantId).length / gridSize
   );
+
+  const checkPermissions = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      return true;
+    } catch (err) {
+      console.error('Permission check failed:', err);
+      toast.error('Please allow camera and microphone access.');
+      return false;
+    }
+  };
 
   const getIceServers = useCallback(async () => {
     try {
@@ -120,16 +132,172 @@ const Meeting = () => {
   const setupSocketListeners = useCallback(
     (socket) => {
       socket.on('user-joined', ({ userId, username, isHost: participantHost }) => {
+        setParticipants((prev) => {
+          if (prev.some((p) => p.userId === userId)) return prev;
+          return [
+            ...prev,
+            {
+              userId,
+              username,
+              stream: null,
+              isLocal: false,
+              isHost: participantHost,
+              videoEnabled: false,
+              audioEnabled: false,
+              isScreenSharing: false,
+              connectionQuality: 'good',
+            },
+          ];
+        });
+      });
+
+      socket.on('offer', async ({ from, offer, username, isHost: participantHost }) => {
+        setParticipants((prev) => {
+          if (prev.some((p) => p.userId === from)) return prev;
+          return [
+            ...prev,
+            {
+              userId: from,
+              username,
+              stream: null,
+              isLocal: false,
+              isHost: participantHost,
+              videoEnabled: false,
+              audioEnabled: false,
+              isScreenSharing: false,
+              connectionQuality: 'good',
+            },
+          ];
+        });
+        const pc = await createPeerConnection(from);
+        if (!pc) return;
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach((track) => pc.addTrack(track, localStreamRef.current));
+        }
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('answer', { to: from, answer: pc.localDescription });
+      });
+
+      socket.on('answer', ({ from, answer }) => {
+        const pc = peerConnections.current.get(from);
+        if (pc) {
+          pc.setRemoteDescription(new RTCSessionDescription(answer)).catch((err) =>
+            console.error(`Failed to set remote description: ${err}`)
+          );
+        }
+      });
+
+      socket.on('ice-candidate', ({ from, candidate }) => {
+        const pc = peerConnections.current.get(from);
+        if (pc) {
+          pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) =>
+            console.error(`Failed to add ICE candidate: ${err}`)
+          );
+        }
+      });
+
+      socket.on('user-left', (userId) => {
+        const pc = peerConnections.current.get(userId);
+        if (pc) {
+          pc.close();
+          peerConnections.current.delete(userId);
+        }
+        setParticipants((prev) => prev.filter((p) => p.userId !== userId));
+        if (pinnedParticipantId === userId) {
+          setPinnedParticipantId(null);
+        }
+      });
+
+      socket.on('chat-message', (payload) => setMessages((prev) => [...prev, payload]));
+
+      socket.on('pin-participant', ({ userId }) => {
+        setPinnedParticipantId(userId);
+      });
+
+      socket.on('unpin-participant', () => {
+        setPinnedParticipantId(null);
+      });
+
+      socket.on('screen-share-start', ({ userId }) => {
         setParticipants((prev) =>
-          prev.map((p) =>
-            p.userId === userId
-              ? { ...p, isHost: participantHost }
-              : p
-          )
+          prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: true } : p))
         );
       });
 
-      // ... (other socket listeners remain the same)
+      socket.on('screen-share-stop', ({ userId }) => {
+        setParticipants((prev) =>
+          prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false } : p))
+        );
+        if (pinnedParticipantId === userId) {
+          setPinnedParticipantId(null);
+        }
+      });
+
+      socket.on('drawing-start', ({ from, x, y, color, size, tool }) => {
+        remoteDrawingStates.current.set(from, { color, size, tool });
+        const canvas = annotationCanvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (ctx && canvas) {
+          ctx.beginPath();
+          ctx.moveTo(x * canvas.width, y * canvas.height);
+        }
+      });
+
+      socket.on('drawing-move', ({ from, x, y }) => {
+        const state = remoteDrawingStates.current.get(from);
+        const canvas = annotationCanvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!state || !ctx || !canvas) return;
+        ctx.lineWidth = state.size;
+        ctx.strokeStyle = state.color;
+        ctx.globalCompositeOperation = state.tool === 'eraser' ? 'destination-out' : 'source-over';
+        ctx.lineCap = 'round';
+        ctx.lineTo(x * canvas.width, y * canvas.height);
+        ctx.stroke();
+      });
+
+      socket.on('drawing-end', ({ from }) => {
+        remoteDrawingStates.current.delete(from);
+      });
+
+      socket.on('draw-shape', (data) => {
+        const canvas = annotationCanvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (ctx && canvas) {
+          const absStartX = data.startX * canvas.width;
+          const absStartY = data.startY * canvas.height;
+          const absEndX = data.endX * canvas.width;
+          const absEndY = data.endY * canvas.height;
+          const absWidth = absEndX - absStartX;
+          const absHeight = absEndY - absStartY;
+          ctx.lineWidth = data.size;
+          ctx.strokeStyle = data.color;
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.beginPath();
+          switch (data.tool) {
+            case 'rectangle':
+              ctx.rect(absStartX, absStartY, absWidth, absHeight);
+              break;
+            case 'circle':
+              const radius = Math.sqrt(absWidth ** 2 + absHeight ** 2);
+              if (radius > 0) {
+                ctx.arc(absStartX, absStartY, radius, 0, 2 * Math.PI);
+              }
+              break;
+            default:
+              break;
+          }
+          ctx.stroke();
+        }
+      });
+
+      socket.on('clear-canvas', () => {
+        const canvas = annotationCanvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      });
     },
     [createPeerConnection]
   );
@@ -164,9 +332,9 @@ const Meeting = () => {
         );
       }
       if (isScreenShare) {
-        socketRef.current.emit('screen-share-start');
+        socketRef.current.emit('screen-share-start', { userId: 'local' });
       } else {
-        socketRef.current.emit('screen-share-stop');
+        socketRef.current.emit('screen-share-stop', { userId: 'local' });
       }
     },
     []
@@ -245,8 +413,8 @@ const Meeting = () => {
             stream,
             isLocal: true,
             isHost: response.data.meeting.isHost,
-            videoEnabled: stream.getVideoTracks()[0]?.enabled ?? false,
-            audioEnabled: stream.getAudioTracks()[0]?.enabled ?? false,
+            videoEnabled: true,
+            audioEnabled: true,
             isScreenSharing: false,
             connectionQuality: 'good',
           },
@@ -540,6 +708,7 @@ const Meeting = () => {
                   onPin={handleUnpin}
                   isLocal={participants.find((p) => p.userId === pinnedParticipantId).isLocal}
                   isHost={isHost}
+                  localCameraVideoRef={localStreamRef}
                 />
               </div>
               <div className="flex overflow-x-auto gap-2 p-2 bg-black">
@@ -551,6 +720,7 @@ const Meeting = () => {
                       onPin={() => handlePin(p.userId)}
                       isLocal={p.isLocal}
                       isHost={isHost}
+                      localCameraVideoRef={localStreamRef}
                     />
                   </div>
                 ))}
@@ -569,6 +739,7 @@ const Meeting = () => {
                   onPin={() => handlePin(p.userId)}
                   isLocal={p.isLocal}
                   isHost={isHost}
+                  localCameraVideoRef={localStreamRef}
                 />
               ))}
             </div>

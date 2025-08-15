@@ -24,6 +24,7 @@ const getColorForId = (id) => {
   return `hsl(${hue}, 90%, 60%)`;
 };
 
+
 const Meeting = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
@@ -59,7 +60,7 @@ const Meeting = () => {
   const mainVideoContainerRef = useRef(null);
   const remoteDrawingStates = useRef(new Map());
 
-  // --- DERIVED STATE (Calculated on every render for accuracy) ---
+  // --- DERIVED STATE ---
   const defaultMainParticipant = useMemo(() => {
     const screenSharer = participants.find(p => p.isScreenSharing);
     if (screenSharer) return screenSharer;
@@ -234,14 +235,92 @@ const Meeting = () => {
     return () => resizeObserver.disconnect();
   }, [mainViewParticipant]);
 
-  const replaceTrack = useCallback(async (newTrack, isScreenShare = false) => { /* ... unchanged ... */ },[]);
-  const toggleAudio = () => { /* ... unchanged ... */ };
-  const toggleVideo = () => { /* ... unchanged ... */ };
-  const handleScreenShare = async () => { /* ... unchanged ... */ };
-  const handleSwipe = (direction) => { /* ... unchanged ... */ };
-  const handleToolbarMouseDown = (e) => { /* ... unchanged ... */ };
-  const handleToolbarMouseMove = (e) => { /* ... unchanged ... */ };
-  const handleToolbarMouseUp = () => { /* ... unchanged ... */ };
+  const replaceTrack = useCallback(async (newTrack, isScreenShare = false) => {
+      for (const pc of peerConnections.current.values()) {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+        if (sender) await sender.replaceTrack(newTrack);
+      }
+      const oldTrack = localStreamRef.current.getVideoTracks()[0];
+      localStreamRef.current.removeTrack(oldTrack);
+      localStreamRef.current.addTrack(newTrack);
+      
+      setParticipants((prev) => prev.map((p) => p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p));
+      socketRef.current.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop');
+  },[]);
+
+  const toggleAudio = () => {
+    const audioTrack = localStreamRef.current?.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      setIsAudioMuted(!audioTrack.enabled);
+      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, audioEnabled: audioTrack.enabled } : p));
+    }
+  };
+
+  const toggleVideo = () => {
+    const videoTrack = localStreamRef.current?.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = !videoTrack.enabled;
+      setIsVideoEnabled(videoTrack.enabled);
+      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: videoTrack.enabled } : p));
+    }
+  };
+
+  const handleScreenShare = async () => {
+    if (isSharingScreen) {
+      await replaceTrack(localCameraTrackRef.current, false);
+      setIsSharingScreen(false);
+      screenStreamRef.current?.getTracks().forEach(track => track.stop());
+    } else {
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        screenStreamRef.current = screenStream;
+        const screenTrack = screenStream.getVideoTracks()[0];
+        await replaceTrack(screenTrack, true);
+        setIsSharingScreen(true);
+        screenTrack.onended = async () => {
+          if (localCameraTrackRef.current) {
+            await replaceTrack(localCameraTrackRef.current, false);
+            setIsSharingScreen(false);
+          }
+        };
+      } catch (err) { toast.error('Screen sharing failed.'); }
+    }
+  };
+
+  const handleSwipe = (direction) => {
+    setCurrentOffset((prev) => {
+      const newOffset = prev + direction;
+      return Math.max(0, Math.min(newOffset, totalFilmstripPages - 1));
+    });
+  };
+  
+  const handleToolbarMouseDown = (e) => {
+    const toolbar = e.currentTarget.parentElement;
+    const rect = toolbar.getBoundingClientRect();
+    dragInfo.current = {
+      isDragging: true,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    };
+    window.addEventListener('mousemove', handleToolbarMouseMove);
+    window.addEventListener('mouseup', handleToolbarMouseUp);
+  };
+
+  const handleToolbarMouseMove = (e) => {
+    if (dragInfo.current.isDragging) {
+      setToolbarPosition({
+        x: e.clientX - dragInfo.current.offsetX,
+        y: e.clientY - dragInfo.current.offsetY,
+      });
+    }
+  };
+
+  const handleToolbarMouseUp = () => {
+    dragInfo.current.isDragging = false;
+    window.removeEventListener('mousemove', handleToolbarMouseMove);
+    window.removeEventListener('mouseup', handleToolbarMouseUp);
+  };
 
   // --- ANNOTATION HANDLERS ---
   const handleMouseDown = (e) => {
@@ -265,7 +344,7 @@ const Meeting = () => {
   };
 
   const handleMouseMove = (e) => {
-     if (!isAnnotationActive || !e.buttons) return;
+     if (!isAnnotationActive || !e.buttons) return; // Check if mouse button is pressed
      const canvas = annotationCanvasRef.current;
      const rect = canvas.getBoundingClientRect();
      const x = (e.clientX - rect.left) / canvas.width;

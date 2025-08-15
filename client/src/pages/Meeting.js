@@ -118,7 +118,7 @@ const Meeting = () => {
       socket.on('user-joined', ({ userId, username, isHost }) => {
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === userId)) return prev;
-          return [
+          const updatedParticipants = [
             ...prev,
             {
               userId,
@@ -132,9 +132,10 @@ const Meeting = () => {
               connectionQuality: 'good',
             },
           ];
+          // Reset offset to show new user in center
+          if (prev.length === 1) setCurrentOffset(0);
+          return updatedParticipants;
         });
-        // Reset offset to show new user in center
-        if (prev.length === 1) setCurrentOffset(0);
       });
 
       socket.on('offer', async ({ from, offer, username, isHost }) => {
@@ -214,7 +215,7 @@ const Meeting = () => {
 
       socket.on('screen-share-stop', ({ userId }) => {
         setParticipants((prev) =>
-          prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false, stream: prev.find(p => p.userId === userId)?.stream } : p))
+          prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false, stream: prev.find((p) => p.userId === userId)?.stream } : p))
         );
         if (pinnedParticipantId === userId) {
           setPinnedParticipantId(null);

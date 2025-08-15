@@ -57,8 +57,7 @@ const Meeting = () => {
       console.error('Failed to get ICE servers from Twilio:', error);
       toast.error('Unable to fetch ICE servers from Twilio. Using fallback servers.');
       return [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'turn:turn.example.com:3478', username: 'user', credential: 'pass' }, // Replace with your TURN server
+        { urls: 'stun:stun.l.google.com:19302' }
       ];
     }
   }, []);

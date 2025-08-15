@@ -98,14 +98,12 @@ app.get('/ice-servers', async (req, res) => {
     const iceServers = [
       ...token.iceServers,
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'turn:turn.example.com:3478', username: 'user', credential: 'pass' }, // Replace with your TURN server
     ];
     res.json(iceServers);
   } catch (error) {
     logError('Twilio ICE server error', error);
     res.status(500).json([
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'turn:turn.example.com:3478', username: 'user', credential: 'pass' },
     ]);
   }
 });

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 
 const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLocal }) => {
@@ -16,7 +15,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
     }
     setIsParticipantInvalid(false);
 
-    const playVideo = async () => {
+    const playVideo = () => {
       if (videoRef.current && participant.stream) {
         if (videoRef.current.srcObject !== participant.stream) {
           console.log(`Assigning new stream to videoRef for participant: ${participant.userId}`, {
@@ -46,13 +45,17 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
           return;
         }
 
-        try {
-          await videoRef.current.play();
-          setIsStreamLoading(false);
-        } catch (error) {
-          console.error('Video play error:', error, { userId: participant.userId });
-          setIsStreamLoading(false);
-        }
+        // Set onloadedmetadata to play the video
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current.play()
+            .then(() => {
+              setIsStreamLoading(false);
+            })
+            .catch((error) => {
+              console.error('Video play error:', error, { userId: participant.userId });
+              setIsStreamLoading(false);
+            });
+        };
       } else {
         console.warn('Cannot play video: missing videoRef or stream', {
           videoRefExists: !!videoRef.current,

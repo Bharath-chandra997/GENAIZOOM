@@ -38,9 +38,8 @@ const Meeting = () => {
   const localCameraPiPVideoRef = useRef(null);
   const screenStreamRef = useRef(null);
   const peerConnections = useRef(new Map());
-  const annotationCanvasRef = useRef(null);
   const videoContainerRef = useRef(null);
-
+  
   // Memoized values for performance
   const memoizedParticipants = useMemo(() => participants, [participants]);
   
@@ -56,13 +55,15 @@ const Meeting = () => {
       setPinnedParticipantId(host.userId);
       return;
     }
-    // Fallback if no host is present for some reason
+    // Fallback if no host is present or has left
     if (memoizedParticipants.length > 0) {
-      setPinnedParticipantId(memoizedParticipants[0].userId)
+      if (!pinnedParticipantId || !memoizedParticipants.find(p => p.userId === pinnedParticipantId)) {
+        setPinnedParticipantId(memoizedParticipants[0].userId);
+      }
     } else {
       setPinnedParticipantId(null);
     }
-  }, [memoizedParticipants]);
+  }, [memoizedParticipants, pinnedParticipantId]);
   
 
   const totalPages = Math.ceil(memoizedParticipants.length / gridSize);
@@ -83,7 +84,7 @@ const Meeting = () => {
   }, []);
 
   const createPeerConnection = useCallback(
-    async (remoteSocketId, remoteUsername) => {
+    async (remoteSocketId) => {
       const iceServers = await getIceServers();
       const pc = new RTCPeerConnection({ iceServers });
       
@@ -107,29 +108,14 @@ const Meeting = () => {
 
   const setupSocketListeners = useCallback(
     (socket) => {
-      // Existing users get this event when a new user joins
-      socket.on('user-joined', async ({ userId, username, isHost }) => {
-        // Add new user to state to render their video tile
-        setParticipants(prev => [...prev, { userId, username, stream: null, isLocal: false, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false }]);
-        
-        // Existing user creates an offer TO the new user
-        const pc = await createPeerConnection(userId, username);
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+      // An existing user receives an offer from a new user who just got their info
+      socket.on('offer', async ({ from, offer, username }) => {
+        const isNewParticipant = !participants.some(p => p.userId === from);
+        if (isNewParticipant) {
+           setParticipants(prev => [...prev, { userId: from, username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false }]);
         }
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', { to: userId, offer, username: user.username });
-      });
 
-      // A user receives an offer (either the new user or an existing one)
-      socket.on('offer', async ({ from, offer, username, isHost }) => {
-        setParticipants(prev => {
-          if (prev.find(p => p.userId === from)) return prev;
-          return [...prev, { userId: from, username, stream: null, isLocal: false, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
-        });
-
-        const pc = await createPeerConnection(from, username);
+        const pc = await createPeerConnection(from);
         if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
         }
@@ -138,7 +124,12 @@ const Meeting = () => {
         await pc.setLocalDescription(answer);
         socket.emit('answer', { to: from, answer });
       });
-
+      
+      // A new user receives this when an existing user offers a connection
+      socket.on('user-joined', async ({ userId, username }) => {
+        setParticipants(prev => [...prev, { userId, username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false }]);
+      });
+      
       socket.on('answer', ({ from, answer }) => {
         const pc = peerConnections.current.get(from);
         pc?.setRemoteDescription(new RTCSessionDescription(answer));
@@ -160,26 +151,50 @@ const Meeting = () => {
       socket.on('screen-share-start', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p)));
       socket.on('screen-share-stop', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p)));
     },
-    [createPeerConnection, user.username]
+    [createPeerConnection, participants] // participants dependency is important here
   );
   
   useEffect(() => {
+    let isMounted = true;
     const initialize = async () => {
       if (!user) { navigate('/home'); return; }
       try {
         setIsLoading(true);
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true });
+        if (!isMounted) return;
+        
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
 
         const socket = io(SERVER_URL, { auth: { token: user.token }, transports: ['websocket'] });
         socketRef.current = socket;
         
-        socket.on('connect', () => {
-          const localParticipant = { userId: socket.id, username: `${user.username} (You)`, stream, isLocal: true, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false };
-          setParticipants([localParticipant]);
-          setupSocketListeners(socket);
-          socket.emit('join-room', { roomId, username: user.username });
+        setupSocketListeners(socket);
+        
+        // This is the corrected 'join-room' emit with the required callback
+        socket.emit('join-room', { roomId, username: user.username }, async (otherUsers) => {
+            const isHost = otherUsers.length === 0;
+            const localParticipant = {
+                userId: socket.id,
+                username: `${user.username} (You)`,
+                stream,
+                isLocal: true,
+                isHost,
+                videoEnabled: true,
+                audioEnabled: true,
+                isScreenSharing: false,
+            };
+            setParticipants([localParticipant]);
+
+            // New user sends offers to all existing users
+            for (const otherUser of otherUsers) {
+                setParticipants(prev => [...prev, { userId: otherUser.userId, username: otherUser.username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false }]);
+                const pc = await createPeerConnection(otherUser.userId);
+                stream.getTracks().forEach(track => pc.addTrack(track, stream));
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                socket.emit('offer', { to: otherUser.userId, offer, username: user.username });
+            }
         });
 
         setIsLoading(false);
@@ -190,11 +205,13 @@ const Meeting = () => {
     };
     initialize();
     return () => {
+      isMounted = false;
       socketRef.current?.disconnect();
       localStreamRef.current?.getTracks().forEach(track => track.stop());
       peerConnections.current.forEach(pc => pc.close());
     };
-  }, [roomId, user, navigate, setupSocketListeners]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, user, navigate]);
 
 
   const replaceTrack = useCallback(async (newTrack, isScreenShare = false) => {
@@ -273,11 +290,9 @@ const Meeting = () => {
       </div>
       <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 relative p-4" ref={videoContainerRef}>
-          {/* Annotation Toolbar and Canvas would go here */}
-
           {pinnedParticipantId && participants.length > 1 ? (
-             // Pinned View
-            <div className="h-full flex flex-col">
+             // Pinned View (Host or Screen-sharer is main)
+            <div className="h-full flex flex-col gap-4">
               <div className="flex-1">
                 <VideoPlayer
                   key={pinnedParticipantId}
@@ -286,7 +301,7 @@ const Meeting = () => {
                   isLocal={participants.find((p) => p.userId === pinnedParticipantId)?.isLocal}
                 />
               </div>
-              <div className="h-40 relative mt-4">
+              <div className="h-40 relative">
                 <div className="absolute inset-0 flex transition-transform duration-300 ease-in-out" style={{ transform: `translateX(-${currentOffset * 100}%)` }}>
                   {Array.from({ length: totalSmallPages }, (_, i) => (
                     <div key={i} className="flex-shrink-0 w-full flex gap-4">

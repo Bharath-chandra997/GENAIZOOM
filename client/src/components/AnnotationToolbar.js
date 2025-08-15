@@ -1,53 +1,77 @@
 // src/components/AnnotationToolbar.js
 
 import React from 'react';
+import { FaPen, FaEraser, FaRegCircle, FaRegSquare, FaTrash } from 'react-icons/fa';
 
-const AnnotationToolbar = ({ currentTool, setCurrentTool, currentBrushSize, setCurrentBrushSize, clearCanvas, isAnnotationActive, toggleAnnotations }) => {
-    const tools = ['pen', 'rectangle', 'circle', 'eraser'];
+const AnnotationToolbar = ({
+  isAnnotationActive,
+  toggleAnnotations,
+  currentTool,
+  setCurrentTool,
+  currentBrushSize,
+  setCurrentBrushSize,
+  clearCanvas,
+  onMouseDown, // Prop for dragging
+}) => {
+  const tools = [
+    { id: 'pen', icon: <FaPen /> },
+    { id: 'eraser', icon: <FaEraser /> },
+    { id: 'rectangle', icon: <FaRegSquare /> },
+    { id: 'circle', icon: <FaRegCircle /> },
+  ];
 
-    if (!isAnnotationActive) {
-        return (
-             <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
-                <button 
-                    onClick={toggleAnnotations} 
-                    title="Start Annotating"
-                    style={{ background: '#3c4043', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 15px', cursor: 'pointer' }}
-                >
-                   ✏️ Annotate
-                </button>
-            </div>
-        )
-    }
+  return (
+    <div
+      className="absolute bg-gray-800/80 backdrop-blur-sm text-white p-2 rounded-lg shadow-2xl flex items-center gap-4 cursor-move z-50"
+      onMouseDown={onMouseDown} // Attach the drag handler here
+    >
+      {/* Activate Annotations Button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); toggleAnnotations(); }}
+        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${isAnnotationActive ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-700 hover:bg-gray-600'}`}
+      >
+        {isAnnotationActive ? 'On' : 'Off'}
+      </button>
 
-    return (
-        <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', background: 'rgba(44, 45, 48, 0.9)', padding: '8px 15px', borderRadius: '8px', zIndex: 20, display: 'flex', gap: '10px', alignItems: 'center', color: 'white' }}>
-            <button onClick={toggleAnnotations} title="Stop Annotating" style={{border: 'none', background: 'transparent', color: 'white', cursor: 'pointer'}}>✕</button>
+      {isAnnotationActive && (
+        <>
+          {/* Tool Selection */}
+          <div className="flex items-center gap-1 bg-gray-900/50 p-1 rounded-md">
             {tools.map(tool => (
-                <button
-                    key={tool}
-                    onClick={() => setCurrentTool(tool)}
-                    title={tool.charAt(0).toUpperCase() + tool.slice(1)}
-                    style={{ background: currentTool === tool ? '#8ab4f8' : '#3c4043', color: currentTool === tool ? '#202124' : 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer', textTransform: 'capitalize' }}
-                >
-                    {tool}
-                </button>
+              <button
+                key={tool.id}
+                onClick={(e) => { e.stopPropagation(); setCurrentTool(tool.id); }}
+                className={`p-2 rounded-md transition-colors ${currentTool === tool.id ? 'bg-blue-500' : 'hover:bg-gray-600'}`}
+                title={tool.id.charAt(0).toUpperCase() + tool.id.slice(1)}
+              >
+                {tool.icon}
+              </button>
             ))}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                Size:
-                <input
-                    type="range"
-                    min="2"
-                    max="50"
-                    value={currentBrushSize}
-                    onChange={(e) => setCurrentBrushSize(e.target.value)}
-                    title="Brush Size"
-                />
-            </label>
-            <button onClick={clearCanvas} title="Clear All" style={{ background: '#3c4043', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 10px', cursor: 'pointer' }}>
-                Clear
-            </button>
-        </div>
-    );
+          </div>
+
+          {/* Brush Size Slider */}
+          <input
+            type="range"
+            min="1"
+            max="50"
+            value={currentBrushSize}
+            onChange={(e) => { e.stopPropagation(); setCurrentBrushSize(e.target.value); }}
+            className="w-24 cursor-pointer"
+            onClick={(e) => e.stopPropagation()}
+          />
+          
+          {/* Clear Button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); clearCanvas(); }}
+            className="p-2 text-red-400 hover:bg-red-500 hover:text-white rounded-md transition-colors"
+            title="Clear All"
+          >
+            <FaTrash />
+          </button>
+        </>
+      )}
+    </div>
+  );
 };
 
 export default AnnotationToolbar;

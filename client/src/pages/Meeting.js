@@ -27,14 +27,11 @@ const Meeting = () => {
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
-  const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
-  const [gridSize, setGridSize] = useState(6);
+  const [filmstripSize] = useState(6); // How many participants to show in the filmstrip per page
   const [currentOffset, setCurrentOffset] = useState(0);
 
   // Annotation & Toolbar State
   const [isAnnotationActive, setIsAnnotationActive] = useState(false);
-  const [currentTool, setCurrentTool] = useState('pen');
-  const [currentBrushSize, setCurrentBrushSize] = useState(5);
   const [toolbarPosition, setToolbarPosition] = useState({ x: 20, y: 20 });
   
   // Refs
@@ -44,41 +41,34 @@ const Meeting = () => {
   const screenStreamRef = useRef(null);
   const peerConnections = useRef(new Map());
   const dragInfo = useRef({ isDragging: false, offsetX: 0, offsetY: 0 });
-  const videoContainerRef = useRef(null);
 
-  // Automatically set the main "pinned" view based on who is host or screen-sharing
-  useEffect(() => {
+  // --- NEW DERIVED STATE LOGIC (Replaces pinnedParticipantId state) ---
+  // This is more reliable and calculates the correct view on every render.
+  const mainViewParticipant = useMemo(() => {
+    // A screen sharer always takes priority for the main view
     const screenSharer = participants.find(p => p.isScreenSharing);
-    if (screenSharer) {
-      setPinnedParticipantId(screenSharer.userId);
-      return;
-    }
+    if (screenSharer) return screenSharer;
+
+    // Otherwise, the host is the main view
     const host = participants.find(p => p.isHost);
-    if (host) {
-      setPinnedParticipantId(host.userId);
-    } else if (participants.length > 0) {
-      // Fallback to the first participant if no host
-      if (!pinnedParticipantId || !participants.find(p => p.userId === pinnedParticipantId)) {
-         setPinnedParticipantId(participants[0].userId);
-      }
-    } else {
-      setPinnedParticipantId(null);
-    }
-  }, [participants, pinnedParticipantId]);
+    if (host) return host;
 
-  const smallParticipants = useMemo(() =>
-    pinnedParticipantId ? participants.filter(p => p.userId !== pinnedParticipantId) : [],
-    [pinnedParticipantId, participants]
-  );
-  const totalSmallPages = Math.ceil(smallParticipants.length / gridSize);
-  const totalGridPages = Math.ceil(participants.length / (gridSize * 2)); // Grid view can hold more
-  const gridLayoutClass = gridSize * 2 === 12 ? 'grid-cols-6 grid-rows-2' : 'grid-cols-4 grid-rows-2';
+    // Fallback if there's no host (e.g., host left)
+    return participants[0] || null;
+  }, [participants]);
 
+  const filmstripParticipants = useMemo(() => {
+    if (!mainViewParticipant) return [];
+    // The filmstrip contains everyone *except* the person in the main view
+    return participants.filter(p => p.userId !== mainViewParticipant.userId);
+  }, [participants, mainViewParticipant]);
 
+  const totalFilmstripPages = Math.ceil(filmstripParticipants.length / filmstripSize);
+  
   const getIceServers = useCallback(async () => {
     try {
-      const response = await axios.get(`${SERVER_URL}/ice-servers`);
-      return response.data;
+      const { data } = await axios.get(`${SERVER_URL}/ice-servers`);
+      return data;
     } catch (error) {
       return [{ urls: 'stun:stun.l.google.com:19302' }];
     }
@@ -106,6 +96,7 @@ const Meeting = () => {
   );
 
   const setupSocketListeners = useCallback((socket) => {
+    // --- Signaling Handlers ---
     socket.on('offer', async ({ from, offer, username }) => {
       setParticipants(prev => {
         if (prev.some(p => p.userId === from)) return prev;
@@ -126,13 +117,6 @@ const Meeting = () => {
       peerConnections.current.get(from)?.setRemoteDescription(new RTCSessionDescription(answer));
     });
     
-    socket.on('user-joined', ({ userId, username }) => {
-       setParticipants(prev => {
-          if (prev.some(p => p.userId === userId)) return prev;
-          return [...prev, { userId, username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
-       });
-    });
-
     socket.on('ice-candidate', ({ from, candidate }) => {
       peerConnections.current.get(from)?.addIceCandidate(new RTCIceCandidate(candidate));
     });
@@ -143,21 +127,19 @@ const Meeting = () => {
       setParticipants(prev => prev.filter(p => p.userId !== userId));
     });
     
+    // --- State Sync Handlers ---
     socket.on('chat-message', (payload) => setMessages(prev => [...prev, payload]));
-
     socket.on('screen-share-start', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p)));
     socket.on('screen-share-stop', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p)));
 
-  }, [createPeerConnection]); // Empty dependency array is crucial here to prevent re-registration
+  }, [createPeerConnection]);
 
   useEffect(() => {
-    let isMounted = true;
     const initialize = async () => {
       if (!user) { navigate('/home'); return; }
       try {
         setIsLoading(true);
         const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true });
-        if (!isMounted) return;
         
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
@@ -169,12 +151,15 @@ const Meeting = () => {
         
         socket.emit('join-room', { roomId, username: user.username }, async (otherUsers) => {
             const isHost = otherUsers.length === 0;
-            const allUsers = [
-                { userId: socket.id, username: `${user.username} (You)`, stream, isLocal: true, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false },
+            const localParticipant = { userId: socket.id, username: `${user.username} (You)`, stream, isLocal: true, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false };
+            
+            // Add self and all other users to the state at once
+            setParticipants([
+                localParticipant,
                 ...otherUsers.map(u => ({ userId: u.userId, username: u.username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false }))
-            ];
-            setParticipants(allUsers);
+            ]);
 
+            // As the new joiner, send an offer to everyone who was already here
             for (const otherUser of otherUsers) {
                 const pc = await createPeerConnection(otherUser.userId);
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -191,7 +176,6 @@ const Meeting = () => {
     };
     initialize();
     return () => {
-      isMounted = false;
       socketRef.current?.disconnect();
       localStreamRef.current?.getTracks().forEach(track => track.stop());
       peerConnections.current.forEach(pc => pc.close());
@@ -204,9 +188,12 @@ const Meeting = () => {
         const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
         if (sender) await sender.replaceTrack(newTrack);
       }
+      // Visually update your own stream
       const oldTrack = localStreamRef.current.getVideoTracks()[0];
       localStreamRef.current.removeTrack(oldTrack);
       localStreamRef.current.addTrack(newTrack);
+      
+      // Update your own state and notify others
       setParticipants((prev) => prev.map((p) => p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p));
       socketRef.current.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop');
     },[]);
@@ -252,10 +239,9 @@ const Meeting = () => {
   };
   
   const handleSwipe = (direction) => {
-    const maxPages = pinnedParticipantId ? totalSmallPages : totalGridPages;
     setCurrentOffset((prev) => {
       const newOffset = prev + direction;
-      return Math.max(0, Math.min(newOffset, maxPages - 1));
+      return Math.max(0, Math.min(newOffset, totalFilmstripPages - 1));
     });
   };
 
@@ -296,35 +282,33 @@ const Meeting = () => {
       </div>
 
       <div className="flex-1 flex overflow-hidden relative">
-        <div className="flex-1 relative p-4" ref={videoContainerRef}>
+        <div 
+            className="flex-1 flex flex-col relative p-4 gap-4"
+            onWheel={(e) => { if (e.deltaY !== 0) { e.preventDefault(); handleSwipe(e.deltaY > 0 ? 1 : -1); } }}
+        >
           <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
-            <AnnotationToolbar
-                onMouseDown={handleToolbarMouseDown}
-                isAnnotationActive={isAnnotationActive}
-                toggleAnnotations={() => setIsAnnotationActive(p => !p)}
-                currentTool={currentTool}
-                setCurrentTool={setCurrentTool}
-                currentBrushSize={currentBrushSize}
-                setCurrentBrushSize={setCurrentBrushSize}
-                clearCanvas={() => {/* Implement canvas clearing */}}
-            />
+            <AnnotationToolbar onMouseDown={handleToolbarMouseDown} isAnnotationActive={isAnnotationActive} toggleAnnotations={() => setIsAnnotationActive(p => !p)}/>
           </div>
 
-          {pinnedParticipantId && participants.length > 1 ? (
-            <div className="h-full flex flex-col gap-4">
-              <div className="flex-1 min-h-0">
+          {/* Main View Area */}
+          <div className="flex-1 min-h-0">
+            {mainViewParticipant && (
                 <VideoPlayer
-                  key={pinnedParticipantId}
-                  participant={participants.find((p) => p.userId === pinnedParticipantId)}
+                  key={mainViewParticipant.userId}
+                  participant={mainViewParticipant}
                   isPinned={true}
-                  isLocal={participants.find((p) => p.userId === pinnedParticipantId)?.isLocal}
+                  isLocal={mainViewParticipant.isLocal}
                 />
-              </div>
-              <div className="h-40 relative">
+            )}
+          </div>
+          
+          {/* Filmstrip View Area */}
+          {filmstripParticipants.length > 0 && (
+            <div className="h-40 w-full relative">
                 <div className="absolute inset-0 flex transition-transform duration-300 ease-in-out" style={{ transform: `translateX(-${currentOffset * 100}%)` }}>
-                  {Array.from({ length: totalSmallPages }, (_, i) => (
-                    <div key={i} className={`flex-shrink-0 w-full h-full grid grid-cols-6 gap-2`}>
-                      {smallParticipants.slice(i * gridSize, (i + 1) * gridSize).map((p) => (
+                  {Array.from({ length: totalFilmstripPages }, (_, i) => (
+                    <div key={i} className={`flex-shrink-0 w-full h-full grid grid-cols-6 gap-4`}>
+                      {filmstripParticipants.slice(i * filmstripSize, (i + 1) * filmstripSize).map((p) => (
                         <div key={p.userId} className="h-full">
                           <VideoPlayer participant={p} isLocal={p.isLocal}/>
                         </div>
@@ -332,28 +316,13 @@ const Meeting = () => {
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-          ) : (
-            <div className="h-full relative" onWheel={(e) => { if (e.deltaY !== 0) { e.preventDefault(); handleSwipe(e.deltaY > 0 ? 1 : -1); } }}>
-              <div className="absolute inset-0 flex transition-transform duration-300 ease-in-out" style={{ transform: `translateX(-${currentOffset * 100}%)` }}>
-                {Array.from({ length: totalGridPages }, (_, i) => (
-                  <div key={i} className={`flex-shrink-0 w-full h-full grid gap-4 ${gridLayoutClass}`}>
-                    {participants.slice(i * (gridSize * 2), (i + 1) * (gridSize * 2)).map((p) => (
-                      <div key={p.userId} className="bg-gray-800 rounded-lg">
-                        <VideoPlayer participant={p} isLocal={p.isLocal} />
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-              {totalGridPages > 1 && (
-                <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2">
-                  {Array.from({ length: totalGridPages }, (_, i) => (
-                    <button key={i} onClick={() => setCurrentOffset(i)} className={`w-3 h-3 rounded-full ${currentOffset === i ? 'bg-white' : 'bg-gray-500'}`} />
-                  ))}
-                </div>
-              )}
+                {totalFilmstripPages > 1 && (
+                    <div className="absolute bottom-[-10px] left-0 right-0 flex justify-center gap-2">
+                        {Array.from({ length: totalFilmstripPages }, (_, i) => (
+                        <button key={i} onClick={() => setCurrentOffset(i)} className={`w-2.5 h-2.5 rounded-full ${currentOffset === i ? 'bg-white' : 'bg-gray-500'}`} />
+                        ))}
+                    </div>
+                )}
             </div>
           )}
         </div>

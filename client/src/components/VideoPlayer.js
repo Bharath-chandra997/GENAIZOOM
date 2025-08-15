@@ -1,9 +1,10 @@
-
+// VideoPlayer.js
 import React, { useEffect, useRef, useState } from 'react';
 
 const VideoPlayer = ({ participant, isPinned, onPin, isLocal, isHost, localCameraVideoRef, localCameraTrackRef }) => {
   const internalVideoRef = useRef(null);
-  const videoRef = isLocal ? localCameraVideoRef : internalVideoRef;
+  // ✨ FIX: Always use the internalVideoRef for the main video element.
+  const videoRef = internalVideoRef;
   const [isStreamLoading, setIsStreamLoading] = useState(true);
   const [isParticipantInvalid, setIsParticipantInvalid] = useState(false);
 
@@ -69,12 +70,13 @@ const VideoPlayer = ({ participant, isPinned, onPin, isLocal, isHost, localCamer
     }
   }, [participant.stream, participant.videoEnabled, participant.isScreenSharing, participant.userId, videoRef, isLocal]);
 
+  // The JSX is unchanged from your original code.
   return (
     <div className={`video-container relative bg-gray-800 ${isPinned ? 'pinned-video' : ''}`}>
       <style>
         {`
           .unmirror { transform: scaleX(-1) !important; }
-          .camera-video { position: absolute; bottom: 10px; right: 10px; width: 150px; height: 100px; border: 2px solid white; border-radius: 8px; }
+          .camera-video { position: absolute; bottom: 10px; right: 10px; width: 150px; height: 100px; border: 2px solid white; border-radius: 8px; z-index: 20; }
           .pinned-video { width: 100%; height: 80vh; margin-bottom: 10px; }
           .host-logo { margin-left: 8px; font-size: 16px; }
         `}

@@ -1,4 +1,3 @@
-// Meeting.js
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -40,6 +39,7 @@ const Meeting = () => {
   const socketRef = useRef(null);
   const localStreamRef = useRef(null);
   const localCameraTrackRef = useRef(null);
+  const localCameraPiPVideoRef = useRef(null);
   const screenStreamRef = useRef(null);
   const peerConnections = useRef(new Map());
   const annotationCanvasRef = useRef(null);
@@ -52,8 +52,8 @@ const Meeting = () => {
 
   // Paginated participants with swipe logic
   const totalPages = Math.ceil(memoizedParticipants.length / gridSize);
-  const smallParticipants = useMemo(() => 
-    pinnedParticipantId ? memoizedParticipants.filter(p => p.userId !== pinnedParticipantId) : [], 
+  const smallParticipants = useMemo(() =>
+    pinnedParticipantId ? memoizedParticipants.filter(p => p.userId !== pinnedParticipantId) : [],
     [pinnedParticipantId, memoizedParticipants]
   );
   const totalSmallPages = Math.ceil(smallParticipants.length / gridSize);
@@ -154,9 +154,13 @@ const Meeting = () => {
           peerConnections.current.delete(userId);
         }
         setParticipants((prev) => prev.filter((p) => p.userId !== userId));
-        if (pinnedParticipantId === userId) {
-          setPinnedParticipantId(null);
-        }
+        // Use functional update to ensure we have the latest state
+        setPinnedParticipantId((currentPinnedId) => {
+          if (currentPinnedId === userId) {
+            return null;
+          }
+          return currentPinnedId;
+        });
       });
       socket.on('chat-message', (payload) => setMessages((prev) => [...prev, payload]));
       socket.on('pin-participant', ({ userId }) => {
@@ -168,10 +172,11 @@ const Meeting = () => {
       socket.on('screen-share-start', ({ userId }) => {
         setParticipants((prev) => {
           const updated = prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: true } : p));
-          const localIsHost = prev.find((p) => p.isLocal)?.isHost;
-          if (localIsHost && !pinnedParticipantId) {
-            setPinnedParticipantId(userId);
-            socket.emit('pin-participant', { userId });
+          const localUser = prev.find((p) => p.isLocal);
+          // Auto-pin for host if no one is pinned
+          if (localUser?.isHost) {
+             setPinnedParticipantId(currentPinnedId => currentPinnedId ? currentPinnedId : userId);
+             socket.emit('pin-participant', { userId });
           }
           return updated;
         });
@@ -179,13 +184,16 @@ const Meeting = () => {
       socket.on('screen-share-stop', ({ userId }) => {
         setParticipants((prev) => {
           const updated = prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false } : p));
-          const localIsHost = prev.find((p) => p.isLocal)?.isHost;
-          if (pinnedParticipantId === userId) {
-            setPinnedParticipantId(null);
-            if (localIsHost) {
-              socket.emit('unpin-participant');
-            }
-          }
+          const localUser = prev.find((p) => p.isLocal);
+          setPinnedParticipantId(currentPinnedId => {
+              if (currentPinnedId === userId) {
+                  if (localUser?.isHost) {
+                      socket.emit('unpin-participant');
+                  }
+                  return null;
+              }
+              return currentPinnedId;
+          });
           return updated;
         });
       });
@@ -249,7 +257,7 @@ const Meeting = () => {
         if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       });
     },
-    [createPeerConnection, pinnedParticipantId]
+    [createPeerConnection]
   );
 
   const replaceTrack = useCallback(
@@ -415,7 +423,6 @@ const Meeting = () => {
       if (localCameraTrackRef.current) {
         await replaceTrack(localCameraTrackRef.current, false);
         setIsSharingScreen(false);
-        setParticipants((prev) => prev.map((p) => (p.isLocal ? { ...p, isScreenSharing: false } : p)));
       }
     } else {
       try {
@@ -424,12 +431,10 @@ const Meeting = () => {
         const screenTrack = screenStream.getVideoTracks()[0];
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
-        setParticipants((prev) => prev.map((p) => (p.isLocal ? { ...p, isScreenSharing: true } : p)));
         screenTrack.onended = async () => {
           if (localCameraTrackRef.current) {
             await replaceTrack(localCameraTrackRef.current, false);
             setIsSharingScreen(false);
-            setParticipants((prev) => prev.map((p) => (p.isLocal ? { ...p, isScreenSharing: false } : p)));
           }
         };
       } catch (err) {
@@ -625,6 +630,10 @@ const Meeting = () => {
                   onPin={handleUnpin}
                   isLocal={participants.find((p) => p.userId === pinnedParticipantId).isLocal}
                   isHost={participants.find((p) => p.isLocal)?.isHost}
+                  {...(participants.find(p => p.userId === pinnedParticipantId).isLocal && {
+                    localCameraVideoRef: localCameraPiPVideoRef,
+                    localCameraTrackRef: localCameraTrackRef,
+                  })}
                 />
               </div>
               <div className="h-40 relative">
@@ -648,6 +657,10 @@ const Meeting = () => {
                             onPin={() => handlePin(p.userId)}
                             isLocal={p.isLocal}
                             isHost={participants.find((p) => p.isLocal)?.isHost}
+                            {...(p.isLocal && {
+                              localCameraVideoRef: localCameraPiPVideoRef,
+                              localCameraTrackRef: localCameraTrackRef,
+                            })}
                           />
                         </div>
                       ))}
@@ -677,6 +690,10 @@ const Meeting = () => {
                   onPin={() => handlePin(participants[0].userId)}
                   isLocal={participants[0].isLocal}
                   isHost={participants.find((p) => p.isLocal)?.isHost}
+                  {...(participants[0].isLocal && {
+                    localCameraVideoRef: localCameraPiPVideoRef,
+                    localCameraTrackRef: localCameraTrackRef,
+                  })}
                 />
               </div>
             </div>
@@ -702,6 +719,10 @@ const Meeting = () => {
                           onPin={() => handlePin(p.userId)}
                           isLocal={p.isLocal}
                           isHost={participants.find((p) => p.isLocal)?.isHost}
+                          {...(p.isLocal && {
+                            localCameraVideoRef: localCameraPiPVideoRef,
+                            localCameraTrackRef: localCameraTrackRef,
+                          })}
                         />
                       </div>
                     ))}

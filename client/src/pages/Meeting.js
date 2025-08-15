@@ -15,7 +15,7 @@ const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
 // Helper function to generate a unique, consistent color from a user's ID
 const getColorForId = (id) => {
-  if (!id) return '#FFFFFF'; // Return white for null ID
+  if (!id) return '#FFFFFF';
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     hash = id.charCodeAt(i) + ((hash << 5) - hash);
@@ -44,7 +44,6 @@ const Meeting = () => {
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
 
   // Annotation & Toolbar State
-  const [isAnnotationActive, setIsAnnotationActive] = useState(false);
   const [toolbarPosition, setToolbarPosition] = useState({ x: 20, y: 20 });
   const [currentTool, setCurrentTool] = useState('pen');
   const [currentBrushSize, setCurrentBrushSize] = useState(5);
@@ -59,6 +58,8 @@ const Meeting = () => {
   const annotationCanvasRef = useRef(null);
   const mainVideoContainerRef = useRef(null);
   const remoteDrawingStates = useRef(new Map());
+  const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
+
 
   // --- DERIVED STATE ---
   const defaultMainParticipant = useMemo(() => {
@@ -166,6 +167,28 @@ const Meeting = () => {
         ctx.lineTo(x * canvas.width, y * canvas.height);
         ctx.stroke();
     });
+    socket.on('draw-shape', ({ from, tool, startX, startY, endX, endY, color, size }) => {
+        const canvas = annotationCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = color;
+        ctx.lineWidth = size;
+        ctx.globalCompositeOperation = 'source-over';
+        
+        const sX = startX * canvas.width;
+        const sY = startY * canvas.height;
+        const eX = endX * canvas.width;
+        const eY = endY * canvas.height;
+
+        ctx.beginPath();
+        if (tool === 'rectangle') {
+            ctx.rect(sX, sY, eX - sX, eY - sY);
+        } else if (tool === 'circle') {
+            const radius = Math.sqrt(Math.pow(eX - sX, 2) + Math.pow(eY - sY, 2));
+            ctx.arc(sX, sY, radius, 0, 2 * Math.PI);
+        }
+        ctx.stroke();
+    });
     socket.on('clear-canvas', () => {
         const canvas = annotationCanvasRef.current;
         if (!canvas) return;
@@ -176,7 +199,6 @@ const Meeting = () => {
   }, [createPeerConnection]);
 
   useEffect(() => {
-    // Main initialization logic
     const initialize = async () => {
       if (!user) { navigate('/home'); return; }
       try {
@@ -226,7 +248,6 @@ const Meeting = () => {
     const canvas = annotationCanvasRef.current;
     const container = mainVideoContainerRef.current;
     if (!container || !canvas) return;
-
     const resizeObserver = new ResizeObserver(() => {
       canvas.width = container.clientWidth;
       canvas.height = container.clientHeight;
@@ -287,7 +308,7 @@ const Meeting = () => {
       } catch (err) { toast.error('Screen sharing failed.'); }
     }
   };
-
+  
   const handleSwipe = (direction) => {
     setCurrentOffset((prev) => {
       const newOffset = prev + direction;
@@ -324,37 +345,83 @@ const Meeting = () => {
 
   // --- ANNOTATION HANDLERS ---
   const handleMouseDown = (e) => {
-    if (!isAnnotationActive) return;
     const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / canvas.width;
-    const y = (e.clientY - rect.top) / canvas.height;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
     
-    const myColor = getColorForId(socketRef.current.id);
-    const payload = { x, y, color: myColor, tool: currentTool, size: currentBrushSize };
-    socketRef.current.emit('drawing-start', payload);
+    drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
 
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = myColor;
-    ctx.lineWidth = currentBrushSize;
-    ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(x * canvas.width, y * canvas.height);
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+      const myColor = getColorForId(socketRef.current.id);
+      const payload = { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize };
+      socketRef.current.emit('drawing-start', payload);
+
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = myColor;
+      ctx.lineWidth = currentBrushSize;
+      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
   };
 
   const handleMouseMove = (e) => {
-     if (!isAnnotationActive || !e.buttons) return; // Check if mouse button is pressed
+     if (!drawingStateRef.current.isDrawing || !e.buttons) return;
      const canvas = annotationCanvasRef.current;
-     const rect = canvas.getBoundingClientRect();
-     const x = (e.clientX - rect.left) / canvas.width;
-     const y = (e.clientY - rect.top) / canvas.height;
+     if (!canvas) return;
      
-     socketRef.current.emit('drawing-move', { x, y });
-     
-     const ctx = canvas.getContext('2d');
-     ctx.lineTo(x * canvas.width, y * canvas.height);
-     ctx.stroke();
+     if (currentTool === 'pen' || currentTool === 'eraser') {
+       const rect = canvas.getBoundingClientRect();
+       const x = e.clientX - rect.left;
+       const y = e.clientY - rect.top;
+       socketRef.current.emit('drawing-move', { x: x / canvas.width, y: y / canvas.height });
+       
+       const ctx = canvas.getContext('2d');
+       ctx.lineTo(x, y);
+       ctx.stroke();
+     }
+  };
+  
+  const handleMouseUp = (e) => {
+    if (!drawingStateRef.current.isDrawing) return;
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    
+    if (currentTool === 'rectangle' || currentTool === 'circle') {
+        const rect = canvas.getBoundingClientRect();
+        const { startX, startY } = drawingStateRef.current;
+        const endX = e.clientX - rect.left;
+        const endY = e.clientY - rect.top;
+        const myColor = getColorForId(socketRef.current.id);
+
+        const payload = {
+            tool: currentTool,
+            startX: startX / canvas.width,
+            startY: startY / canvas.height,
+            endX: endX / canvas.width,
+            endY: endY / canvas.height,
+            color: myColor,
+            size: currentBrushSize,
+        };
+        socketRef.current.emit('draw-shape', payload);
+
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = myColor;
+        ctx.lineWidth = currentBrushSize;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.beginPath();
+        if (currentTool === 'rectangle') {
+            ctx.rect(startX, startY, endX - startX, endY - startY);
+        } else if (currentTool === 'circle') {
+            const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+            ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+        }
+        ctx.stroke();
+    }
+    drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
   };
   
   const handleParticipantClick = (userId) => {
@@ -388,8 +455,6 @@ const Meeting = () => {
             <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
               <AnnotationToolbar 
                 onMouseDown={handleToolbarMouseDown} 
-                isAnnotationActive={isAnnotationActive} 
-                toggleAnnotations={() => setIsAnnotationActive(p => !p)}
                 currentTool={currentTool}
                 setCurrentTool={setCurrentTool}
                 currentBrushSize={currentBrushSize}
@@ -414,9 +479,11 @@ const Meeting = () => {
             <canvas
               ref={annotationCanvasRef}
               className="absolute top-0 left-0"
-              style={{ pointerEvents: isAnnotationActive ? 'auto' : 'none', zIndex: 10, touchAction: 'none' }}
+              style={{ pointerEvents: isSomeoneScreenSharing ? 'auto' : 'none', zIndex: 10, touchAction: 'none' }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
             />
           </div>
           

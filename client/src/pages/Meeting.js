@@ -48,6 +48,7 @@ const Meeting = () => {
   const remoteDrawingStates = useRef(new Map());
   const localVideoRef = useRef(null);
   const isMountedRef = useRef(true);
+  const reconnectAttemptsRef = useRef(0);
 
   // Memoize participants
   const memoizedParticipants = useMemo(() => participants, [participants]);
@@ -63,8 +64,9 @@ const Meeting = () => {
 
   const getIceServers = useCallback(async () => {
     try {
+      console.log('Fetching ICE servers...');
       const response = await axios.get(`${SERVER_URL}/ice-servers`);
-      console.log('ICE servers:', response.data);
+      console.log('ICE servers fetched:', response.data);
       return response.data;
     } catch (error) {
       console.error('Failed to fetch ICE servers:', error);
@@ -117,14 +119,17 @@ const Meeting = () => {
     (socket) => {
       socket.on('connect', () => {
         console.log('Socket connected:', socket.id);
+        reconnectAttemptsRef.current = 0;
         setSocketError(null);
         toast.success('Connected to meeting server.');
       });
 
       socket.on('connect_error', (error) => {
         console.error('Socket connection error:', error);
-        setSocketError('Failed to connect to the server. Retrying...');
-        if (socket.io.opts.reconnectionAttempts >= 5) {
+        reconnectAttemptsRef.current += 1;
+        console.log(`Reconnection attempt ${reconnectAttemptsRef.current}`);
+        setSocketError(`Failed to connect to the server. Attempt ${reconnectAttemptsRef.current}/5...`);
+        if (reconnectAttemptsRef.current >= 5) {
           setSocketError('Unable to connect to the server. Please refresh or contact support.');
           socket.disconnect();
         }
@@ -384,6 +389,7 @@ const Meeting = () => {
 
   useEffect(() => {
     if (!user) {
+      console.log('No user, navigating to /home');
       navigate('/home');
       return;
     }
@@ -392,8 +398,10 @@ const Meeting = () => {
 
     const checkPermissions = async () => {
       try {
+        console.log('Checking media permissions...');
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         stream.getTracks().forEach((track) => track.stop());
+        console.log('Media permissions granted');
         return true;
       } catch (err) {
         console.error('Permission check failed:', err);
@@ -406,12 +414,14 @@ const Meeting = () => {
       try {
         setIsLoading(true);
         if (!roomId) {
+          console.error('Invalid meeting ID');
           toast.error('Invalid meeting ID');
           navigate('/home');
           return;
         }
         const hasPermissions = await checkPermissions();
         if (!hasPermissions) {
+          console.log('No permissions, navigating to /home');
           navigate('/home');
           return;
         }
@@ -420,6 +430,7 @@ const Meeting = () => {
         let attempt = 0;
         while (!stream && attempt < maxRetries) {
           try {
+            console.log(`Attempting getUserMedia (attempt ${attempt + 1}/${maxRetries})`);
             stream = await navigator.mediaDevices.getUserMedia({
               video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
               audio: true,
@@ -465,7 +476,7 @@ const Meeting = () => {
         ]);
         const socket = io(SERVER_URL, {
           auth: { token: user.token },
-          transports: ['websocket', 'polling'],
+          transports: ['websocket'], // Prefer WebSocket, avoid polling
           reconnection: true,
           reconnectionAttempts: 5,
           reconnectionDelay: 2000,
@@ -527,6 +538,7 @@ const Meeting = () => {
     };
     initialize();
     return () => {
+      console.log('Meeting.js cleanup triggered');
       isMountedRef.current = false;
       peerConnections.current.forEach((pc) => pc.close());
       peerConnections.current.clear();
@@ -583,6 +595,7 @@ const Meeting = () => {
       }
     } else {
       try {
+        console.log('Starting screen share...');
         const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         screenStreamRef.current = screenStream;
         const screenTrack = screenStream.getVideoTracks()[0];
@@ -593,6 +606,7 @@ const Meeting = () => {
         );
         screenTrack.onended = async () => {
           if (localCameraTrackRef.current && isMountedRef.current) {
+            console.log('Screen sharing ended, switching back to camera');
             await replaceTrack(localCameraTrackRef.current, false);
             setIsSharingScreen(false);
             setParticipants((prev) =>

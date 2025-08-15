@@ -24,7 +24,7 @@ const Meeting = () => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
@@ -33,9 +33,8 @@ const Meeting = () => {
   const [currentBrushSize, setCurrentBrushSize] = useState(5);
   const [myColor, setMyColor] = useState('');
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
-  const [gridSize, setGridSize] = useState(4);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [isHost, setIsHost] = useState(false);
+  const [gridSize, setGridSize] = useState(4); // Default to 4 frames
+  const [currentOffset, setCurrentOffset] = useState(0);
 
   // Refs
   const socketRef = useRef(null);
@@ -51,28 +50,13 @@ const Meeting = () => {
   // Memoize participants
   const memoizedParticipants = useMemo(() => participants, [participants]);
 
-  // Paginated participants
-  const paginatedParticipants = useMemo(() => {
-    const start = currentPage * gridSize;
+  // Paginated participants with swipe logic
+  const totalPages = Math.ceil(memoizedParticipants.length / gridSize);
+  const visibleParticipants = useMemo(() => {
+    const start = currentOffset * gridSize;
     const end = start + gridSize;
-    return memoizedParticipants.filter((p) => p.userId !== pinnedParticipantId).slice(start, end);
-  }, [memoizedParticipants, currentPage, gridSize, pinnedParticipantId]);
-
-  const totalPages = Math.ceil(
-    memoizedParticipants.filter((p) => p.userId !== pinnedParticipantId).length / gridSize
-  );
-
-  const checkPermissions = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-      return true;
-    } catch (err) {
-      console.error('Permission check failed:', err);
-      toast.error('Please allow camera and microphone access.');
-      return false;
-    }
-  };
+    return memoizedParticipants.slice(start, end);
+  }, [memoizedParticipants, currentOffset, gridSize]);
 
   const getIceServers = useCallback(async () => {
     try {
@@ -131,7 +115,7 @@ const Meeting = () => {
 
   const setupSocketListeners = useCallback(
     (socket) => {
-      socket.on('user-joined', ({ userId, username, isHost: participantHost }) => {
+      socket.on('user-joined', ({ userId, username, isHost }) => {
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === userId)) return prev;
           return [
@@ -141,7 +125,7 @@ const Meeting = () => {
               username,
               stream: null,
               isLocal: false,
-              isHost: participantHost,
+              isHost,
               videoEnabled: false,
               audioEnabled: false,
               isScreenSharing: false,
@@ -149,9 +133,11 @@ const Meeting = () => {
             },
           ];
         });
+        // Reset offset to show new user in center
+        if (prev.length === 1) setCurrentOffset(0);
       });
 
-      socket.on('offer', async ({ from, offer, username, isHost: participantHost }) => {
+      socket.on('offer', async ({ from, offer, username, isHost }) => {
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === from)) return prev;
           return [
@@ -161,7 +147,7 @@ const Meeting = () => {
               username,
               stream: null,
               isLocal: false,
-              isHost: participantHost,
+              isHost,
               videoEnabled: false,
               audioEnabled: false,
               isScreenSharing: false,
@@ -228,7 +214,7 @@ const Meeting = () => {
 
       socket.on('screen-share-stop', ({ userId }) => {
         setParticipants((prev) =>
-          prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false } : p))
+          prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false, stream: prev.find(p => p.userId === userId)?.stream } : p))
         );
         if (pinnedParticipantId === userId) {
           setPinnedParticipantId(null);
@@ -299,7 +285,7 @@ const Meeting = () => {
         if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       });
     },
-    [createPeerConnection]
+    [createPeerConnection, pinnedParticipantId]
   );
 
   const replaceTrack = useCallback(
@@ -347,6 +333,18 @@ const Meeting = () => {
     }
     setMyColor(`hsl(${Math.random() * 360}, 80%, 60%)`);
 
+    const checkPermissions = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        return true;
+      } catch (err) {
+        console.error('Permission check failed:', err);
+        toast.error('Please allow camera and microphone access.');
+        return false;
+      }
+    };
+
     const initialize = async () => {
       try {
         setIsLoading(true);
@@ -375,6 +373,10 @@ const Meeting = () => {
               },
               audio: true,
             });
+            if (stream.getVideoTracks().length > 0) {
+              stream.getVideoTracks()[0].onmute = () => console.log('Video track muted');
+              stream.getVideoTracks()[0].onunmute = () => console.log('Video track unmuted');
+            }
           } catch (err) {
             console.error(`getUserMedia attempt ${attempt + 1} failed:`, err);
             attempt++;
@@ -403,16 +405,14 @@ const Meeting = () => {
           })),
         });
 
-        const response = await axios.get(`${SERVER_URL}/api/meetings/${roomId}`);
-        setIsHost(response.data.meeting.isHost);
-
+        const isHost = true; // Adjust based on your logic
         setParticipants([
           {
             userId: 'local',
             username: `${user.username} (You)`,
             stream,
             isLocal: true,
-            isHost: response.data.meeting.isHost,
+            isHost,
             videoEnabled: true,
             audioEnabled: true,
             isScreenSharing: false,
@@ -427,7 +427,7 @@ const Meeting = () => {
         socketRef.current = socket;
         setupSocketListeners(socket);
 
-        socket.emit('join-room', { roomId, isHost: response.data.meeting.isHost }, async (otherUsers) => {
+        socket.emit('join-room', { roomId, isHost }, async (otherUsers) => {
           console.log('Joined room, other users:', otherUsers);
           for (const otherUser of otherUsers) {
             setParticipants((prev) => {
@@ -454,7 +454,7 @@ const Meeting = () => {
             });
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            socketRef.current.emit('offer', { to: otherUser.userId, offer: pc.localDescription, isHost: response.data.meeting.isHost });
+            socketRef.current.emit('offer', { to: otherUser.userId, offer: pc.localDescription, isHost });
           }
         });
 
@@ -551,6 +551,13 @@ const Meeting = () => {
   const handleUnpin = () => {
     setPinnedParticipantId(null);
     socketRef.current.emit('unpin-participant');
+  };
+
+  const handleSwipe = (direction) => {
+    setCurrentOffset((prev) => {
+      const newOffset = prev + direction;
+      return Math.max(0, Math.min(newOffset, totalPages - 1));
+    });
   };
 
   const resizeCanvas = () => {
@@ -658,20 +665,52 @@ const Meeting = () => {
     const y = (e.clientY - rect.top) / rect.height;
     drawingStateRef.current.endX = x;
     drawingStateRef.current.endY = y;
-    // Redraw the shape in real-time (optional for better UX)
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const absStartX = drawingStateRef.current.startX * canvas.width;
+    const absStartY = drawingStateRef.current.startY * canvas.height;
+    const absEndX = x * canvas.width;
+    const absEndY = y * canvas.height;
+    const absWidth = absEndX - absStartX;
+    const absHeight = absEndY - absStartY;
+    ctx.lineWidth = currentBrushSize;
+    ctx.strokeStyle = myColor;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.beginPath();
+    if (currentTool === 'rectangle') {
+      ctx.rect(absStartX, absStartY, absWidth, absHeight);
+    } else if (currentTool === 'circle') {
+      const radius = Math.sqrt(absWidth ** 2 + absHeight ** 2);
+      if (radius > 0) {
+        ctx.arc(absStartX, absStartY, radius, 0, 2 * Math.PI);
+      }
+    }
+    ctx.stroke();
   };
 
-  if (isLoading) return <div className="h-screen bg-gray-900 flex items-center justify-center"><LoadingSpinner size="large" /></div>;
+  if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
   return (
-    <div className="h-screen bg-black flex flex-col overflow-hidden">
-      <div className="bg-black text-white p-2 flex items-center justify-between" style={{ height: '40px' }}>
-        <h1 className="text-sm font-semibold">Zoom Meeting</h1>
-        <button className="text-white text-sm">View</button>
+    <div className="h-screen bg-black flex flex-col overflow-hidden text-white">
+      <div className="bg-gray-900 p-4 flex items-center justify-between">
+        <h1 className="text-lg font-semibold">Meeting: {roomId}</h1>
+        <div className="flex items-center gap-4">
+          <span>Participants: {participants.length}</span>
+          <select
+            value={gridSize}
+            onChange={(e) => {
+              setGridSize(Number(e.target.value));
+              setCurrentOffset(0);
+            }}
+            className="bg-gray-800 text-white p-1 rounded"
+          >
+            <option value={4}>4 Frames</option>
+            <option value={6}>6 Frames</option>
+          </select>
+        </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden relative">
-        <div className="flex-1 p-0 relative" ref={videoContainerRef} style={{ background: 'black' }}>
+        <div className="flex-1 relative p-4" ref={videoContainerRef}>
           <AnnotationToolbar
             isAnnotationActive={isAnnotationActive}
             toggleAnnotations={() => setIsAnnotationActive((prev) => !prev)}
@@ -699,7 +738,7 @@ const Meeting = () => {
             onMouseLeave={handleMouseUp}
           />
           {pinnedParticipantId && participants.find((p) => p.userId === pinnedParticipantId && p.isScreenSharing) ? (
-            <div className="flex flex-col h-full">
+            <div className="h-full flex flex-col">
               <div className="flex-1">
                 <VideoPlayer
                   key={pinnedParticipantId}
@@ -707,68 +746,83 @@ const Meeting = () => {
                   isPinned={true}
                   onPin={handleUnpin}
                   isLocal={participants.find((p) => p.userId === pinnedParticipantId).isLocal}
-                  isHost={isHost}
-                  localCameraVideoRef={localStreamRef}
+                  isHost={participants.find((p) => p.isLocal)?.isHost}
                 />
               </div>
-              <div className="flex overflow-x-auto gap-2 p-2 bg-black">
-                {paginatedParticipants.map((p) => (
-                  <div key={p.userId} className="w-32 h-24">
+              <div className="flex overflow-x-auto gap-4 p-2">
+                {visibleParticipants.map((p) => (
+                  <div key={p.userId} className="w-1/4 h-32">
                     <VideoPlayer
                       participant={p}
                       isPinned={false}
                       onPin={() => handlePin(p.userId)}
                       isLocal={p.isLocal}
-                      isHost={isHost}
-                      localCameraVideoRef={localStreamRef}
+                      isHost={participants.find((p) => p.isLocal)?.isHost}
                     />
                   </div>
                 ))}
               </div>
             </div>
+          ) : participants.length === 1 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="w-3/4 h-3/4">
+                <VideoPlayer
+                  key={participants[0].userId}
+                  participant={participants[0]}
+                  isPinned={false}
+                  onPin={() => handlePin(participants[0].userId)}
+                  isLocal={participants[0].isLocal}
+                  isHost={participants.find((p) => p.isLocal)?.isHost}
+                />
+              </div>
+            </div>
           ) : (
             <div
-              className="w-full h-full grid gap-0"
-              style={{ gridTemplateColumns: 'repeat(2, 1fr)', gridTemplateRows: 'repeat(2, 1fr)', background: 'black' }}
+              className="h-full overflow-x-auto whitespace-nowrap"
+              onWheel={(e) => {
+                if (e.deltaY !== 0) {
+                  e.preventDefault();
+                  handleSwipe(e.deltaY > 0 ? 1 : -1);
+                }
+              }}
+              style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }}
             >
-              {memoizedParticipants.slice(0, 4).map((p) => (
-                <VideoPlayer
-                  key={p.userId}
-                  participant={p}
-                  isPinned={false}
-                  onPin={() => handlePin(p.userId)}
-                  isLocal={p.isLocal}
-                  isHost={isHost}
-                  localCameraVideoRef={localStreamRef}
-                />
+              {Array.from({ length: totalPages }, (_, i) => (
+                <div
+                  key={i}
+                  className="inline-flex gap-4"
+                  style={{ transform: `translateX(-${currentOffset * 100}%)`, transition: 'transform 0.3s ease' }}
+                >
+                  {memoizedParticipants.slice(i * gridSize, (i + 1) * gridSize).map((p) => (
+                    <div key={p.userId} className="w-1/4 h-1/3 inline-block">
+                      <VideoPlayer
+                        participant={p}
+                        isPinned={false}
+                        onPin={() => handlePin(p.userId)}
+                        isLocal={p.isLocal}
+                        isHost={participants.find((p) => p.isLocal)?.isHost}
+                      />
+                    </div>
+                  ))}
+                </div>
               ))}
             </div>
           )}
           {totalPages > 1 && (
-            <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-                disabled={currentPage === 0}
-                className="bg-gray-600 text-white p-2 rounded disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span className="text-white">
-                Page {currentPage + 1} of {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={currentPage === totalPages - 1}
-                className="bg-gray-600 text-white p-2 rounded disabled:opacity-50"
-              >
-                Next
-              </button>
+            <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2">
+              {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentOffset(i)}
+                  className={`w-3 h-3 rounded-full ${currentOffset === i ? 'bg-white' : 'bg-gray-500'}`}
+                />
+              ))}
             </div>
           )}
         </div>
 
         <div
-          className={`bg-gray-800 border-l border-gray-700 transition-all duration-300 ${
+          className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${
             isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'
           } overflow-hidden`}
         >
@@ -796,39 +850,36 @@ const Meeting = () => {
         </div>
       </div>
 
-      <div className="bg-black text-white p-2 flex items-center justify-center gap-4" style={{ height: '50px' }}>
-        <button onClick={toggleAudio} className="flex flex-col items-center text-sm">
-          <span>{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</span>
+      <div className="bg-gray-900 border-t border-gray-700 p-4 flex justify-center gap-4">
+        <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
+          {isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}
         </button>
-        <button onClick={toggleVideo} className="flex flex-col items-center text-sm">
-          <span>{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</span>
+        <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
+          {isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}
         </button>
-        <button className="flex flex-col items-center text-sm">
-          <span>Security</span>
+        <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
+          {isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}
         </button>
-        <button onClick={() => setIsParticipantsOpen((o) => !o)} className="flex flex-col items-center text-sm">
-          <span>Participants</span>
+        <button
+          onClick={() => {
+            setIsChatOpen((o) => !o);
+            setIsParticipantsOpen(false);
+          }}
+          className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600"
+        >
+          Chat 💬
         </button>
-        <button onClick={() => setIsChatOpen((o) => !o)} className="flex flex-col items-center text-sm">
-          <span>Chat</span>
+        <button
+          onClick={() => {
+            setIsParticipantsOpen((o) => !o);
+            setIsChatOpen(false);
+          }}
+          className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600"
+        >
+          Participants 👥
         </button>
-        <button onClick={handleScreenShare} className="flex flex-col items-center text-sm">
-          <span>{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</span>
-        </button>
-        <button className="flex flex-col items-center text-sm">
-          <span>Record</span>
-        </button>
-        <button className="flex flex-col items-center text-sm">
-          <span>Reactions</span>
-        </button>
-        <button className="flex flex-col items-center text-sm">
-          <span>Apps</span>
-        </button>
-        <button onClick={() => setIsAnnotationActive((prev) => !prev)} className="flex flex-col items-center text-sm">
-          <span>Whiteboard</span>
-        </button>
-        <button onClick={() => navigate('/home')} className="flex flex-col items-center text-sm bg-red-600 p-2 rounded">
-          <span>Leave</span>
+        <button onClick={() => navigate('/home')} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">
+          Exit Room 📞
         </button>
       </div>
     </div>

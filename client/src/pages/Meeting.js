@@ -203,7 +203,7 @@ const Meeting = () => {
               try {
                 const params = sender.getParameters();
                 if (!params.encodings) params.encodings = [{}];
-                params.encodings[0].maxBitrate = 2000000; // Increased to 2Mbps
+                params.encodings[0].maxBitrate = 2000000;
                 params.encodings[0].scaleResolutionDownBy = 1;
                 params.encodings[0].maxFramerate = 30;
                 sender.setParameters(params);
@@ -403,14 +403,41 @@ const Meeting = () => {
 
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
+
+        // Wait for video track to be ready with a timeout
+        const timeoutMs = 5000; // 5 seconds
+        const startTime = Date.now();
+        if (stream.getVideoTracks().length > 0) {
+          const videoTrack = stream.getVideoTracks()[0];
+          videoTrack.onmute = () => console.log('Local video track muted');
+          videoTrack.onunmute = () => console.log('Local video track unmuted');
+          await new Promise((resolve, reject) => {
+            const checkTrack = () => {
+              if (videoTrack.readyState === 'live') {
+                console.log('Local video track is live:', videoTrack);
+                resolve();
+              } else if (Date.now() - startTime > timeoutMs) {
+                reject(new Error('Video track failed to become live within timeout'));
+              } else {
+                console.log('Waiting for local video track to be live:', videoTrack.readyState);
+                setTimeout(checkTrack, 100);
+              }
+            };
+            checkTrack();
+          });
+        } else {
+          throw new Error('No video tracks in local stream');
+        }
+
+        // Set participants only after stream is confirmed ready
         setParticipants([
           {
             userId: 'local',
             username: `${user.username} (You)`,
             stream,
             isLocal: true,
-            videoEnabled: true,
-            audioEnabled: true,
+            videoEnabled: stream.getVideoTracks()[0]?.enabled ?? false,
+            audioEnabled: stream.getAudioTracks()[0]?.enabled ?? false,
             isScreenSharing: false,
             connectionQuality: 'good',
           },
@@ -470,22 +497,6 @@ const Meeting = () => {
           }, 1000);
         });
 
-        // Wait for stream to be ready before setting isLoading to false
-        if (stream.getVideoTracks().length > 0) {
-          const videoTrack = stream.getVideoTracks()[0];
-          videoTrack.onmute = () => console.log('Local video track muted');
-          videoTrack.onunmute = () => console.log('Local video track unmuted');
-          await new Promise((resolve) => {
-            const checkTrack = () => {
-              if (videoTrack.readyState === 'live') {
-                resolve();
-              } else {
-                setTimeout(checkTrack, 100);
-              }
-            };
-            checkTrack();
-          });
-        }
         setIsLoading(false);
       } catch (error) {
         console.error('Initialization error:', error);
@@ -514,6 +525,10 @@ const Meeting = () => {
     const audioTracks = stream.getAudioTracks();
 
     const handleTrackChange = () => {
+      console.log('Local track change:', {
+        videoTracks: videoTracks.map((t) => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
+        audioTracks: audioTracks.map((t) => ({ id: t.id, enabled: t.enabled, readyState: t.readyState })),
+      });
       setParticipants((prev) =>
         prev.map((p) =>
           p.isLocal
@@ -797,7 +812,7 @@ const Meeting = () => {
                   <VideoPlayer participant={p} isLocal={p.isLocal} />
                 ) : (
                   <div className="w-full h-full bg-black flex items-center justify-center text-white">
-                    {p.isLocal ? 'Your video loading...' : `Connecting to ${p.username}...`}
+                    {p.isLocal ? 'Your video is initializing...' : `Connecting to ${p.username}...`}
                   </div>
                 )}
               </div>

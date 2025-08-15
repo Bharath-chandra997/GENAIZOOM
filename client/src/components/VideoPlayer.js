@@ -24,6 +24,12 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
             videoEnabled: participant.videoEnabled ?? true,
             isScreenSharing: participant.isScreenSharing ?? false,
             unmirrorApplied: participant.isLocal && !participant.isScreenSharing,
+            videoTracks: participant.stream.getVideoTracks().map((track) => ({
+              id: track.id,
+              enabled: track.enabled,
+              readyState: track.readyState,
+              label: track.label,
+            })),
           });
           videoRef.current.srcObject = participant.stream;
           lastStreamRef.current = participant.stream;
@@ -39,16 +45,17 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
               id: track.id,
               enabled: track.enabled,
               readyState: track.readyState,
+              label: track.label,
             })),
           });
           setIsStreamLoading(false);
           return;
         }
 
-        // Set onloadedmetadata to play the video
         videoRef.current.onloadedmetadata = () => {
           videoRef.current.play()
             .then(() => {
+              console.log(`Video playing for participant: ${participant.userId}`);
               setIsStreamLoading(false);
             })
             .catch((error) => {
@@ -93,6 +100,8 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
         });
         if (videoRef.current && participant.stream && (participant.videoEnabled || participant.isScreenSharing)) {
           playVideo();
+        } else {
+          setIsStreamLoading(false);
         }
       };
       videoTracks.forEach((track) => {
@@ -118,10 +127,24 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
         hasStream: !!participant.stream,
         videoEnabled: participant.videoEnabled ?? true,
         isScreenSharing: participant.isScreenSharing ?? false,
+        streamDetails: participant.stream ? {
+          videoTracks: participant.stream.getVideoTracks().map((track) => ({
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState,
+            label: track.label,
+          })),
+          audioTracks: participant.stream.getAudioTracks().map((track) => ({
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState,
+            label: track.label,
+          })),
+        } : 'No stream',
       });
       setIsStreamLoading(false);
     }
-  }, [participant]);
+  }, [participant, isLocal]);
 
   return (
     <div className="video-container relative bg-gray-800">
@@ -140,7 +163,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
         <div className="w-full h-full bg-gray-700 flex items-center justify-center">
           <div className="text-center text-white">
             <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-            <div className="text-sm">Loading...</div>
+            <div className="text-sm">Loading video...</div>
           </div>
         </div>
       ) : (participant.stream && ((participant.videoEnabled ?? true) || (participant.isScreenSharing ?? false))) ? (

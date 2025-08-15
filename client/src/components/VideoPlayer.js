@@ -1,6 +1,7 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 
-const VideoPlayer = ({ participant, isPinned, onPin, isLocal, isHost, localCameraVideoRef }) => {
+const VideoPlayer = ({ participant, isPinned, onPin, isLocal, isHost, localCameraVideoRef, localCameraTrackRef }) => {
   const internalVideoRef = useRef(null);
   const videoRef = isLocal ? localCameraVideoRef : internalVideoRef;
   const [isStreamLoading, setIsStreamLoading] = useState(true);
@@ -98,7 +99,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, isLocal, isHost, localCamer
             muted={isLocal}
             className={`w-full h-full object-cover ${isPinned ? 'pinned-video' : ''} ${isLocal && !participant.isScreenSharing ? 'unmirror' : ''}`}
           />
-          {isLocal && participant.isScreenSharing && localCameraVideoRef && (
+          {isLocal && participant.isScreenSharing && localCameraVideoRef && localCameraTrackRef && (
             <video
               ref={localCameraVideoRef}
               autoPlay

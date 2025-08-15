@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -833,6 +834,7 @@ const Meeting = () => {
                   isLocal={participants.find((p) => p.userId === pinnedParticipantId).isLocal}
                   isHost={participants.find((p) => p.isLocal)?.isHost}
                   localCameraVideoRef={participants.find((p) => p.userId === pinnedParticipantId).isLocal ? localVideoRef : null}
+                  localCameraTrackRef={participants.find((p) => p.userId === pinnedParticipantId).isLocal ? localCameraTrackRef : null}
                 />
               </div>
               {smallParticipants.length > 0 && (
@@ -858,6 +860,7 @@ const Meeting = () => {
                               isLocal={p.isLocal}
                               isHost={participants.find((p) => p.isLocal)?.isHost}
                               localCameraVideoRef={p.isLocal ? localVideoRef : null}
+                              localCameraTrackRef={p.isLocal ? localCameraTrackRef : null}
                             />
                           </div>
                         ))}
@@ -921,6 +924,7 @@ const Meeting = () => {
                           isLocal={p.isLocal}
                           isHost={participants.find((p) => p.isLocal)?.isHost}
                           localCameraVideoRef={p.isLocal ? localVideoRef : null}
+                          localCameraTrackRef={p.isLocal ? localCameraTrackRef : null}
                         />
                       </div>
                     ))}

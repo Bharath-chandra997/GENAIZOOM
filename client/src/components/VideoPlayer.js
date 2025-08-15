@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLocal }) => {
+const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLocal, isHost }) => {
   const videoRef = useRef(null);
   const lastStreamRef = useRef(null);
   const [isStreamLoading, setIsStreamLoading] = useState(true);
@@ -90,7 +90,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
   }, [participant, isLocal]);
 
   return (
-    <div className="video-container relative bg-gray-800">
+    <div className={`video-container relative bg-gray-800 ${isPinned ? 'pinned-video' : ''}`}>
       <style>
         {`
           .unmirror {
@@ -104,6 +104,15 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
             height: 100px;
             border: 2px solid white;
             border-radius: 8px;
+          }
+          .pinned-video {
+            width: 100%;
+            height: 80vh;
+            margin-bottom: 10px;
+          }
+          .host-logo {
+            margin-left: 8px;
+            font-size: 16px;
           }
         `}
       </style>
@@ -158,7 +167,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
         <div className="flex items-center justify-between">
           <span className="text-white text-sm font-medium truncate">
             {participant.username || 'Participant'} {participant.isLocal ?? isLocal ? '(You)' : ''}
-            {participant.isHost && <span className="host-badge ml-2">Host</span>}
+            {participant.isHost && <span className="host-logo">👑</span>}
           </span>
           <div className="flex items-center space-x-1">
             {!(participant.audioEnabled ?? true) && (
@@ -206,7 +215,7 @@ const VideoPlayer = ({ participant, isPinned, onPin, localCameraVideoRef, isLoca
         </div>
       )}
 
-      {onPin && (
+      {isHost && !isLocal && onPin && (
         <div className="absolute top-2 right-10">
           <button
             onClick={onPin}

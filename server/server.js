@@ -111,13 +111,11 @@ const fetchIceServers = async () => {
     } else {
       info('No Twilio credentials, using fallback servers');
     }
-    // Add STUN and TURN servers
     iceServers = [
       ...iceServers,
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
-      // Add a TURN server (replace with actual credentials if available)
       {
         urls: 'turn:openrelay.metered.ca:80',
         username: 'openrelayproject',
@@ -130,7 +128,7 @@ const fetchIceServers = async () => {
       },
     ];
     cachedIceServers = iceServers;
-    iceServersExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+    iceServersExpiry = Date.now() + 24 * 60 * 60 * 1000;
     info('Cached ICE servers', iceServers.map(s => s.urls));
     return iceServers;
   } catch (error) {
@@ -202,7 +200,7 @@ io.on('connection', (socket) => {
   const { username, userId } = socket.user;
   info(`Socket connected: ${socket.id} for user ${username} (${userId})`);
 
-  socket.on('join-room', ({ roomId }, callback) => {
+  socket.on('join-room', ({ roomId, isHost }, callback) => {
     if (!roomId) {
       socket.emit('error', { message: 'Invalid room ID' });
       info(`Join-room failed: Invalid room ID for ${username} (${socket.id})`);
@@ -217,14 +215,14 @@ io.on('connection', (socket) => {
     if (room) {
       room.forEach((id) => {
         if (id !== socket.id) {
-          usersInRoom.push({ userId: id, username: socketIdToUsername[id] });
+          usersInRoom.push({ userId: id, username: socketIdToUsername[id], isHost: false });
         }
       });
     }
 
     info(`User ${username} (${socket.id}) joined room ${roomId} with ${usersInRoom.length} other users`);
     callback(usersInRoom);
-    socket.to(roomId).emit('user-joined', { userId: socket.id, username });
+    socket.to(roomId).emit('user-joined', { userId: socket.id, username, isHost });
   });
 
   socket.on('offer', (payload) => {
@@ -238,6 +236,7 @@ io.on('connection', (socket) => {
       from: socket.id,
       offer: payload.offer,
       username: socketIdToUsername[socket.id],
+      isHost: socket.user.isHost || false,
     });
   });
 
@@ -279,6 +278,26 @@ io.on('connection', (socket) => {
     }
     info(`Broadcasting chat message from ${socketIdToUsername[socket.id]} in room ${roomId}`);
     socket.to(roomId).emit('chat-message', payload);
+  });
+
+  socket.on('pin-participant', ({ userId }) => {
+    const roomId = socketToRoom[socket.id];
+    if (!roomId) {
+      socket.emit('error', { message: 'Not in a room' });
+      return;
+    }
+    info(`Broadcasting pin-participant ${userId} from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+    socket.to(roomId).emit('pin-participant', { userId });
+  });
+
+  socket.on('unpin-participant', () => {
+    const roomId = socketToRoom[socket.id];
+    if (!roomId) {
+      socket.emit('error', { message: 'Not in a room' });
+      return;
+    }
+    info(`Broadcasting unpin-participant from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+    socket.to(roomId).emit('unpin-participant');
   });
 
   const drawingEvents = ['drawing-start', 'drawing-move', 'drawing-end', 'clear-canvas', 'draw-shape'];

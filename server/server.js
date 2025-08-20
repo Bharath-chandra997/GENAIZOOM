@@ -183,7 +183,7 @@ const roomHosts = new Map();
 io.on('connection', (socket) => {
   const { username, userId } = socket.user;
   info(`Socket connected: ${socket.id} for user ${username} (${userId})`);
-  socket.on('join-room', ({ roomId, isHost }, callback) => {
+  socket.on('join-room', ({ roomId, username }, callback) => {
     if (!roomId) {
       socket.emit('error', { message: 'Invalid room ID' });
       info(`Join-room failed: Invalid room ID for ${username} (${socket.id})`);
@@ -210,6 +210,16 @@ io.on('connection', (socket) => {
     info(`User ${username} (${socket.id}) joined room ${roomId} with ${otherUsers.length} other users`);
     callback(otherUsers);
     socket.to(roomId).emit('user-joined', { userId: socket.id, username, isHost: isFirst });
+    if (otherUsers.length > 0) {
+      try {
+        Meeting.updateOne(
+          { roomId },
+          { $addToSet: { participants: socket.user.userId } }
+        );
+      } catch (err) {
+        logError('Error adding participant to meeting', err);
+      }
+    }
   });
   socket.on('offer', (payload) => {
     if (!payload.to || !payload.offer) {
@@ -307,6 +317,15 @@ io.on('connection', (socket) => {
     info(`${disconnectedUser} (${socket.id}) disconnected from room ${roomId || 'none'}`);
     if (roomId) {
       socket.to(roomId).emit('user-left', socket.id);
+      const room = io.sockets.adapter.rooms.get(roomId);
+      const remaining = room ? room.size - 1 : 0;
+      if (remaining === 0) {
+        try {
+          Meeting.updateOne({ roomId, endTime: { $exists: false } }, { endTime: new Date() });
+        } catch (err) {
+          logError('Error ending meeting', err);
+        }
+      }
     }
     delete socketToRoom[socket.id];
     delete socketIdToUsername[socket.id];

@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -8,8 +7,10 @@ const helmet = require('helmet');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const jwt = require('jsonwebtoken');
-require('dotenv').config();
 const twilio = require('twilio');
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const meetingRoutes = require('./routes/meetings');
 const { info, logError } = require('./utils/logger');
@@ -32,6 +33,10 @@ if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
   logError('FATAL ERROR: Google OAuth credentials not defined.');
   process.exit(1);
 }
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  logError('FATAL ERROR: Cloudinary credentials not defined.');
+  process.exit(1);
+}
 
 // App & Server Setup
 const app = express();
@@ -42,17 +47,41 @@ const io = new Server(server, {
     methods: ['GET', 'POST'],
     credentials: true,
   },
+  maxHttpBufferSize: 1e8, // 100MB buffer as fallback
+});
+
+// Multer Setup for Temporary File Storage
+const upload = multer({ dest: 'tmp/' }); // Temporary storage before Cloudinary upload
+
+// Cloudinary Configuration
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 // Middleware
 app.use(helmet());
 app.use(cors({
   origin: ['https://genaizoom123.onrender.com', 'https://genaizoomserver-0yn4.onrender.com'],
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'PUT'],
   credentials: true,
 }));
 app.use(express.json());
 app.use(passport.initialize());
+
+// JWT Authentication Middleware for Uploads
+const authenticate = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (err) {
+    logError('JWT auth error', err);
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
 
 // Database Connection
 mongoose.connect(process.env.MONGO_URI, {
@@ -116,12 +145,25 @@ const fetchIceServers = async () => {
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayprojectsecret',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayprojectsecret',
+      },
+      {
+        urls: 'turns:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayprojectsecret',
+      },
     ];
     cachedIceServers = iceServers;
     iceServersExpiry = Date.now() + 24 * 60 * 60 * 1000;
-    info('Cached ICE servers', iceServers.map(s => s.urls));
+    info('Cached ICE servers:', iceServers.map(s => s.urls));
     return iceServers;
   } catch (error) {
     logError('Twilio ICE server error', error);
@@ -129,8 +171,21 @@ const fetchIceServers = async () => {
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayprojectsecret',
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayprojectsecret',
+      },
+      {
+        urls: 'turns:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayprojectsecret',
+      },
     ];
   }
 };
@@ -148,6 +203,35 @@ app.get('/ice-servers', async (req, res) => {
   } catch (error) {
     logError('ICE servers endpoint error', error);
     res.status(500).json({ error: 'Failed to fetch ICE servers' });
+  }
+});
+
+// File Upload Endpoints with Cloudinary
+app.post('/upload/image', authenticate, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      resource_type: 'image',
+      folder: 'genaizoom/images',
+    });
+    res.json({ url: result.secure_url });
+  } catch (err) {
+    logError('Cloudinary image upload error', err);
+    res.status(500).json({ error: 'Image upload failed' });
+  }
+});
+
+app.post('/upload/audio', authenticate, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      resource_type: 'video', // Cloudinary uses 'video' for audio
+      folder: 'genaizoom/audio',
+    });
+    res.json({ url: result.secure_url });
+  } catch (err) {
+    logError('Cloudinary audio upload error', err);
+    res.status(500).json({ error: 'Audio upload failed' });
   }
 });
 
@@ -183,6 +267,7 @@ const roomHosts = new Map();
 io.on('connection', (socket) => {
   const { username, userId } = socket.user;
   info(`Socket connected: ${socket.id} for user ${username} (${userId})`);
+
   socket.on('join-room', ({ roomId, username }, callback) => {
     if (!roomId) {
       socket.emit('error', { message: 'Invalid room ID' });
@@ -221,6 +306,7 @@ io.on('connection', (socket) => {
       }
     }
   });
+
   socket.on('offer', (payload) => {
     if (!payload.to || !payload.offer) {
       socket.emit('error', { message: 'Invalid offer payload' });
@@ -232,9 +318,10 @@ io.on('connection', (socket) => {
       from: socket.id,
       offer: payload.offer,
       username: socketIdToUsername[socket.id],
-      isHost: socket.user.isHost || false,
+      isHost: roomHosts.get(socketToRoom[socket.id]) === socket.id,
     });
   });
+
   socket.on('answer', (payload) => {
     if (!payload.to || !payload.answer) {
       socket.emit('error', { message: 'Invalid answer payload' });
@@ -244,6 +331,7 @@ io.on('connection', (socket) => {
     info(`Relaying answer from ${socketIdToUsername[socket.id]} to ${socketIdToUsername[payload.to] || payload.to}`);
     io.to(payload.to).emit('answer', { from: socket.id, answer: payload.answer });
   });
+
   socket.on('ice-candidate', (payload) => {
     if (!payload.to || !payload.candidate) {
       socket.emit('error', { message: 'Invalid ICE candidate payload' });
@@ -253,6 +341,7 @@ io.on('connection', (socket) => {
     info(`Relaying ICE candidate from ${socketIdToUsername[socket.id]} to ${socketIdToUsername[payload.to] || payload.to}`);
     io.to(payload.to).emit('ice-candidate', { from: socket.id, candidate: payload.candidate });
   });
+
   socket.on('send-chat-message', (payload) => {
     const roomId = socketToRoom[socket.id];
     if (!roomId) {
@@ -266,6 +355,7 @@ io.on('connection', (socket) => {
     info(`Broadcasting chat message from ${socketIdToUsername[socket.id]} in room ${roomId}`);
     socket.to(roomId).emit('chat-message', payload);
   });
+
   socket.on('pin-participant', ({ userId }) => {
     const roomId = socketToRoom[socket.id];
     if (!roomId) {
@@ -275,6 +365,7 @@ io.on('connection', (socket) => {
     info(`Broadcasting pin-participant ${userId} from ${socketIdToUsername[socket.id]} in room ${roomId}`);
     socket.to(roomId).emit('pin-participant', { userId });
   });
+
   socket.on('unpin-participant', () => {
     const roomId = socketToRoom[socket.id];
     if (!roomId) {
@@ -284,6 +375,7 @@ io.on('connection', (socket) => {
     info(`Broadcasting unpin-participant from ${socketIdToUsername[socket.id]} in room ${roomId}`);
     socket.to(roomId).emit('unpin-participant');
   });
+
   socket.on('screen-share-start', () => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
@@ -291,6 +383,7 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('screen-share-start', { userId: socket.id });
     }
   });
+
   socket.on('screen-share-stop', () => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
@@ -298,6 +391,55 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('screen-share-stop', { userId: socket.id });
     }
   });
+
+  socket.on('ai-image-uploaded', ({ url, userId }) => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting ai-image-uploaded from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('ai-image-uploaded', { url, userId });
+    }
+  });
+
+  socket.on('ai-audio-uploaded', ({ url, userId }) => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting ai-audio-uploaded from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('ai-audio-uploaded', { url, userId });
+    }
+  });
+
+  socket.on('ai-start-processing', ({ userId }) => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting ai-start-processing from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('ai-start-processing', { userId });
+    }
+  });
+
+  socket.on('ai-finish-processing', ({ response }) => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting ai-finish-processing from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('ai-finish-processing', { response });
+    }
+  });
+
+  socket.on('ai-audio-play', () => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting ai-audio-play from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('ai-audio-play');
+    }
+  });
+
+  socket.on('ai-audio-pause', () => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting ai-audio-pause from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('ai-audio-pause');
+    }
+  });
+
   const drawingEvents = ['drawing-start', 'drawing-move', 'drawing-end', 'clear-canvas', 'draw-shape'];
   drawingEvents.forEach((event) => {
     socket.on(event, (data) => {
@@ -311,6 +453,7 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit(event, payload);
     });
   });
+
   const handleDisconnect = () => {
     const disconnectedUser = socketIdToUsername[socket.id] || 'A user';
     const roomId = socketToRoom[socket.id];
@@ -330,6 +473,7 @@ io.on('connection', (socket) => {
     delete socketToRoom[socket.id];
     delete socketIdToUsername[socket.id];
   };
+
   socket.on('leave-room', handleDisconnect);
   socket.on('disconnect', handleDisconnect);
 });

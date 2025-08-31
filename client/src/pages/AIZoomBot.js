@@ -1,7 +1,8 @@
-// src/components/AIZoomBot.js
-
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
+import axios from 'axios';
+
+const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
 const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [imageFile, setImageFile] = useState(null);
@@ -12,39 +13,14 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentUploader, setCurrentUploader] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(1.0); // Default volume (100%)
+  const [volume, setVolume] = useState(1.0);
   const audioRef = useRef(null);
 
   useEffect(() => {
     if (!socket) return;
 
-    // Handle AI processing start
     socket.on('ai-start-processing', ({ userId }) => {
       setIsProcessing(true);
-      setCurrentUploader(userId);
-      setIsPlaying(false);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0; // Reset playback position
-      }
-    });
-
-    // Handle AI processing finish
-    socket.on('ai-finish-processing', ({ response }) => {
-      setIsProcessing(false);
-      setCurrentUploader(null);
-      setOutput(response);
-    });
-
-    // Handle image upload broadcast
-    socket.on('ai-image-uploaded', ({ imageData, userId }) => {
-      setImageUrl(imageData);
-      setCurrentUploader(userId);
-    });
-
-    // Handle audio upload broadcast
-    socket.on('ai-audio-uploaded', ({ audioData, userId }) => {
-      setAudioUrl(audioData);
       setCurrentUploader(userId);
       setIsPlaying(false);
       if (audioRef.current) {
@@ -53,13 +29,33 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       }
     });
 
-    // Handle audio playback state
+    socket.on('ai-finish-processing', ({ response }) => {
+      setIsProcessing(false);
+      setCurrentUploader(null);
+      setOutput(response);
+    });
+
+    socket.on('ai-image-uploaded', ({ url, userId }) => {
+      setImageUrl(url);
+      setCurrentUploader(userId);
+    });
+
+    socket.on('ai-audio-uploaded', ({ url, userId }) => {
+      setAudioUrl(url);
+      setCurrentUploader(userId);
+      setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    });
+
     socket.on('ai-audio-play', () => {
       setIsPlaying(true);
       if (audioRef.current) {
         audioRef.current.play().catch((err) => {
           console.error('Audio playback error:', err);
-          toast.error('Failed to play audio. Please try again.');
+          toast.error('Failed to play audio. Check permissions.');
           setIsPlaying(false);
         });
       }
@@ -81,12 +77,10 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   }, [socket]);
 
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = volume; // Update volume when state changes
-    }
+    if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     if (e.target.files[0] && !isProcessing) {
       const file = e.target.files[0];
       if (!file.type.startsWith('image/')) {
@@ -94,19 +88,25 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         return;
       }
       setImageFile(file);
-      const reader = new FileReader();
-      reader.onload = () => {
-        socket.emit('ai-image-uploaded', { imageData: reader.result, userId: currentUser.userId });
-        setImageUrl(reader.result);
-      };
-      reader.onerror = () => {
-        toast.error('Failed to read image file.');
-      };
-      reader.readAsDataURL(file);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const { data } = await axios.post(`${SERVER_URL}/upload/image`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${currentUser.token}`,
+          },
+        });
+        socket.emit('ai-image-uploaded', { url: data.url, userId: currentUser.userId });
+        setImageUrl(data.url);
+      } catch (err) {
+        console.error('Image upload error:', err);
+        toast.error('Image upload failed.');
+      }
     }
   };
 
-  const handleAudioChange = (e) => {
+  const handleAudioChange = async (e) => {
     if (e.target.files[0] && !isProcessing) {
       const file = e.target.files[0];
       if (!['audio/mpeg', 'audio/wav', 'audio/mp3'].includes(file.type)) {
@@ -114,26 +114,29 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         return;
       }
       setAudioFile(file);
-      const reader = new FileReader();
-      reader.onload = () => {
-        socket.emit('ai-audio-uploaded', { audioData: reader.result, userId: currentUser.userId });
-        setAudioUrl(reader.result);
-      };
-      reader.onerror = () => {
-        toast.error('Failed to read audio file.');
-      };
-      reader.readAsDataURL(file);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const { data } = await axios.post(`${SERVER_URL}/upload/audio`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${currentUser.token}`,
+          },
+        });
+        socket.emit('ai-audio-uploaded', { url: data.url, userId: currentUser.userId });
+        setAudioUrl(data.url);
+      } catch (err) {
+        console.error('Audio upload error:', err);
+        toast.error('Audio upload failed.');
+      }
     }
   };
 
   const handleUpload = () => {
     if (isProcessing || (!imageFile && !audioFile)) return;
-
     socket.emit('ai-start-processing', { userId: currentUser.userId });
-
-    // Simulate processing with dummy response
     setTimeout(() => {
-      const dummyResponse = 'This is a dummy AI response based on the uploaded file(s).';
+      const dummyResponse = 'Processed by AI: Image/Audio analyzed.';
       socket.emit('ai-finish-processing', { response: dummyResponse });
     }, 3000);
   };
@@ -141,20 +144,12 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const handlePlay = () => {
     if (audioRef.current && audioUrl && !isProcessing) {
       socket.emit('ai-audio-play');
-      setIsPlaying(true);
-      audioRef.current.play().catch((err) => {
-        console.error('Audio playback error:', err);
-        toast.error('Failed to play audio. Please check the file or browser permissions.');
-        setIsPlaying(false);
-      });
     }
   };
 
   const handlePause = () => {
     if (audioRef.current && audioUrl) {
       socket.emit('ai-audio-pause');
-      setIsPlaying(false);
-      audioRef.current.pause();
     }
   };
 
@@ -232,7 +227,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
                 className="w-full"
                 onError={(e) => {
                   console.error('Audio element error:', e);
-                  toast.error('Error loading audio file. Please try a different file.');
+                  toast.error('Error loading audio file. Try a different file.');
                 }}
               >
                 Your browser does not support the audio element.

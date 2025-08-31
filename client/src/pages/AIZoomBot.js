@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+// src/components/AIZoomBot.js
+
+import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'react-toastify';
 
 const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [imageFile, setImageFile] = useState(null);
@@ -8,6 +11,9 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [output, setOutput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentUploader, setCurrentUploader] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(1.0); // Default volume (100%)
+  const audioRef = useRef(null);
 
   useEffect(() => {
     if (!socket) return;
@@ -16,6 +22,11 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     socket.on('ai-start-processing', ({ userId }) => {
       setIsProcessing(true);
       setCurrentUploader(userId);
+      setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0; // Reset playback position
+      }
     });
 
     // Handle AI processing finish
@@ -35,6 +46,28 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     socket.on('ai-audio-uploaded', ({ audioData, userId }) => {
       setAudioUrl(audioData);
       setCurrentUploader(userId);
+      setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    });
+
+    // Handle audio playback state
+    socket.on('ai-audio-play', () => {
+      setIsPlaying(true);
+      if (audioRef.current) {
+        audioRef.current.play().catch((err) => {
+          console.error('Audio playback error:', err);
+          toast.error('Failed to play audio. Please try again.');
+          setIsPlaying(false);
+        });
+      }
+    });
+
+    socket.on('ai-audio-pause', () => {
+      setIsPlaying(false);
+      if (audioRef.current) audioRef.current.pause();
     });
 
     return () => {
@@ -42,17 +75,32 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       socket.off('ai-finish-processing');
       socket.off('ai-image-uploaded');
       socket.off('ai-audio-uploaded');
+      socket.off('ai-audio-play');
+      socket.off('ai-audio-pause');
     };
   }, [socket]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume; // Update volume when state changes
+    }
+  }, [volume]);
 
   const handleImageChange = (e) => {
     if (e.target.files[0] && !isProcessing) {
       const file = e.target.files[0];
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please upload a valid image file.');
+        return;
+      }
       setImageFile(file);
       const reader = new FileReader();
       reader.onload = () => {
         socket.emit('ai-image-uploaded', { imageData: reader.result, userId: currentUser.userId });
         setImageUrl(reader.result);
+      };
+      reader.onerror = () => {
+        toast.error('Failed to read image file.');
       };
       reader.readAsDataURL(file);
     }
@@ -61,11 +109,18 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const handleAudioChange = (e) => {
     if (e.target.files[0] && !isProcessing) {
       const file = e.target.files[0];
+      if (!['audio/mpeg', 'audio/wav', 'audio/mp3'].includes(file.type)) {
+        toast.error('Please upload a valid audio file (MP3 or WAV).');
+        return;
+      }
       setAudioFile(file);
       const reader = new FileReader();
       reader.onload = () => {
         socket.emit('ai-audio-uploaded', { audioData: reader.result, userId: currentUser.userId });
         setAudioUrl(reader.result);
+      };
+      reader.onerror = () => {
+        toast.error('Failed to read audio file.');
       };
       reader.readAsDataURL(file);
     }
@@ -81,6 +136,31 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       const dummyResponse = 'This is a dummy AI response based on the uploaded file(s).';
       socket.emit('ai-finish-processing', { response: dummyResponse });
     }, 3000);
+  };
+
+  const handlePlay = () => {
+    if (audioRef.current && audioUrl && !isProcessing) {
+      socket.emit('ai-audio-play');
+      setIsPlaying(true);
+      audioRef.current.play().catch((err) => {
+        console.error('Audio playback error:', err);
+        toast.error('Failed to play audio. Please check the file or browser permissions.');
+        setIsPlaying(false);
+      });
+    }
+  };
+
+  const handlePause = () => {
+    if (audioRef.current && audioUrl) {
+      socket.emit('ai-audio-pause');
+      setIsPlaying(false);
+      audioRef.current.pause();
+    }
+  };
+
+  const handleVolumeChange = (e) => {
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
   };
 
   return (
@@ -138,21 +218,55 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
           <input
             id="audio-upload"
             type="file"
-            accept="audio/*"
+            accept="audio/mpeg,audio/wav,audio/mp3"
             onChange={handleAudioChange}
             className="hidden"
             disabled={isProcessing}
           />
           {audioFile && <p className="text-sm text-gray-300">Selected: {audioFile.name}</p>}
           {audioUrl && (
-            <div className="mt-2">
+            <div className="mt-2 flex flex-col gap-2">
               <audio
-                controls
+                ref={audioRef}
                 src={audioUrl}
                 className="w-full"
+                onError={(e) => {
+                  console.error('Audio element error:', e);
+                  toast.error('Error loading audio file. Please try a different file.');
+                }}
               >
                 Your browser does not support the audio element.
               </audio>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePlay}
+                  disabled={isProcessing || !audioUrl}
+                  className="flex-1 bg-blue-600 text-white py-1 px-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Play ▶️
+                </button>
+                <button
+                  onClick={handlePause}
+                  disabled={isProcessing || !audioUrl}
+                  className="flex-1 bg-blue-600 text-white py-1 px-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Pause ⏸️
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor="volume" className="text-sm text-gray-300">Volume:</label>
+                <input
+                  id="volume"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={volume}
+                  onChange={handleVolumeChange}
+                  className="w-full"
+                  disabled={isProcessing || !audioUrl}
+                />
+              </div>
             </div>
           )}
         </div>

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { FaPen, FaEraser, FaRegCircle, FaRegSquare, FaTrash } from 'react-icons/fa';
-
+import './AnnotationToolbar.css'
 const AnnotationToolbar = ({
   onMouseDown, // Prop for dragging
   currentTool,

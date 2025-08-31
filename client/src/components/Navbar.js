@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-
+import './Navbar.css'
 /**
  * Navigation bar component with responsive design and authentication handling
  */

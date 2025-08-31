@@ -1,7 +1,7 @@
 // Participants.js
 import React from 'react';
 import { toast } from 'react-toastify';
-
+import './Participants.css'
 const Participants = ({ participants = [], pendingRequests = [], currentUser, meetingInfo, onClose, onAcceptJoin, onRejectJoin, onPinParticipant, roomId }) => {
   return (
     <div className="h-full flex flex-col bg-gray-800">

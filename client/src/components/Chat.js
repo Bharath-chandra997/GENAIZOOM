@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-
+import './Chat.css'
 const Chat = ({ messages, onSendMessage, currentUser, onClose }) => {
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);

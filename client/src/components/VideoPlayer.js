@@ -1,7 +1,7 @@
 // src/components/VideoPlayer.js
 
 import React, { useEffect, useRef, useState } from 'react';
-
+import './VideoPlayer.css'
 const VideoPlayer = ({ participant, isPinned, isLocal }) => {
   const videoRef = useRef(null);
   const [isSpeaking, setIsSpeaking] = useState(false);

@@ -1,0 +1,30 @@
+:root {
+  /* Colors */
+  --primary-color: #007bff;
+  --medium-gray: #e9ecef;
+  --dark-gray: #6c757d;
+  --white: #ffffff;
+  --purple: #6f42c1;
+
+  /* Border Radius */
+  --radius-full: 50%;
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner circle {
+  opacity: 0.25;
+  stroke: currentColor;
+  stroke-width: 4;
+}
+
+.loading-spinner path {
+  opacity: 0.75;
+  fill: currentColor;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

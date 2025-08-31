@@ -9,7 +9,7 @@ import Participants from '../components/Participants';
 import LoadingSpinner from '../components/LoadingSpinner';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
-import AIZoomBot from '../components/AIZoomBot'; // Updated import path
+import AIZoomBot from '../pages/AIZoomBot'; // Updated import path
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 

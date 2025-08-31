@@ -10,6 +10,7 @@ import Participants from '../components/Participants';
 import LoadingSpinner from '../components/LoadingSpinner';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
+import AIZoomBot from '../components/AIZoomBot';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
@@ -36,6 +37,7 @@ const Meeting = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
+  const [isAIBotOpen, setIsAIBotOpen] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
@@ -512,13 +514,14 @@ const Meeting = () => {
           )}
         </div>
         
-        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
+        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen || isAIBotOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
           {isChatOpen && <Chat messages={messages} onSendMessage={(message) => {
               const payload = { message, username: user.username, timestamp: new Date().toISOString() };
               socketRef.current.emit('send-chat-message', payload);
               setMessages((prev) => [...prev, payload]);
             }} currentUser={user} onClose={() => setIsChatOpen(false)} />}
           {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
+          {isAIBotOpen && <AIZoomBot onClose={() => setIsAIBotOpen(false)} roomId={roomId} socket={socketRef.current} currentUser={user} />}
         </div>
       </div>
 
@@ -526,8 +529,9 @@ const Meeting = () => {
           <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</button>
           <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</button>
           <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>
-          <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
-          <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
+          <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
+          <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
+          <button onClick={() => { setIsAIBotOpen(o => !o); setIsChatOpen(false); setIsParticipantsOpen(false); }} className="p-2 rounded-full text-white bg-purple-600 hover:bg-purple-500">AI 🤖</button>
           <button onClick={() => navigate('/home')} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
       </div>
     </div>

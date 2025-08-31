@@ -9,7 +9,7 @@ import Participants from '../components/Participants';
 import LoadingSpinner from '../components/LoadingSpinner';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
-import AIZoomBot from '../pages/AIZoomBot'; // Updated import path
+import AIZoomBot from '../pages/AIZoomBot';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
@@ -88,7 +88,7 @@ const Meeting = () => {
   const getIceServers = useCallback(async () => {
     try {
       const { data } = await axios.get(`${SERVER_URL}/ice-servers`);
-      console.log('ICE Servers:', data); // Debug
+      console.log('ICE Servers:', data);
       return data;
     } catch (error) {
       console.error('Error fetching ICE servers:', error);
@@ -231,7 +231,6 @@ const Meeting = () => {
 
     socket.on('error', ({ message }) => toast.error(message));
 
-    // Annotation Listeners
     socket.on('drawing-start', ({ from, x, y, color, tool, size }) => {
       remoteDrawingStates.current.set(from, { color, tool, size });
       const canvas = annotationCanvasRef.current;
@@ -293,7 +292,7 @@ const Meeting = () => {
       try {
         setIsLoading(true);
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480, frameRate: 15 }, // Lower res for latency
+          video: { width: 640, height: 480, frameRate: 15 },
           audio: true
         });
         localStreamRef.current = stream;
@@ -327,7 +326,6 @@ const Meeting = () => {
     };
   }, [roomId, user, navigate, setupSocketListeners]);
 
-  // Canvas resize
   useEffect(() => {
     const canvas = annotationCanvasRef.current;
     const container = mainVideoContainerRef.current;
@@ -495,7 +493,7 @@ const Meeting = () => {
       if (currentTool === 'rectangle') {
         ctx.rect(startX, startY, endX - startX, endY - startY);
       } else if (currentTool === 'circle') {
-        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - sY, 2));
+        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
         ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
       }
       ctx.stroke();

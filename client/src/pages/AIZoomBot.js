@@ -1,10 +1,10 @@
-// src/components/AIZoomBot.js
-
 import React, { useState, useEffect } from 'react';
 
 const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [imageFile, setImageFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
+  const [imageUrl, setImageUrl] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
   const [output, setOutput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentUploader, setCurrentUploader] = useState(null);
@@ -12,22 +12,64 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   useEffect(() => {
     if (!socket) return;
 
+    // Handle AI processing start
     socket.on('ai-start-processing', ({ userId }) => {
       setIsProcessing(true);
       setCurrentUploader(userId);
     });
 
+    // Handle AI processing finish
     socket.on('ai-finish-processing', ({ response }) => {
       setIsProcessing(false);
       setCurrentUploader(null);
       setOutput(response);
     });
 
+    // Handle image upload broadcast
+    socket.on('ai-image-uploaded', ({ imageData, userId }) => {
+      setImageUrl(imageData);
+      setCurrentUploader(userId);
+    });
+
+    // Handle audio upload broadcast
+    socket.on('ai-audio-uploaded', ({ audioData, userId }) => {
+      setAudioUrl(audioData);
+      setCurrentUploader(userId);
+    });
+
     return () => {
       socket.off('ai-start-processing');
       socket.off('ai-finish-processing');
+      socket.off('ai-image-uploaded');
+      socket.off('ai-audio-uploaded');
     };
   }, [socket]);
+
+  const handleImageChange = (e) => {
+    if (e.target.files[0] && !isProcessing) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        socket.emit('ai-image-uploaded', { imageData: reader.result, userId: currentUser.userId });
+        setImageUrl(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAudioChange = (e) => {
+    if (e.target.files[0] && !isProcessing) {
+      const file = e.target.files[0];
+      setAudioFile(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        socket.emit('ai-audio-uploaded', { audioData: reader.result, userId: currentUser.userId });
+        setAudioUrl(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleUpload = () => {
     if (isProcessing || (!imageFile && !audioFile)) return;
@@ -39,18 +81,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       const dummyResponse = 'This is a dummy AI response based on the uploaded file(s).';
       socket.emit('ai-finish-processing', { response: dummyResponse });
     }, 3000);
-  };
-
-  const handleImageChange = (e) => {
-    if (e.target.files[0]) {
-      setImageFile(e.target.files[0]);
-    }
-  };
-
-  const handleAudioChange = (e) => {
-    if (e.target.files[0]) {
-      setAudioFile(e.target.files[0]);
-    }
   };
 
   return (
@@ -87,6 +117,16 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             disabled={isProcessing}
           />
           {imageFile && <p className="text-sm text-gray-300">Selected: {imageFile.name}</p>}
+          {imageUrl && (
+            <div className="mt-2">
+              <img
+                src={imageUrl}
+                alt="Uploaded"
+                className="max-w-full h-auto rounded-lg border border-gray-600"
+                style={{ maxHeight: '200px' }}
+              />
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-2">
           <label
@@ -104,6 +144,17 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             disabled={isProcessing}
           />
           {audioFile && <p className="text-sm text-gray-300">Selected: {audioFile.name}</p>}
+          {audioUrl && (
+            <div className="mt-2">
+              <audio
+                controls
+                src={audioUrl}
+                className="w-full"
+              >
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+          )}
         </div>
         <button
           onClick={handleUpload}

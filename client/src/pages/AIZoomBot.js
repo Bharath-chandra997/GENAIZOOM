@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import axios from 'axios';
@@ -30,25 +29,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
     return 'Another user';
   };
 
-  // Load persisted state from localStorage on mount
-  useEffect(() => {
-    const savedImageUrl = localStorage.getItem(`aizoom_image_${roomId}_${currentUser.userId}`);
-    const savedAudioUrl = localStorage.getItem(`aizoom_audio_${roomId}_${currentUser.userId}`);
-    const savedOutput = localStorage.getItem(`aizoom_output_${roomId}_${currentUser.userId}`);
-    if (savedImageUrl) {
-      console.log(`Loaded image URL from localStorage for user ${currentUser.userId}: ${savedImageUrl}`);
-      setImageUrl(savedImageUrl);
-    }
-    if (savedAudioUrl) {
-      console.log(`Loaded audio URL from localStorage for user ${currentUser.userId}: ${savedAudioUrl}`);
-      setAudioUrl(savedAudioUrl);
-    }
-    if (savedOutput) {
-      console.log(`Loaded output from localStorage for user ${currentUser.userId}: ${savedOutput}`);
-      setOutput(savedOutput);
-    }
-  }, [roomId, currentUser.userId]);
-
   // Socket event listeners
   useEffect(() => {
     if (!socket) {
@@ -76,7 +56,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
       setUploaderUsername('');
       const displayResponse = typeof response === 'object' ? JSON.stringify(response, null, 2) : response;
       setOutput(displayResponse);
-      localStorage.setItem(`aizoom_output_${roomId}_${currentUser.userId}`, displayResponse);
       socket.emit('ai-bot-unlocked', { roomId });
     });
 
@@ -85,7 +64,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
       setImageUrl(url);
       setCurrentUploader(userId);
       setUploaderUsername(username || getUsernameById(userId));
-      localStorage.setItem(`aizoom_image_${roomId}_${currentUser.userId}`, url);
       console.log(`Updated imageUrl for user ${currentUser.userId}: ${url}`);
     });
 
@@ -96,7 +74,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
       setUploaderUsername(username || getUsernameById(userId));
       setIsPlaying(false);
       setIsAudioReady(false);
-      localStorage.setItem(`aizoom_audio_${roomId}_${currentUser.userId}`, url);
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
@@ -196,7 +173,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
           },
         });
         setImageUrl(data.url);
-        localStorage.setItem(`aizoom_image_${roomId}_${currentUser.userId}`, data.url);
         socket.emit('ai-image-uploaded', {
           url: data.url,
           userId: currentUser.userId,
@@ -232,7 +208,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
           },
         });
         setAudioUrl(data.url);
-        localStorage.setItem(`aizoom_audio_${roomId}_${currentUser.userId}`, data.url);
         socket.emit('ai-audio-uploaded', {
           url: data.url,
           userId: currentUser.userId,
@@ -288,7 +263,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
       const response = data.result || displayResponse || 'No answer provided by AI.';
       socket.emit('ai-finish-processing', { response });
       setOutput(response);
-      localStorage.setItem(`aizoom_output_${roomId}_${currentUser.userId}`, response);
       console.log(`AI processing finished for user ${currentUser.userId}: ${response}`);
     } catch (err) {
       console.error(`AI prediction error for user ${currentUser.userId}:`, err);
@@ -336,7 +310,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
       <style>
         {`
           .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.2);
+            border: 4px solid rgba(255, redactado255, 255, 255, 0.2);
             border-left-color: #ffffff;
             border-radius: 50%;
             width: 24px;

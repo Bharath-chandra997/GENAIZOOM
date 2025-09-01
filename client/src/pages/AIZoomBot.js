@@ -186,7 +186,8 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       socket.emit('ai-start-processing', { userId: currentUser.userId });
 
       const formData = new FormData();
-      formData.append('file', imageFile); // Send only image file for PathVQA
+      formData.append('image', imageFile);
+      if (audioFile) formData.append('audio', audioFile);
 
       const { data } = await axios.post(`${API_URL}/predict`, formData, {
         headers: {
@@ -201,10 +202,10 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       setOutput(response);
     } catch (err) {
       console.error('AI prediction error:', err);
-      console.error('Error details:', err.response?.data?.detail);
+      console.error('Error details:', JSON.stringify(err.response?.data?.detail, null, 2));
       const errorMessage = err.response?.data?.detail || 'Failed to get AI answer.';
-      toast.error(errorMessage);
-      setOutput(`Error: ${errorMessage}`);
+      toast.error(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
+      setOutput(`Error: ${typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage)}`);
       socket.emit('ai-bot-unlocked', { roomId });
       setIsProcessing(false);
       setCurrentUploader(null);
@@ -313,7 +314,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             htmlFor="audio-upload"
             className="bg-primary-600 text-white py-2 px-4 rounded cursor-pointer hover:bg-primary-700 text-center"
           >
-            Upload Audio for Playback 🎤
+            Upload Audio for Playback and AI Processing 🎤
           </label>
           <input
             id="audio-upload"

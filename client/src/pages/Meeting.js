@@ -45,6 +45,9 @@ const Meeting = () => {
   const [sharedAudioUrl, setSharedAudioUrl] = useState('');
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [uploaderUsername, setUploaderUsername] = useState('');
+  const [toolbarPosition, setToolbarPosition] = useState({ x: 20, y: 20 }); // Added for annotation toolbar
+  const [currentTool, setCurrentTool] = useState('pen'); // Added for annotation tool
+  const [currentBrushSize, setCurrentBrushSize] = useState(5); // Added for brush size
 
   // Refs
   const socketRef = useRef(null);
@@ -388,8 +391,8 @@ const Meeting = () => {
       socket.off('screen-share-stop', handleScreenShareStop);
       socket.off('ai-image-uploaded', handleAiImageUploaded);
       socket.off('ai-audio-uploaded', handleAiAudioUploaded);
-      socket.off('ai-audio-play', handleAiAudioPlay);
-      socket.off('ai-audio-pause', handleAiAudioPause);
+      socket.on('ai-audio-play', handleAiAudioPlay);
+      socket.on('ai-audio-pause', handleAiAudioPause);
       socket.off('error', handleError);
       socket.off('drawing-start', handleDrawingStart);
       socket.off('drawing-move', handleDrawingMove);
@@ -428,6 +431,7 @@ const Meeting = () => {
 
         const cleanupSocketListeners = setupSocketListeners(socketRef.current);
         return () => {
+          console.log('Cleaning up Meeting component');
           if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => track.stop());
             localStreamRef.current = null;

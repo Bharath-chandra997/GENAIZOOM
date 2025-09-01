@@ -28,7 +28,7 @@ const Meeting = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // State
+  // State for meeting
   const [participants, setParticipants] = useState([]);
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +44,16 @@ const Meeting = () => {
   const [toolbarPosition, setToolbarPosition] = useState({ x: 20, y: 20 });
   const [currentTool, setCurrentTool] = useState('pen');
   const [currentBrushSize, setCurrentBrushSize] = useState(5);
+
+  // State for AI Zoom Bot (shared across users)
+  const [imageUrl, setImageUrl] = useState('');
+  const [audioUrl, setAudioUrl] = useState('');
+  const [output, setOutput] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentUploader, setCurrentUploader] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isBotLocked, setIsBotLocked] = useState(false);
+  const [uploaderUsername, setUploaderUsername] = useState('');
 
   // Refs
   const socketRef = useRef(null);
@@ -148,6 +158,74 @@ const Meeting = () => {
     },
     [getIceServers]
   );
+
+  // AI Zoom Bot Socket Handlers
+  const handleAiStartProcessing = useCallback(({ userId, username }) => {
+    console.log(`Received ai-start-processing: userId=${userId}, username=${username}`);
+    setIsProcessing(true);
+    setCurrentUploader(userId);
+    setUploaderUsername(username || getUsernameById(userId));
+    setIsPlaying(false);
+  }, [getUsernameById]);
+
+  const handleAiFinishProcessing = useCallback(({ response }) => {
+    console.log(`Received ai-finish-processing: response=${response}`);
+    setIsProcessing(false);
+    setCurrentUploader(null);
+    setUploaderUsername('');
+    const displayResponse = typeof response === 'object' ? JSON.stringify(response, null, 2) : response;
+    setOutput(displayResponse);
+  }, []);
+
+  const handleAiImageUploaded = useCallback(({ url, userId, username }) => {
+    console.log(`Received ai-image-uploaded: url=${url}, userId=${userId}, username=${username}`);
+    setImageUrl(url);
+    setCurrentUploader(userId);
+    setUploaderUsername(username || getUsernameById(userId));
+  }, [getUsernameById]);
+
+  const handleAiAudioUploaded = useCallback(({ url, userId, username }) => {
+    console.log(`Received ai-audio-uploaded: url=${url}, userId=${userId}, username=${username}`);
+    setAudioUrl(url);
+    setCurrentUploader(userId);
+    setUploaderUsername(username || getUsernameById(userId));
+    setIsPlaying(false);
+  }, [getUsernameById]);
+
+  const handleAiBotLocked = useCallback(({ userId, username }) => {
+    console.log(`Received ai-bot-locked: userId=${userId}, username=${username}`);
+    setIsBotLocked(true);
+    setCurrentUploader(userId);
+    setUploaderUsername(username || getUsernameById(userId));
+  }, [getUsernameById]);
+
+  const handleAiBotUnlocked = useCallback(() => {
+    console.log('Received ai-bot-unlocked');
+    setIsBotLocked(false);
+    setCurrentUploader(null);
+    setUploaderUsername('');
+  }, []);
+
+  const handleAiAudioPlay = useCallback(() => {
+    console.log('Received ai-audio-play');
+    setIsPlaying(true);
+  }, []);
+
+  const handleAiAudioPause = useCallback(() => {
+    console.log('Received ai-audio-pause');
+    setIsPlaying(false);
+  }, []);
+
+  // Audio control handlers
+  const handlePlayAudio = useCallback(() => {
+    setIsPlaying(true);
+    socketRef.current?.emit('ai-audio-play', { roomId });
+  }, [roomId]);
+
+  const handlePauseAudio = useCallback(() => {
+    setIsPlaying(false);
+    socketRef.current?.emit('ai-audio-pause', { roomId });
+  }, [roomId]);
 
   // Setup Socket Listeners
   const setupSocketListeners = useCallback((socket) => {
@@ -328,6 +406,14 @@ const Meeting = () => {
     socket.on('drawing-move', handleDrawingMove);
     socket.on('draw-shape', handleDrawShape);
     socket.on('clear-canvas', handleClearCanvas);
+    socket.on('ai-start-processing', handleAiStartProcessing);
+    socket.on('ai-finish-processing', handleAiFinishProcessing);
+    socket.on('ai-image-uploaded', handleAiImageUploaded);
+    socket.on('ai-audio-uploaded', handleAiAudioUploaded);
+    socket.on('ai-bot-locked', handleAiBotLocked);
+    socket.on('ai-bot-unlocked', handleAiBotUnlocked);
+    socket.on('ai-audio-play', handleAiAudioPlay);
+    socket.on('ai-audio-pause', handleAiAudioPause);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -344,8 +430,29 @@ const Meeting = () => {
       socket.off('drawing-move', handleDrawingMove);
       socket.off('draw-shape', handleDrawShape);
       socket.off('clear-canvas', handleClearCanvas);
+      socket.off('ai-start-processing', handleAiStartProcessing);
+      socket.off('ai-finish-processing', handleAiFinishProcessing);
+      socket.off('ai-image-uploaded', handleAiImageUploaded);
+      socket.off('ai-audio-uploaded', handleAiAudioUploaded);
+      socket.off('ai-bot-locked', handleAiBotLocked);
+      socket.off('ai-bot-unlocked', handleAiBotUnlocked);
+      socket.off('ai-audio-play', handleAiAudioPlay);
+      socket.off('ai-audio-pause', handleAiAudioPause);
     };
-  }, [createPeerConnection, roomId, user, getUsernameById]);
+  }, [
+    createPeerConnection,
+    roomId,
+    user,
+    getUsernameById,
+    handleAiStartProcessing,
+    handleAiFinishProcessing,
+    handleAiImageUploaded,
+    handleAiAudioUploaded,
+    handleAiBotLocked,
+    handleAiBotUnlocked,
+    handleAiAudioPlay,
+    handleAiAudioPause
+  ]);
 
   useEffect(() => {
     if (isInitialized.current) return;
@@ -591,7 +698,7 @@ const Meeting = () => {
       if (currentTool === 'rectangle') {
         ctx.rect(startX, startY, endX - startX, endY - startY);
       } else if (currentTool === 'circle') {
-        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)); // Fixed: sY -> startY
+        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
         ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
       }
       ctx.stroke();
@@ -623,7 +730,12 @@ const Meeting = () => {
       <div className="flex-1 flex overflow-hidden relative">
         <div 
           className="flex-1 flex flex-col relative p-4 gap-4"
-          onWheel={(e) => { if (e.deltaY !== 0 && totalFilmstripPages > 1) { e.preventDefault(); handleSwipe(e.deltaY > 0 ? 1 : -1); } }}
+          onWheel={(e) => {
+            if (e.deltaY !== 0 && totalFilmstripPages > 1) {
+              e.preventDefault();
+              handleSwipe(e.deltaY > 0 ? 1 : -1);
+            }
+          }}
         >
           {isSomeoneScreenSharing && (
             <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
@@ -688,7 +800,30 @@ const Meeting = () => {
             setMessages((prev) => [...prev, payload]);
           }} currentUser={user} onClose={() => setIsChatOpen(false)} />}
           {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
-          {isAIBotOpen && <AIZoomBot onClose={() => setIsAIBotOpen(false)} roomId={roomId} socket={socketRef.current} currentUser={user} participants={participants} />}
+          {isAIBotOpen && (
+            <AIZoomBot
+              onClose={() => setIsAIBotOpen(false)}
+              roomId={roomId}
+              socket={socketRef.current}
+              currentUser={user}
+              participants={participants}
+              imageUrl={imageUrl}
+              setImageUrl={setImageUrl}
+              audioUrl={audioUrl}
+              setAudioUrl={setAudioUrl}
+              output={output}
+              setOutput={setOutput}
+              isProcessing={isProcessing}
+              setIsProcessing={setIsProcessing}
+              currentUploader={currentUploader}
+              isBotLocked={isBotLocked}
+              setIsBotLocked={setIsBotLocked}
+              uploaderUsername={uploaderUsername}
+              isPlaying={isPlaying}
+              handlePlayAudio={handlePlayAudio}
+              handlePauseAudio={handlePauseAudio}
+            />
+          )}
         </div>
       </div>
       <div className="bg-gray-900 border-t border-gray-700 p-4 flex justify-center gap-4 z-20">

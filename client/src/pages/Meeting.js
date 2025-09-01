@@ -640,7 +640,7 @@ const Meeting = () => {
             setMessages((prev) => [...prev, payload]);
           }} currentUser={user} onClose={() => setIsChatOpen(false)} />}
           {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
-          {isAIBotOpen && <AIZoomBot onClose={() => setIsAIBotOpen(false)} roomId={roomId} socket={socketRef.current} currentUser={user} />}
+          {isAIBotOpen && <AIZoomBot onClose={() => setIsAIBotOpen(false)} roomId={roomId} socket={socketRef.current} currentUser={user} participants={participants} />}
         </div>
       </div>
       <div className="bg-gray-900 border-t border-gray-700 p-4 flex justify-center gap-4 z-20">

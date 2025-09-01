@@ -5,7 +5,7 @@ import axios from 'axios';
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 const API_URL = 'https://genaizoom-1.onrender.com'; // FastAPI server URL
 
-const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
+const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
   const [imageFile, setImageFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
   const [imageUrl, setImageUrl] = useState('');
@@ -19,6 +19,15 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [uploaderUsername, setUploaderUsername] = useState('');
   const audioRef = useRef(null);
+
+  // Helper function to get username by userId from participants
+  const getUsernameById = (userId) => {
+    const participant = participants.find(p => p.userId === userId);
+    if (participant) {
+      return participant.isLocal ? currentUser.username : participant.username;
+    }
+    return 'Another user';
+  };
 
   // Load persisted state from localStorage on mount
   useEffect(() => {
@@ -50,7 +59,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       console.log(`Received ai-start-processing: userId=${userId}, username=${username}`);
       setIsProcessing(true);
       setCurrentUploader(userId);
-      setUploaderUsername(username || (userId === currentUser.userId ? currentUser.username : 'Another user'));
+      setUploaderUsername(username || getUsernameById(userId));
       setIsPlaying(false);
       setIsAudioReady(false);
       if (audioRef.current) {
@@ -72,31 +81,29 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
 
     socket.on('ai-image-uploaded', ({ url, userId, username, roomId: eventRoomId }) => {
       console.log(`Received ai-image-uploaded: url=${url}, userId=${userId}, username=${username}, eventRoomId=${eventRoomId}`);
-      if (eventRoomId === roomId) {
-        setImageUrl(url);
-        setCurrentUploader(userId);
-        setUploaderUsername(username || (userId === currentUser.userId ? currentUser.username : 'Another user'));
-        localStorage.setItem(`aizoom_image_${roomId}_${currentUser.userId}`, url);
-        console.log(`Updated imageUrl for user ${currentUser.userId}: ${url}`);
-      }
+      // Removed the if (eventRoomId === roomId) check since server broadcasts only to the correct room
+      setImageUrl(url);
+      setCurrentUploader(userId);
+      setUploaderUsername(username || getUsernameById(userId));
+      localStorage.setItem(`aizoom_image_${roomId}_${currentUser.userId}`, url);
+      console.log(`Updated imageUrl for user ${currentUser.userId}: ${url}`);
     });
 
     socket.on('ai-audio-uploaded', ({ url, userId, username, roomId: eventRoomId }) => {
       console.log(`Received ai-audio-uploaded: url=${url}, userId=${userId}, username=${username}, eventRoomId=${eventRoomId}`);
-      if (eventRoomId === roomId) {
-        setAudioUrl(url);
-        setCurrentUploader(userId);
-        setUploaderUsername(username || (userId === currentUser.userId ? currentUser.username : 'Another user'));
-        setIsPlaying(false);
-        setIsAudioReady(false);
-        localStorage.setItem(`aizoom_audio_${roomId}_${currentUser.userId}`, url);
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          audioRef.current.src = url;
-          audioRef.current.load();
-          console.log(`Updated audioRef.src for user ${currentUser.userId}: ${url}`);
-        }
+      // Removed the if (eventRoomId === roomId) check since server broadcasts only to the correct room
+      setAudioUrl(url);
+      setCurrentUploader(userId);
+      setUploaderUsername(username || getUsernameById(userId));
+      setIsPlaying(false);
+      setIsAudioReady(false);
+      localStorage.setItem(`aizoom_audio_${roomId}_${currentUser.userId}`, url);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = url;
+        audioRef.current.load();
+        console.log(`Updated audioRef.src for user ${currentUser.userId}: ${url}`);
       }
     });
 
@@ -125,7 +132,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       console.log(`Received ai-bot-locked: userId=${userId}, username=${username}`);
       setIsBotLocked(true);
       setCurrentUploader(userId);
-      setUploaderUsername(username || (userId === currentUser.userId ? currentUser.username : 'Another user'));
+      setUploaderUsername(username || getUsernameById(userId));
     });
 
     socket.on('ai-bot-unlocked', () => {
@@ -145,7 +152,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       socket.off('ai-bot-locked');
       socket.off('ai-bot-unlocked');
     };
-  }, [socket, roomId, audioUrl, currentUser]);
+  }, [socket, roomId, audioUrl, currentUser, participants]);
 
   // Preload audio and handle readiness
   useEffect(() => {

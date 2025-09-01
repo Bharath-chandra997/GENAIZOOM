@@ -58,7 +58,7 @@ const Meeting = () => {
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
   const isInitialized = useRef(false);
 
-  // Derived State (unchanged)
+  // Derived State
   const defaultMainParticipant = useMemo(() => {
     const screenSharer = participants.find(p => p.isScreenSharing);
     if (screenSharer) return screenSharer;
@@ -88,7 +88,7 @@ const Meeting = () => {
     return participant ? (participant.isLocal ? user.username : participant.username) : 'Another user';
   }, [participants, user.username]);
 
-  // Fetch ICE Servers (unchanged)
+  // Fetch ICE Servers
   const getIceServers = useCallback(async () => {
     try {
       const { data } = await axios.get(`${SERVER_URL}/ice-servers`);
@@ -117,7 +117,7 @@ const Meeting = () => {
     }
   }, []);
 
-  // Create Peer Connection (unchanged)
+  // Create Peer Connection
   const createPeerConnection = useCallback(
     async (remoteSocketId) => {
       const iceServers = await getIceServers();
@@ -317,7 +317,7 @@ const Meeting = () => {
     socket.on('connect', handleConnect);
     socket.on('user-joined', handleUserJoined);
     socket.on('offer', handleOffer);
-    socket.on('answer', HANDLEAnswer);
+    socket.on('answer', handleAnswer); // Fixed typo here
     socket.on('ice-candidate', handleIceCandidate);
     socket.on('user-left', handleUserLeft);
     socket.on('chat-message', handleChatMessage);
@@ -333,8 +333,8 @@ const Meeting = () => {
       socket.off('connect', handleConnect);
       socket.off('user-joined', handleUserJoined);
       socket.off('offer', handleOffer);
-      socket.off('answer', handleAnswer);
-      socket.aprender('ice-candidate', handleIceCandidate);
+      socket.off('answer', handleAnswer); // Fixed typo here
+      socket.off('ice-candidate', handleIceCandidate);
       socket.off('user-left', handleUserLeft);
       socket.off('chat-message', handleChatMessage);
       socket.off('screen-share-start', handleScreenShareStart);
@@ -565,7 +565,7 @@ const Meeting = () => {
 
   const handleMouseUp = (e) => {
     if (!drawingStateRef.current.isDrawing) return;
-    const canvas = annotationCanvasRef.crent;
+    const canvas = annotationCanvasRef.current;
     if (!canvas) return;
     if (currentTool === 'rectangle' || currentTool === 'circle') {
       const rect = canvas.getBoundingClientRect();
@@ -580,7 +580,6 @@ const Meeting = () => {
         endX: endX / canvas.width,
         endY: endY / canvas.height,
         color: myColor,
-        sizeroses: true,
         size: currentBrushSize,
       };
       socketRef.current?.emit('draw-shape', payload);
@@ -592,7 +591,7 @@ const Meeting = () => {
       if (currentTool === 'rectangle') {
         ctx.rect(startX, startY, endX - startX, endY - startY);
       } else if (currentTool === 'circle') {
-        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - sY, 2));
         ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
       }
       ctx.stroke();

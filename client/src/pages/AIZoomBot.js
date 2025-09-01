@@ -34,6 +34,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     });
 
     socket.on('ai-finish-processing', ({ response }) => {
+      console.log('Received ai-finish-processing:', response); // Debug
       setIsProcessing(false);
       setCurrentUploader(null);
       setOutput(response);
@@ -53,6 +54,8 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
+        audioRef.current.src = url; // Update audio source
+        audioRef.current.load(); // Preload audio
       }
     });
 
@@ -64,6 +67,8 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
           toast.error('Failed to play audio. Ensure you have interacted with the page (e.g., click Play).');
           setIsPlaying(false);
         });
+      } else {
+        toast.error('Audio not ready or unavailable.');
       }
     });
 
@@ -103,7 +108,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         console.log('Audio is ready to play:', audioUrl);
       };
       audioRef.current.addEventListener('canplaythrough', handleCanPlay);
-      audioRef.current.load(); // Ensure audio is loaded
+      audioRef.current.load();
       return () => {
         audioRef.current.removeEventListener('canplaythrough', handleCanPlay);
       };
@@ -177,13 +182,13 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       return;
     }
     try {
-      setIsProcessing(true); // Start processing (shows spinner)
+      setIsProcessing(true);
       socket.emit('ai-bot-locked', { userId: currentUser.userId, roomId });
       socket.emit('ai-start-processing', { userId: currentUser.userId });
 
       const formData = new FormData();
-      if (imageFile) formData.append('image', imageFile);
-      if (audioFile) formData.append('audio', audioFile);
+      if (imageFile) formData.append('file', imageFile); // Match backend's expected field name
+      if (audioFile) formData.append('file', audioFile);
 
       if (!imageFile && !audioFile) {
         toast.error('Please upload at least one file.');
@@ -196,11 +201,13 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 60000, // 60-second timeout to prevent 504 errors
       });
-      console.log('FastAPI Response:', data); // Debug FastAPI response
+      console.log('FastAPI Response:', data);
 
-      const response = data.result || 'No answer provided by AI.';
+      const response = data.answer || 'No answer provided by AI.';
       socket.emit('ai-finish-processing', { response });
+      setOutput(response); // Set output directly for uploader
     } catch (err) {
       console.error('AI prediction error:', err);
       toast.error(err.response?.data?.detail || 'Failed to get AI answer.');
@@ -211,8 +218,8 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   };
 
   const handlePlay = () => {
-    if (audioRef.current && audioUrl && isAudioReady && !isProcessing && !isBotLocked && currentUploader === currentUser.userId) {
-      socket.emit('ai-audio-play');
+    if (audioRef.current && audioUrl && isAudioReady && !isProcessing && !isBotLocked) {
+      socket.emit('ai-audio-play', { roomId });
       setIsPlaying(true);
       audioRef.current.play().catch((err) => {
         console.error('Audio playback error:', err);
@@ -221,22 +228,18 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       });
     } else if (isBotLocked) {
       toast.error('AI Bot is currently in use by another user.');
-    } else if (currentUploader !== currentUser.userId) {
-      toast.error('Only the uploader can control audio playback.');
     } else if (!isAudioReady) {
       toast.error('Audio is not ready yet. Please wait.');
     }
   };
 
   const handlePause = () => {
-    if (audioRef.current && audioUrl && !isBotLocked && currentUploader === currentUser.userId) {
-      socket.emit('ai-audio-pause');
+    if (audioRef.current && audioUrl && !isBotLocked) {
+      socket.emit('ai-audio-pause', { roomId });
       setIsPlaying(false);
       audioRef.current.pause();
     } else if (isBotLocked) {
       toast.error('AI Bot is currently in use by another user.');
-    } else if (currentUploader !== currentUser.userId) {
-      toast.error('Only the uploader can control audio playback.');
     }
   };
 
@@ -344,14 +347,14 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
               <div className="flex gap-2">
                 <button
                   onClick={handlePlay}
-                  disabled={isProcessing || !audioUrl || !isAudioReady || isBotLocked || currentUploader !== currentUser.userId}
+                  disabled={isProcessing || !audioUrl || !isAudioReady || isBotLocked}
                   className="flex-1 bg-blue-600 text-white py-1 px-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Play ▶️
                 </button>
                 <button
                   onClick={handlePause}
-                  disabled={isProcessing || !audioUrl || !isPlaying || isBotLocked || currentUploader !== currentUser.userId}
+                  disabled={isProcessing || !audioUrl || !isPlaying || isBotLocked}
                   className="flex-1 bg-blue-600 text-white py-1 px-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Pause ⏸️
@@ -368,7 +371,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
                   value={volume}
                   onChange={handleVolumeChange}
                   className="w-full"
-                  disabled={isProcessing || !audioUrl || isBotLocked || currentUploader !== currentUser.userId}
+                  disabled={isProcessing || !audioUrl || isBotLocked}
                 />
               </div>
             </div>

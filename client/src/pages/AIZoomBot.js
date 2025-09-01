@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { FiUpload, FiX, FiPlay, FiPause } from 'react-icons/fi';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
+const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com'; // Replace with your actual AI model API URL
 
 const AIZoomBot = ({
   onClose,
@@ -121,8 +122,8 @@ const AIZoomBot = ({
       setIsProcessing(true);
       socket.emit('ai-start-processing', { userId: socket.id, username: currentUser.username, roomId });
 
-      // Call the AI processing endpoint
-      const response = await axios.post(`${SERVER_URL}/process-ai`, {
+      // Call the AI model API
+      const response = await axios.post(AI_MODEL_API_URL, {
         imageUrl,
         audioUrl,
       }, {
@@ -137,7 +138,7 @@ const AIZoomBot = ({
       socket.emit('ai-finish-processing', { response: modelOutput, roomId });
       setIsProcessing(false);
     } catch (error) {
-      console.error('Processing error:', error);
+      console.error('AI processing error:', error);
       toast.error('Failed to process with AI.');
       setIsProcessing(false);
     } finally {
@@ -238,15 +239,15 @@ const AIZoomBot = ({
             <div className="flex gap-2 mt-2">
               <button
                 onClick={handlePlayAudio}
-                disabled={isProcessing || !audioUrl || isPlaying}
-                className="p-2 bg-green-600 hover:bg-green-500 rounded flex items-center"
+                disabled={isProcessing || !audioUrl}
+                className="p-2 bg-green-600 hover:bg-green-500 rounded flex items-center disabled:bg-gray-600"
               >
                 <FiPlay className="mr-2" /> Play
               </button>
               <button
                 onClick={handlePauseAudio}
-                disabled={isProcessing || !audioUrl || !isPlaying}
-                className="p-2 bg-red-600 hover:bg-red-500 rounded flex items-center"
+                disabled={isProcessing || !audioUrl}
+                className="p-2 bg-red-600 hover:bg-red-500 rounded flex items-center disabled:bg-gray-600"
               >
                 <FiPause className="mr-2" /> Pause
               </button>
@@ -257,7 +258,7 @@ const AIZoomBot = ({
         <button
           onClick={handleProcess}
           disabled={isProcessing || !imageUrl || !audioUrl || (isBotLocked && currentUploader !== socket.id)}
-          className="w-full p-2 bg-purple-600 hover:bg-purple-500 rounded"
+          className="w-full p-2 bg-purple-600 hover:bg-purple-500 rounded disabled:bg-gray-600"
         >
           {isProcessing ? 'Processing...' : 'Process with AI'}
         </button>

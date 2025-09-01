@@ -149,7 +149,8 @@ const Meeting = () => {
   const setupSocketListeners = useCallback((socket) => {
     socket.on('connect', () => {
       console.log('Socket connected:', socket.id);
-      socket.emit('join-room', { roomId, username: user.username }, (otherUsers) => {
+      socket.emit('join-room', { roomId, username: user.username }, (response) => {
+        const { otherUsers, videoStates } = response;
         const isHost = otherUsers.length === 0;
         const remoteParticipants = otherUsers.map(u => ({
           userId: u.userId,
@@ -157,7 +158,7 @@ const Meeting = () => {
           stream: null,
           isLocal: false,
           isHost: u.isHost || false,
-          videoEnabled: true,
+          videoEnabled: videoStates[u.userId] ?? true,
           audioEnabled: true,
           isScreenSharing: false
         }));
@@ -167,19 +168,20 @@ const Meeting = () => {
           stream: localStreamRef.current,
           isLocal: true,
           isHost,
-          videoEnabled: true,
+          videoEnabled: localStorage.getItem(`videoEnabled_${roomId}_${socket.id}`) === 'true' ? true : false,
           audioEnabled: true,
           isScreenSharing: false
         };
         setParticipants([localParticipant, ...remoteParticipants]);
+        setIsVideoEnabled(localParticipant.videoEnabled);
         setIsLoading(false);
       });
     });
 
-    socket.on('user-joined', async ({ userId, username, isHost }) => {
+    socket.on('user-joined', async ({ userId, username, isHost, videoEnabled }) => {
       setParticipants((prev) => {
         if (prev.some(p => p.userId === userId)) return prev;
-        return [...prev, { userId, username, stream: null, isLocal: false, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
+        return [...prev, { userId, username, stream: null, isLocal: false, isHost, videoEnabled, audioEnabled: true, isScreenSharing: false }];
       });
 
       try {
@@ -255,6 +257,9 @@ const Meeting = () => {
     socket.on('chat-message', (payload) => setMessages(prev => [...prev, payload]));
     socket.on('screen-share-start', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p)));
     socket.on('screen-share-stop', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p)));
+    socket.on('toggle-video', ({ userId, enabled }) => {
+      setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, videoEnabled: enabled } : p));
+    });
 
     socket.on('error', ({ message }) => toast.error(message));
 
@@ -318,12 +323,15 @@ const Meeting = () => {
       }
       try {
         setIsLoading(true);
+        const savedVideoState = localStorage.getItem(`videoEnabled_${roomId}_${user.userId}`) === 'true' ? true : false;
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480, frameRate: 15 },
+          video: savedVideoState ? { width: 640, height: 480, frameRate: 15 } : false,
           audio: true
         });
         localStreamRef.current = stream;
-        localCameraTrackRef.current = stream.getVideoTracks()[0];
+        if (savedVideoState) {
+          localCameraTrackRef.current = stream.getVideoTracks()[0];
+        }
         console.log('Local stream initialized:', stream);
 
         socketRef.current = io(SERVER_URL, {
@@ -400,20 +408,31 @@ const Meeting = () => {
   const toggleVideo = async () => {
     if (!localStreamRef.current) return;
     const videoTrack = localStreamRef.current.getVideoTracks()[0];
-    if (videoTrack.enabled) {
+    if (videoTrack?.enabled) {
       videoTrack.enabled = false;
       setIsVideoEnabled(false);
+      localStorage.setItem(`videoEnabled_${roomId}_${socketRef.current.id}`, 'false');
       setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: false } : p));
-      socketRef.current.emit('toggle-video', { enabled: false, roomId });
+      socketRef.current.emit('toggle-video', { enabled: false, roomId, userId: socketRef.current.id });
     } else {
       try {
         const newStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 15 } });
         const newVideoTrack = newStream.getVideoTracks()[0];
-        await replaceTrack(newVideoTrack, false);
+        if (videoTrack) {
+          await replaceTrack(newVideoTrack, false);
+        } else {
+          localStreamRef.current.addTrack(newVideoTrack);
+          peerConnections.current.forEach((pc) => {
+            const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+            if (sender) sender.replaceTrack(newVideoTrack);
+            else pc.addTrack(newVideoTrack, localStreamRef.current);
+          });
+        }
         localCameraTrackRef.current = newVideoTrack;
         setIsVideoEnabled(true);
+        localStorage.setItem(`videoEnabled_${roomId}_${socketRef.current.id}`, 'true');
         setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: true } : p));
-        socketRef.current.emit('toggle-video', { enabled: true, roomId });
+        socketRef.current.emit('toggle-video', { enabled: true, roomId, userId: socketRef.current.id });
       } catch (err) {
         console.error('Error enabling video:', err);
         toast.error('Failed to start video.');

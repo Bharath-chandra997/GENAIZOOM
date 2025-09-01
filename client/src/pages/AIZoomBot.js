@@ -22,22 +22,35 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
 
   // Load persisted state from localStorage on mount
   useEffect(() => {
-    const savedImageUrl = localStorage.getItem(`aizoom_image_${roomId}`);
-    const savedAudioUrl = localStorage.getItem(`aizoom_audio_${roomId}`);
-    const savedOutput = localStorage.getItem(`aizoom_output_${roomId}`);
-    if (savedImageUrl) setImageUrl(savedImageUrl);
-    if (savedAudioUrl) setAudioUrl(savedAudioUrl);
-    if (savedOutput) setOutput(savedOutput);
-  }, [roomId]);
+    const savedImageUrl = localStorage.getItem(`aizoom_image_${roomId}_${currentUser.userId}`);
+    const savedAudioUrl = localStorage.getItem(`aizoom_audio_${roomId}_${currentUser.userId}`);
+    const savedOutput = localStorage.getItem(`aizoom_output_${roomId}_${currentUser.userId}`);
+    if (savedImageUrl) {
+      console.log(`Loaded image URL from localStorage for user ${currentUser.userId}: ${savedImageUrl}`);
+      setImageUrl(savedImageUrl);
+    }
+    if (savedAudioUrl) {
+      console.log(`Loaded audio URL from localStorage for user ${currentUser.userId}: ${savedAudioUrl}`);
+      setAudioUrl(savedAudioUrl);
+    }
+    if (savedOutput) {
+      console.log(`Loaded output from localStorage for user ${currentUser.userId}: ${savedOutput}`);
+      setOutput(savedOutput);
+    }
+  }, [roomId, currentUser.userId]);
 
   // Socket event listeners
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) {
+      console.error('Socket is not initialized');
+      return;
+    }
 
     socket.on('ai-start-processing', ({ userId, username }) => {
+      console.log(`Received ai-start-processing: userId=${userId}, username=${username}`);
       setIsProcessing(true);
       setCurrentUploader(userId);
-      setUploaderUsername(username);
+      setUploaderUsername(username || (userId === currentUser.userId ? currentUser.username : 'Another user'));
       setIsPlaying(false);
       setIsAudioReady(false);
       if (audioRef.current) {
@@ -47,42 +60,48 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     });
 
     socket.on('ai-finish-processing', ({ response }) => {
+      console.log(`Received ai-finish-processing: response=${response}`);
       setIsProcessing(false);
       setCurrentUploader(null);
       setUploaderUsername('');
-      const displayResponse = typeof response === 'object' ? JSON.stringify(response) : response;
+      const displayResponse = typeof response === 'object' ? JSON.stringify(response, null, 2) : response;
       setOutput(displayResponse);
-      localStorage.setItem(`aizoom_output_${roomId}`, displayResponse);
+      localStorage.setItem(`aizoom_output_${roomId}_${currentUser.userId}`, displayResponse);
       socket.emit('ai-bot-unlocked', { roomId });
     });
 
     socket.on('ai-image-uploaded', ({ url, userId, username, roomId: eventRoomId }) => {
+      console.log(`Received ai-image-uploaded: url=${url}, userId=${userId}, username=${username}, eventRoomId=${eventRoomId}`);
       if (eventRoomId === roomId) {
         setImageUrl(url);
         setCurrentUploader(userId);
         setUploaderUsername(username || (userId === currentUser.userId ? currentUser.username : 'Another user'));
-        localStorage.setItem(`aizoom_image_${roomId}`, url);
+        localStorage.setItem(`aizoom_image_${roomId}_${currentUser.userId}`, url);
+        console.log(`Updated imageUrl for user ${currentUser.userId}: ${url}`);
       }
     });
 
     socket.on('ai-audio-uploaded', ({ url, userId, username, roomId: eventRoomId }) => {
+      console.log(`Received ai-audio-uploaded: url=${url}, userId=${userId}, username=${username}, eventRoomId=${eventRoomId}`);
       if (eventRoomId === roomId) {
         setAudioUrl(url);
         setCurrentUploader(userId);
         setUploaderUsername(username || (userId === currentUser.userId ? currentUser.username : 'Another user'));
         setIsPlaying(false);
         setIsAudioReady(false);
-        localStorage.setItem(`aizoom_audio_${roomId}`, url);
+        localStorage.setItem(`aizoom_audio_${roomId}_${currentUser.userId}`, url);
         if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current.currentTime = 0;
           audioRef.current.src = url;
           audioRef.current.load();
+          console.log(`Updated audioRef.src for user ${currentUser.userId}: ${url}`);
         }
       }
     });
 
     socket.on('ai-audio-play', () => {
+      console.log('Received ai-audio-play');
       if (audioRef.current && audioUrl && isAudioReady) {
         setIsPlaying(true);
         audioRef.current.play().catch((err) => {
@@ -91,22 +110,26 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
           setIsPlaying(false);
         });
       } else {
+        console.warn('Audio not playable: ', { audioUrl, isAudioReady });
         toast.error('Audio not ready or unavailable.');
       }
     });
 
     socket.on('ai-audio-pause', () => {
+      console.log('Received ai-audio-pause');
       setIsPlaying(false);
       if (audioRef.current) audioRef.current.pause();
     });
 
     socket.on('ai-bot-locked', ({ userId, username }) => {
+      console.log(`Received ai-bot-locked: userId=${userId}, username=${username}`);
       setIsBotLocked(true);
       setCurrentUploader(userId);
       setUploaderUsername(username || (userId === currentUser.userId ? currentUser.username : 'Another user'));
     });
 
     socket.on('ai-bot-unlocked', () => {
+      console.log('Received ai-bot-unlocked');
       setIsBotLocked(false);
       setCurrentUploader(null);
       setUploaderUsername('');
@@ -130,7 +153,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       audioRef.current.src = audioUrl;
       const handleCanPlay = () => {
         setIsAudioReady(true);
-        console.log('Audio is ready to play:', audioUrl);
+        console.log(`Audio is ready to play for user ${currentUser.userId}: ${audioUrl}`);
       };
       audioRef.current.addEventListener('canplaythrough', handleCanPlay);
       audioRef.current.load();
@@ -138,12 +161,15 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         audioRef.current.removeEventListener('canplaythrough', handleCanPlay);
       };
     }
-  }, [audioUrl]);
+  }, [audioUrl, currentUser.userId]);
 
   // Update volume
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume;
-  }, [volume]);
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+      console.log(`Updated volume for user ${currentUser.userId}: ${volume}`);
+    }
+  }, [volume, currentUser.userId]);
 
   const handleImageChange = async (e) => {
     if (e.target.files[0] && !isProcessing && !isBotLocked) {
@@ -153,6 +179,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         return;
       }
       setImageFile(file);
+      console.log(`Image selected by user ${currentUser.userId}: ${file.name}`);
       try {
         const formData = new FormData();
         formData.append('file', file);
@@ -163,15 +190,16 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
           },
         });
         setImageUrl(data.url);
-        localStorage.setItem(`aizoom_image_${roomId}`, data.url);
+        localStorage.setItem(`aizoom_image_${roomId}_${currentUser.userId}`, data.url);
         socket.emit('ai-image-uploaded', {
           url: data.url,
           userId: currentUser.userId,
           username: currentUser.username,
           roomId
         });
+        console.log(`Image uploaded by user ${currentUser.userId}: ${data.url}`);
       } catch (err) {
-        console.error('Image upload error:', err);
+        console.error(`Image upload error for user ${currentUser.userId}:`, err);
         toast.error('Image upload failed.');
       }
     } else if (isBotLocked) {
@@ -187,6 +215,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         return;
       }
       setAudioFile(file);
+      console.log(`Audio selected by user ${currentUser.userId}: ${file.name}`);
       try {
         const formData = new FormData();
         formData.append('file', file);
@@ -197,15 +226,16 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
           },
         });
         setAudioUrl(data.url);
-        localStorage.setItem(`aizoom_audio_${roomId}`, data.url);
+        localStorage.setItem(`aizoom_audio_${roomId}_${currentUser.userId}`, data.url);
         socket.emit('ai-audio-uploaded', {
           url: data.url,
           userId: currentUser.userId,
           username: currentUser.username,
           roomId
         });
+        console.log(`Audio uploaded by user ${currentUser.userId}: ${data.url}`);
       } catch (err) {
-        console.error('Audio upload error:', err);
+        console.error(`Audio upload error for user ${currentUser.userId}:`, err);
         toast.error('Audio upload failed.');
       }
     } else if (isBotLocked) {
@@ -229,6 +259,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         userId: currentUser.userId,
         username: currentUser.username
       });
+      console.log(`Started AI processing by user ${currentUser.userId}`);
 
       const formData = new FormData();
       if (imageFile) formData.append('image', imageFile);
@@ -251,9 +282,10 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       const response = data.result || displayResponse || 'No answer provided by AI.';
       socket.emit('ai-finish-processing', { response });
       setOutput(response);
-      localStorage.setItem(`aizoom_output_${roomId}`, response);
+      localStorage.setItem(`aizoom_output_${roomId}_${currentUser.userId}`, response);
+      console.log(`AI processing finished for user ${currentUser.userId}: ${response}`);
     } catch (err) {
-      console.error('AI prediction error:', err);
+      console.error(`AI prediction error for user ${currentUser.userId}:`, err);
       toast.error(err.response?.data?.detail || 'Failed to get AI answer.');
       socket.emit('ai-bot-unlocked', { roomId });
       setIsProcessing(false);
@@ -267,7 +299,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       socket.emit('ai-audio-play');
       setIsPlaying(true);
       audioRef.current.play().catch((err) => {
-        console.error('Audio playback error:', err);
+        console.error(`Audio playback error for user ${currentUser.userId}:`, err);
         toast.error('Failed to play audio. Ensure you have interacted with the page (e.g., click Play).');
         setIsPlaying(false);
       });
@@ -364,6 +396,10 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
                 alt="Uploaded"
                 className="max-w-full h-auto rounded-lg border border-gray-600"
                 style={{ maxHeight: '200px' }}
+                onError={() => {
+                  console.error(`Image failed to load for user ${currentUser.userId}: ${imageUrl}`);
+                  toast.error('Failed to load image.');
+                }}
               />
             </div>
           )}
@@ -396,7 +432,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
                 src={audioUrl}
                 className="w-full"
                 onError={(e) => {
-                  console.error('Audio element error:', e);
+                  console.error(`Audio element error for user ${currentUser.userId}:`, e);
                   toast.error('Error loading audio file. Try a different file.');
                   setIsAudioReady(false);
                 }}

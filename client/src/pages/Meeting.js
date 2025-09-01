@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -591,7 +592,7 @@ const Meeting = () => {
       ctx.beginPath();
       if (currentTool === 'rectangle') {
         ctx.rect(startX, startY, endX - startX, endY - startY);
-      } else if (tool === 'circle') {
+      } else if (currentTool === 'circle') {
         const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
         ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
       }

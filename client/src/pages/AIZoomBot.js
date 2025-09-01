@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import axios from 'axios';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
+const API_URL = 'https://genaizoom-1.onrender.com'; // FastAPI server URL
 
 const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [imageFile, setImageFile] = useState(null);
@@ -14,6 +15,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [currentUploader, setCurrentUploader] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(1.0);
+  const [isBotLocked, setIsBotLocked] = useState(false);
   const audioRef = useRef(null);
 
   useEffect(() => {
@@ -33,6 +35,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       setIsProcessing(false);
       setCurrentUploader(null);
       setOutput(response);
+      socket.emit('ai-bot-unlocked', { roomId });
     });
 
     socket.on('ai-image-uploaded', ({ url, userId }) => {
@@ -66,6 +69,16 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       if (audioRef.current) audioRef.current.pause();
     });
 
+    socket.on('ai-bot-locked', ({ userId }) => {
+      setIsBotLocked(true);
+      setCurrentUploader(userId);
+    });
+
+    socket.on('ai-bot-unlocked', () => {
+      setIsBotLocked(false);
+      setCurrentUploader(null);
+    });
+
     return () => {
       socket.off('ai-start-processing');
       socket.off('ai-finish-processing');
@@ -73,15 +86,17 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       socket.off('ai-audio-uploaded');
       socket.off('ai-audio-play');
       socket.off('ai-audio-pause');
+      socket.off('ai-bot-locked');
+      socket.off('ai-bot-unlocked');
     };
-  }, [socket]);
+  }, [socket, roomId]);
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
   const handleImageChange = async (e) => {
-    if (e.target.files[0] && !isProcessing) {
+    if (e.target.files[0] && !isProcessing && !isBotLocked) {
       const file = e.target.files[0];
       if (!file.type.startsWith('image/')) {
         toast.error('Please upload a valid image file.');
@@ -103,11 +118,13 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         console.error('Image upload error:', err);
         toast.error('Image upload failed.');
       }
+    } else if (isBotLocked) {
+      toast.error('AI Bot is currently in use by another user.');
     }
   };
 
   const handleAudioChange = async (e) => {
-    if (e.target.files[0] && !isProcessing) {
+    if (e.target.files[0] && !isProcessing && !isBotLocked) {
       const file = e.target.files[0];
       if (!['audio/mpeg', 'audio/wav', 'audio/mp3'].includes(file.type)) {
         toast.error('Please upload a valid audio file (MP3 or WAV).');
@@ -129,27 +146,60 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         console.error('Audio upload error:', err);
         toast.error('Audio upload failed.');
       }
+    } else if (isBotLocked) {
+      toast.error('AI Bot is currently in use by another user.');
     }
   };
 
-  const handleUpload = () => {
-    if (isProcessing || (!imageFile && !audioFile)) return;
-    socket.emit('ai-start-processing', { userId: currentUser.userId });
-    setTimeout(() => {
-      const dummyResponse = 'Processed by AI: Image/Audio analyzed.';
-      socket.emit('ai-finish-processing', { response: dummyResponse });
-    }, 3000);
+  const handleUpload = async () => {
+    if (isProcessing || (!imageFile && !audioFile) || isBotLocked) {
+      if (isBotLocked) toast.error('AI Bot is currently in use by another user.');
+      return;
+    }
+    try {
+      socket.emit('ai-bot-locked', { userId: currentUser.userId, roomId });
+      socket.emit('ai-start-processing', { userId: currentUser.userId });
+
+      const formData = new FormData();
+      if (imageFile) formData.append('image', imageFile);
+      if (audioFile) formData.append('audio', audioFile);
+
+      if (!imageFile && !audioFile) {
+        toast.error('Please upload at least one file.');
+        socket.emit('ai-bot-unlocked', { roomId });
+        return;
+      }
+
+      const { data } = await axios.post(`${API_URL}/predict`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const response = data.result || 'No answer provided by AI.';
+      socket.emit('ai-finish-processing', { response });
+    } catch (err) {
+      console.error('AI prediction error:', err);
+      toast.error(err.response?.data?.detail || 'Failed to get AI answer.');
+      socket.emit('ai-bot-unlocked', { roomId });
+      setIsProcessing(false);
+      setCurrentUploader(null);
+    }
   };
 
   const handlePlay = () => {
-    if (audioRef.current && audioUrl && !isProcessing) {
+    if (audioRef.current && audioUrl && !isProcessing && !isBotLocked) {
       socket.emit('ai-audio-play');
+    } else if (isBotLocked) {
+      toast.error('AI Bot is currently in use by another user.');
     }
   };
 
   const handlePause = () => {
-    if (audioRef.current && audioUrl) {
+    if (audioRef.current && audioUrl && !isBotLocked) {
       socket.emit('ai-audio-pause');
+    } else if (isBotLocked) {
+      toast.error('AI Bot is currently in use by another user.');
     }
   };
 
@@ -176,6 +226,11 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             Processing by {currentUploader === currentUser.userId ? 'You' : 'another user'}...
           </p>
         )}
+        {isBotLocked && currentUploader !== currentUser.userId && (
+          <p className="text-red-400">
+            AI Bot is locked by another user. Please wait.
+          </p>
+        )}
         <div className="flex flex-col gap-2">
           <label
             htmlFor="image-upload"
@@ -189,7 +244,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             accept="image/*"
             onChange={handleImageChange}
             className="hidden"
-            disabled={isProcessing}
+            disabled={isProcessing || isBotLocked}
           />
           {imageFile && <p className="text-sm text-gray-300">Selected: {imageFile.name}</p>}
           {imageUrl && (
@@ -216,7 +271,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             accept="audio/mpeg,audio/wav,audio/mp3"
             onChange={handleAudioChange}
             className="hidden"
-            disabled={isProcessing}
+            disabled={isProcessing || isBotLocked}
           />
           {audioFile && <p className="text-sm text-gray-300">Selected: {audioFile.name}</p>}
           {audioUrl && (
@@ -235,14 +290,14 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
               <div className="flex gap-2">
                 <button
                   onClick={handlePlay}
-                  disabled={isProcessing || !audioUrl}
+                  disabled={isProcessing || !audioUrl || isBotLocked}
                   className="flex-1 bg-blue-600 text-white py-1 px-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Play ▶️
                 </button>
                 <button
                   onClick={handlePause}
-                  disabled={isProcessing || !audioUrl}
+                  disabled={isProcessing || !audioUrl || isBotLocked}
                   className="flex-1 bg-blue-600 text-white py-1 px-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Pause ⏸️
@@ -259,7 +314,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
                   value={volume}
                   onChange={handleVolumeChange}
                   className="w-full"
-                  disabled={isProcessing || !audioUrl}
+                  disabled={isProcessing || !audioUrl || isBotLocked}
                 />
               </div>
             </div>
@@ -267,7 +322,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         </div>
         <button
           onClick={handleUpload}
-          disabled={(!imageFile && !audioFile) || isProcessing}
+          disabled={(!imageFile && !audioFile) || isProcessing || isBotLocked}
           className="w-full bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           Get AI Answer

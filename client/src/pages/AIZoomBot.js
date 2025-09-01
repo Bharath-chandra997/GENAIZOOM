@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react'; // Added useEffect
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { FiUpload, FiX, FiPlay, FiPause } from 'react-icons/fi';

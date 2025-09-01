@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { FiUpload, FiX, FiPlay, FiPause } from 'react-icons/fi';
+import { FiUpload, FiX, FiPlay, FiPause, FiTrash2 } from 'react-icons/fi';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; // FastAPI predict endpoint
@@ -56,6 +56,13 @@ const AIZoomBot = ({
     }
   };
 
+  // Clear selected files
+  const handleClearFiles = () => {
+    setSelectedImage(null);
+    setSelectedAudio(null);
+    toast.info('Selected files cleared.');
+  };
+
   // Handle file upload
   const handleUpload = useCallback(async (file, type) => {
     if (!file) {
@@ -91,11 +98,6 @@ const AIZoomBot = ({
       }
 
       toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully!`);
-      if (type === 'image') {
-        setSelectedImage(null);
-      } else {
-        setSelectedAudio(null);
-      }
     } catch (error) {
       console.error(`Upload ${type} error:`, error.response || error.message);
       toast.error(`Failed to upload ${type}: ${error.message}`);
@@ -215,6 +217,16 @@ const AIZoomBot = ({
             <FiUpload className="mr-2" /> Upload Audio
           </button>
         </div>
+        {(selectedImage || selectedAudio) && (
+          <div className="mb-4">
+            <button
+              onClick={handleClearFiles}
+              className="w-full p-2 bg-red-600 hover:bg-red-500 rounded flex items-center justify-center"
+            >
+              <FiTrash2 className="mr-2" /> Clear Selected Files
+            </button>
+          </div>
+        )}
         {imageUrl && (
           <div className="mb-4">
             <h3 className="text-md font-medium">Uploaded Image</h3>

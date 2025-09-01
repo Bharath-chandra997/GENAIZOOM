@@ -2,8 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 
+const CLOUDINARY_UPLOAD_PRESET = 'ml_default'; // Replace with your Cloudinary upload preset
+const CLOUDINARY_CLOUD_NAME = 'YOUR_CLOUDINARY_CLOUD_NAME'; // Replace with your Cloudinary cloud name
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
-const API_URL = 'https://genaizoom-1.onrender.com'; // FastAPI server URL
+const API_URL = 'https://genaizoom-1.onrender.com'; // FastAPI server URL for AI processing
 
 const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [imageFile, setImageFile] = useState(null);
@@ -183,24 +186,25 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       try {
         const formData = new FormData();
         formData.append('file', file);
-        const { data } = await axios.post(`${SERVER_URL}/upload/image`, formData, {
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        const { data } = await axios.post(CLOUDINARY_UPLOAD_URL, formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${currentUser.token}`,
           },
         });
-        setImageUrl(data.url);
-        localStorage.setItem(`aizoom_image_${roomId}_${currentUser.userId}`, data.url);
+        const url = data.secure_url;
+        setImageUrl(url);
+        localStorage.setItem(`aizoom_image_${roomId}_${currentUser.userId}`, url);
         socket.emit('ai-image-uploaded', {
-          url: data.url,
+          url,
           userId: currentUser.userId,
           username: currentUser.username,
-          roomId
+          roomId,
         });
-        console.log(`Image uploaded by user ${currentUser.userId}: ${data.url}`);
+        console.log(`Image uploaded to Cloudinary by user ${currentUser.userId}: ${url}`);
       } catch (err) {
         console.error(`Image upload error for user ${currentUser.userId}:`, err);
-        toast.error('Image upload failed.');
+        toast.error('Image upload to Cloudinary failed.');
       }
     } else if (isBotLocked) {
       toast.error('AI Bot is currently in use by another user.');
@@ -219,24 +223,25 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       try {
         const formData = new FormData();
         formData.append('file', file);
-        const { data } = await axios.post(`${SERVER_URL}/upload/audio`, formData, {
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        const { data } = await axios.post(CLOUDINARY_UPLOAD_URL, formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${currentUser.token}`,
           },
         });
-        setAudioUrl(data.url);
-        localStorage.setItem(`aizoom_audio_${roomId}_${currentUser.userId}`, data.url);
+        const url = data.secure_url;
+        setAudioUrl(url);
+        localStorage.setItem(`aizoom_audio_${roomId}_${currentUser.userId}`, url);
         socket.emit('ai-audio-uploaded', {
-          url: data.url,
+          url,
           userId: currentUser.userId,
           username: currentUser.username,
-          roomId
+          roomId,
         });
-        console.log(`Audio uploaded by user ${currentUser.userId}: ${data.url}`);
+        console.log(`Audio uploaded to Cloudinary by user ${currentUser.userId}: ${url}`);
       } catch (err) {
         console.error(`Audio upload error for user ${currentUser.userId}:`, err);
-        toast.error('Audio upload failed.');
+        toast.error('Audio upload to Cloudinary failed.');
       }
     } else if (isBotLocked) {
       toast.error('AI Bot is currently in use by another user.');
@@ -253,11 +258,11 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       socket.emit('ai-bot-locked', {
         userId: currentUser.userId,
         username: currentUser.username,
-        roomId
+        roomId,
       });
       socket.emit('ai-start-processing', {
         userId: currentUser.userId,
-        username: currentUser.username
+        username: currentUser.username,
       });
       console.log(`Started AI processing by user ${currentUser.userId}`);
 

@@ -41,6 +41,10 @@ const Meeting = () => {
   const [filmstripSize] = useState(6);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
+  const [sharedImageUrl, setSharedImageUrl] = useState('');
+  const [sharedAudioUrl, setSharedAudioUrl] = useState('');
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [uploaderUsername, setUploaderUsername] = useState('');
 
   // Annotation & Toolbar State
   const [toolbarPosition, setToolbarPosition] = useState({ x: 20, y: 20 });
@@ -58,6 +62,7 @@ const Meeting = () => {
   const mainVideoContainerRef = useRef(null);
   const remoteDrawingStates = useRef(new Map());
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
+  const audioRef = useRef(null);
 
   // Derived State
   const defaultMainParticipant = useMemo(() => {
@@ -83,6 +88,15 @@ const Meeting = () => {
   );
 
   const totalFilmstripPages = Math.ceil(filmstripParticipants.length / filmstripSize);
+
+  // Helper to get username by userId
+  const getUsernameById = (userId) => {
+    const participant = participants.find(p => p.userId === userId);
+    if (participant) {
+      return participant.isLocal ? user.username : participant.username;
+    }
+    return 'Another user';
+  };
 
   // Fetch ICE Servers
   const getIceServers = useCallback(async () => {
@@ -256,6 +270,46 @@ const Meeting = () => {
     socket.on('screen-share-start', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p)));
     socket.on('screen-share-stop', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p)));
 
+    socket.on('ai-image-uploaded', ({ url, userId, username }) => {
+      console.log(`Received ai-image-uploaded: url=${url}, userId=${userId}, username=${username}`);
+      setSharedImageUrl(url);
+      setUploaderUsername(username || getUsernameById(userId));
+    });
+
+    socket.on('ai-audio-uploaded', ({ url, userId, username }) => {
+      console.log(`Received ai-audio-uploaded: url=${url}, userId=${userId}, username=${username}`);
+      setSharedAudioUrl(url);
+      setUploaderUsername(username || getUsernameById(userId));
+      setIsAudioPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = url;
+        audioRef.current.load();
+      }
+    });
+
+    socket.on('ai-audio-play', () => {
+      console.log('Received ai-audio-play');
+      if (audioRef.current && sharedAudioUrl) {
+        setIsAudioPlaying(true);
+        audioRef.current.play().catch((err) => {
+          console.error('Audio playback error:', err);
+          toast.error('Failed to play audio. Ensure you have interacted with the page.');
+          setIsAudioPlaying(false);
+        });
+      } else {
+        console.warn('Audio not playable: ', { sharedAudioUrl });
+        toast.error('Audio not available.');
+      }
+    });
+
+    socket.on('ai-audio-pause', () => {
+      console.log('Received ai-audio-pause');
+      setIsAudioPlaying(false);
+      if (audioRef.current) audioRef.current.pause();
+    });
+
     socket.on('error', ({ message }) => toast.error(message));
 
     socket.on('drawing-start', ({ from, x, y, color, tool, size }) => {
@@ -307,7 +361,7 @@ const Meeting = () => {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     });
-  }, [createPeerConnection, roomId, user]);
+  }, [createPeerConnection, roomId, user, getUsernameById]);
 
   useEffect(() => {
     const initialize = async () => {
@@ -367,6 +421,21 @@ const Meeting = () => {
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
   }, [mainViewParticipant]);
+
+  // Audio readiness handler
+  useEffect(() => {
+    if (audioRef.current && sharedAudioUrl) {
+      audioRef.current.src = sharedAudioUrl;
+      const handleCanPlay = () => {
+        console.log(`Shared audio is ready to play: ${sharedAudioUrl}`);
+      };
+      audioRef.current.addEventListener('canplaythrough', handleCanPlay);
+      audioRef.current.load();
+      return () => {
+        audioRef.current.removeEventListener('canplaythrough', handleCanPlay);
+      };
+    }
+  }, [sharedAudioUrl]);
 
   const replaceTrack = useCallback(
     async (newTrack, isScreenShare = false) => {
@@ -609,6 +678,50 @@ const Meeting = () => {
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
             />
+            {(sharedImageUrl || sharedAudioUrl) && (
+              <div className="absolute bottom-4 right-4 bg-gray-800 p-4 rounded-lg max-w-sm w-full z-20">
+                {sharedImageUrl && (
+                  <div className="mb-2">
+                    <p className="text-sm text-gray-300 mb-1">
+                      Image shared by: {uploaderUsername}
+                    </p>
+                    <img
+                      src={sharedImageUrl}
+                      alt="Shared"
+                      className="max-w-full h-auto rounded-lg border border-gray-600"
+                      style={{ maxHeight: '150px' }}
+                      onError={() => {
+                        console.error(`Shared image failed to load: ${sharedImageUrl}`);
+                        toast.error('Failed to load shared image.');
+                        setSharedImageUrl('');
+                      }}
+                    />
+                  </div>
+                )}
+                {sharedAudioUrl && (
+                  <div>
+                    <p className="text-sm text-gray-300 mb-1">
+                      Audio shared by: {uploaderUsername}
+                    </p>
+                    <audio
+                      ref={audioRef}
+                      src={sharedAudioUrl}
+                      className="w-full"
+                      onError={(e) => {
+                        console.error(`Shared audio element error:`, e);
+                        toast.error('Error loading shared audio.');
+                        setSharedAudioUrl('');
+                      }}
+                    >
+                      Your browser does not support the audio element.
+                    </audio>
+                    <p className="text-sm text-gray-300 mt-1">
+                      {isAudioPlaying ? 'Playing audio...' : 'Audio paused'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           {filmstripParticipants.length > 0 && (
             <div className="h-40 w-full relative">

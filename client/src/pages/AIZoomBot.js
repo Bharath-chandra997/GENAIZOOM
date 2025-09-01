@@ -16,6 +16,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(1.0);
   const [isBotLocked, setIsBotLocked] = useState(false);
+  const [isAudioReady, setIsAudioReady] = useState(false);
   const audioRef = useRef(null);
 
   useEffect(() => {
@@ -25,6 +26,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       setIsProcessing(true);
       setCurrentUploader(userId);
       setIsPlaying(false);
+      setIsAudioReady(false);
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
@@ -47,6 +49,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       setAudioUrl(url);
       setCurrentUploader(userId);
       setIsPlaying(false);
+      setIsAudioReady(false);
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
@@ -54,11 +57,11 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     });
 
     socket.on('ai-audio-play', () => {
-      setIsPlaying(true);
-      if (audioRef.current) {
+      if (audioRef.current && audioUrl && isAudioReady) {
+        setIsPlaying(true);
         audioRef.current.play().catch((err) => {
           console.error('Audio playback error:', err);
-          toast.error('Failed to play audio. Check permissions.');
+          toast.error('Failed to play audio. Ensure you have interacted with the page (e.g., click Play).');
           setIsPlaying(false);
         });
       }
@@ -91,6 +94,23 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     };
   }, [socket, roomId]);
 
+  // Preload audio and handle readiness
+  useEffect(() => {
+    if (audioRef.current && audioUrl) {
+      audioRef.current.src = audioUrl;
+      const handleCanPlay = () => {
+        setIsAudioReady(true);
+        console.log('Audio is ready to play:', audioUrl);
+      };
+      audioRef.current.addEventListener('canplaythrough', handleCanPlay);
+      audioRef.current.load(); // Ensure audio is loaded
+      return () => {
+        audioRef.current.removeEventListener('canplaythrough', handleCanPlay);
+      };
+    }
+  }, [audioUrl]);
+
+  // Update volume
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
@@ -157,6 +177,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       return;
     }
     try {
+      setIsProcessing(true); // Start processing (shows spinner)
       socket.emit('ai-bot-locked', { userId: currentUser.userId, roomId });
       socket.emit('ai-start-processing', { userId: currentUser.userId });
 
@@ -167,6 +188,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       if (!imageFile && !audioFile) {
         toast.error('Please upload at least one file.');
         socket.emit('ai-bot-unlocked', { roomId });
+        setIsProcessing(false);
         return;
       }
 
@@ -175,6 +197,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
           'Content-Type': 'multipart/form-data',
         },
       });
+      console.log('FastAPI Response:', data); // Debug FastAPI response
 
       const response = data.result || 'No answer provided by AI.';
       socket.emit('ai-finish-processing', { response });
@@ -188,18 +211,32 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   };
 
   const handlePlay = () => {
-    if (audioRef.current && audioUrl && !isProcessing && !isBotLocked) {
+    if (audioRef.current && audioUrl && isAudioReady && !isProcessing && !isBotLocked && currentUploader === currentUser.userId) {
       socket.emit('ai-audio-play');
+      setIsPlaying(true);
+      audioRef.current.play().catch((err) => {
+        console.error('Audio playback error:', err);
+        toast.error('Failed to play audio. Ensure you have interacted with the page (e.g., click Play).');
+        setIsPlaying(false);
+      });
     } else if (isBotLocked) {
       toast.error('AI Bot is currently in use by another user.');
+    } else if (currentUploader !== currentUser.userId) {
+      toast.error('Only the uploader can control audio playback.');
+    } else if (!isAudioReady) {
+      toast.error('Audio is not ready yet. Please wait.');
     }
   };
 
   const handlePause = () => {
-    if (audioRef.current && audioUrl && !isBotLocked) {
+    if (audioRef.current && audioUrl && !isBotLocked && currentUploader === currentUser.userId) {
       socket.emit('ai-audio-pause');
+      setIsPlaying(false);
+      audioRef.current.pause();
     } else if (isBotLocked) {
       toast.error('AI Bot is currently in use by another user.');
+    } else if (currentUploader !== currentUser.userId) {
+      toast.error('Only the uploader can control audio playback.');
     }
   };
 
@@ -210,6 +247,22 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
 
   return (
     <div className="h-full flex flex-col bg-gray-800">
+      <style>
+        {`
+          .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-left-color: #ffffff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+          }
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}
+      </style>
       <div className="flex items-center justify-between p-4 border-b border-gray-700">
         <h3 className="text-lg font-semibold text-white">AI Zoom Bot</h3>
         <button
@@ -283,6 +336,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
                 onError={(e) => {
                   console.error('Audio element error:', e);
                   toast.error('Error loading audio file. Try a different file.');
+                  setIsAudioReady(false);
                 }}
               >
                 Your browser does not support the audio element.
@@ -290,14 +344,14 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
               <div className="flex gap-2">
                 <button
                   onClick={handlePlay}
-                  disabled={isProcessing || !audioUrl || isBotLocked}
+                  disabled={isProcessing || !audioUrl || !isAudioReady || isBotLocked || currentUploader !== currentUser.userId}
                   className="flex-1 bg-blue-600 text-white py-1 px-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Play ▶️
                 </button>
                 <button
                   onClick={handlePause}
-                  disabled={isProcessing || !audioUrl || isBotLocked}
+                  disabled={isProcessing || !audioUrl || !isPlaying || isBotLocked || currentUploader !== currentUser.userId}
                   className="flex-1 bg-blue-600 text-white py-1 px-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Pause ⏸️
@@ -314,7 +368,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
                   value={volume}
                   onChange={handleVolumeChange}
                   className="w-full"
-                  disabled={isProcessing || !audioUrl || isBotLocked}
+                  disabled={isProcessing || !audioUrl || isBotLocked || currentUploader !== currentUser.userId}
                 />
               </div>
             </div>
@@ -323,9 +377,16 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         <button
           onClick={handleUpload}
           disabled={(!imageFile && !audioFile) || isProcessing || isBotLocked}
-          className="w-full bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
         >
-          Get AI Answer
+          {isProcessing ? (
+            <>
+              <span className="spinner"></span>
+              Processing...
+            </>
+          ) : (
+            'Get AI Answer'
+          )}
         </button>
         {output && (
           <div className="bg-gray-700 p-4 rounded-lg">

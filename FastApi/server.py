@@ -15,7 +15,7 @@ app = FastAPI(title="SynergySphere Proxy API")
 # Enable CORS to allow frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://genaizoomserver-0yn4.onrender.com"],  # Restrict to your frontend in production
+    allow_origins=["https://genaizoomserver-0yn4.onrender.com","https://genaizoom123.onrender.com"],  # Restrict to your frontend in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

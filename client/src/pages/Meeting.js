@@ -131,6 +131,7 @@ const Meeting = () => {
         }
       };
       pc.onconnectionstatechange = () => {
+        console.log('Peer connection state:', pc.connectionState, 'for user:', remoteSocketId);
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
           pc.close();
           peerConnections.current.delete(remoteSocketId);
@@ -175,17 +176,31 @@ const Meeting = () => {
 
     socket.on('user-joined', async ({ userId, username, isHost }) => {
       setParticipants((prev) => {
-        if (prev.some(p => p.userId === userId)) return prev;
+        if (prev.some(p => p.userId === userId)) {
+          console.warn('Duplicate user-joined event for:', userId);
+          return prev;
+        }
         return [...prev, { userId, username, stream: null, isLocal: false, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
       });
 
-      const pc = await createPeerConnection(userId);
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+      try {
+        const pc = await createPeerConnection(userId);
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach(track => {
+            console.log('Adding track for user:', userId, track); // Debug
+            pc.addTrack(track, localStreamRef.current); // Line ~148
+          });
+        } else {
+          console.warn('localStreamRef.current is null for user:', userId);
+          return;
+        }
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('offer', { to: userId, offer, username: user.username });
+      } catch (err) {
+        console.error('Error in user-joined handler:', err, { userId, username });
+        toast.error(`Failed to connect to user ${username}.`);
       }
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('offer', { to: userId, offer, username: user.username });
     });
 
     socket.on('offer', async ({ from, offer, username }) => {
@@ -194,24 +209,37 @@ const Meeting = () => {
         return [...prev, { userId: from, username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
       });
 
-      const pc = await createPeerConnection(from);
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+      try {
+        const pc = await createPeerConnection(from);
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+        }
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('answer', { to: from, answer });
+      } catch (err) {
+        console.error('Error in offer handler:', err, { from, username });
+        toast.error(`Failed to process offer from ${username}.`);
       }
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('answer', { to: from, answer });
     });
 
     socket.on('answer', ({ from, answer }) => {
       const pc = peerConnections.current.get(from);
-      if (pc) pc.setRemoteDescription(new RTCSessionDescription(answer));
+      if (pc) {
+        pc.setRemoteDescription(new RTCSessionDescription(answer)).catch(err => {
+          console.error('Error setting remote description:', err);
+        });
+      }
     });
 
     socket.on('ice-candidate', ({ from, candidate }) => {
       const pc = peerConnections.current.get(from);
-      if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => console.error('ICE candidate error:', err));
+      if (pc) {
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+          console.error('ICE candidate error:', err);
+        });
+      }
     });
 
     socket.on('user-left', (userId) => {
@@ -297,6 +325,7 @@ const Meeting = () => {
         });
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
+        console.log('Local stream initialized:', stream); // Debug
 
         socketRef.current = io(SERVER_URL, {
           auth: { token: user.token },
@@ -492,7 +521,7 @@ const Meeting = () => {
       ctx.beginPath();
       if (currentTool === 'rectangle') {
         ctx.rect(startX, startY, endX - startX, endY - startY);
-      } else if (currentTool === 'circle') {
+      } else if (tool === 'circle') {
         const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
         ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
       }

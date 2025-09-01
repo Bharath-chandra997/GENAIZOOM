@@ -17,7 +17,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [volume, setVolume] = useState(1.0);
   const [isBotLocked, setIsBotLocked] = useState(false);
   const [isAudioReady, setIsAudioReady] = useState(false);
-  const [uploaderUsername, setUploaderUsername] = useState('');
   const audioRef = useRef(null);
 
   // Load persisted state from localStorage on mount
@@ -33,10 +32,9 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('ai-start-processing', ({ userId, username }) => {
+    socket.on('ai-start-processing', ({ userId }) => {
       setIsProcessing(true);
       setCurrentUploader(userId);
-      setUploaderUsername(username);
       setIsPlaying(false);
       setIsAudioReady(false);
       if (audioRef.current) {
@@ -49,27 +47,24 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       console.log('Received ai-finish-processing:', response); // Debug
       setIsProcessing(false);
       setCurrentUploader(null);
-      setUploaderUsername('');
       const displayResponse = typeof response === 'object' ? JSON.stringify(response) : response;
       setOutput(displayResponse);
       localStorage.setItem(`aizoom_output_${roomId}`, displayResponse);
       socket.emit('ai-bot-unlocked', { roomId });
     });
 
-    socket.on('ai-image-uploaded', ({ url, userId, username, roomId: eventRoomId }) => {
+    socket.on('ai-image-uploaded', ({ url, userId, roomId: eventRoomId }) => {
       if (eventRoomId === roomId) {
         setImageUrl(url);
         setCurrentUploader(userId);
-        setUploaderUsername(username);
         localStorage.setItem(`aizoom_image_${roomId}`, url);
       }
     });
 
-    socket.on('ai-audio-uploaded', ({ url, userId, username, roomId: eventRoomId }) => {
+    socket.on('ai-audio-uploaded', ({ url, userId, roomId: eventRoomId }) => {
       if (eventRoomId === roomId) {
         setAudioUrl(url);
         setCurrentUploader(userId);
-        setUploaderUsername(username);
         setIsPlaying(false);
         setIsAudioReady(false);
         localStorage.setItem(`aizoom_audio_${roomId}`, url);
@@ -100,16 +95,14 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       if (audioRef.current) audioRef.current.pause();
     });
 
-    socket.on('ai-bot-locked', ({ userId, username }) => {
+    socket.on('ai-bot-locked', ({ userId }) => {
       setIsBotLocked(true);
       setCurrentUploader(userId);
-      setUploaderUsername(username);
     });
 
     socket.on('ai-bot-unlocked', () => {
       setIsBotLocked(false);
       setCurrentUploader(null);
-      setUploaderUsername('');
     });
 
     return () => {
@@ -164,7 +157,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         });
         setImageUrl(data.url);
         localStorage.setItem(`aizoom_image_${roomId}`, data.url);
-        socket.emit('ai-image-uploaded', { url: data.url, userId: currentUser.userId, username: currentUser.username, roomId });
+        socket.emit('ai-image-uploaded', { url: data.url, userId: currentUser.userId, roomId });
       } catch (err) {
         console.error('Image upload error:', err);
         toast.error('Image upload failed.');
@@ -193,7 +186,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         });
         setAudioUrl(data.url);
         localStorage.setItem(`aizoom_audio_${roomId}`, data.url);
-        socket.emit('ai-audio-uploaded', { url: data.url, userId: currentUser.userId, username: currentUser.username, roomId });
+        socket.emit('ai-audio-uploaded', { url: data.url, userId: currentUser.userId, roomId });
       } catch (err) {
         console.error('Audio upload error:', err);
         toast.error('Audio upload failed.');
@@ -210,8 +203,8 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     }
     try {
       setIsProcessing(true);
-      socket.emit('ai-bot-locked', { userId: currentUser.userId, username: currentUser.username, roomId });
-      socket.emit('ai-start-processing', { userId: currentUser.userId, username: currentUser.username });
+      socket.emit('ai-bot-locked', { userId: currentUser.userId, roomId });
+      socket.emit('ai-start-processing', { userId: currentUser.userId });
 
       const formData = new FormData();
       if (imageFile) formData.append('image', imageFile);
@@ -243,7 +236,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       socket.emit('ai-bot-unlocked', { roomId });
       setIsProcessing(false);
       setCurrentUploader(null);
-      setUploaderUsername('');
     }
   };
 
@@ -313,12 +305,12 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
         {isProcessing && (
           <p className="text-yellow-400">
-            Processing by {uploaderUsername || (currentUploader === currentUser.userId ? 'You' : 'another user')}...
+            Processing by {currentUploader === currentUser.userId ? 'You' : 'another user'}...
           </p>
         )}
         {isBotLocked && currentUploader !== currentUser.userId && (
           <p className="text-red-400">
-            AI Bot is locked by {uploaderUsername || 'another user'}. Please wait.
+            AI Bot is locked by another user. Please wait.
           </p>
         )}
         <div className="flex flex-col gap-2">
@@ -339,9 +331,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
           {imageFile && <p className="text-sm text-gray-300">Selected: {imageFile.name}</p>}
           {imageUrl && (
             <div className="mt-2">
-              <p className="text-sm text-gray-300">
-                Uploaded by: {uploaderUsername || (currentUploader === currentUser.userId ? 'You' : 'Another user')}
-              </p>
               <img
                 src={imageUrl}
                 alt="Uploaded"
@@ -369,9 +358,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
           {audioFile && <p className="text-sm text-gray-300">Selected: {audioFile.name}</p>}
           {audioUrl && (
             <div className="mt-2 flex flex-col gap-2">
-              <p className="text-sm text-gray-300">
-                Uploaded by: {uploaderUsername || (currentUploader === currentUser.userId ? 'You' : 'Another user')}
-              </p>
               <audio
                 ref={audioRef}
                 src={audioUrl}

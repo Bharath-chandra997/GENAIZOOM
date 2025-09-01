@@ -3,7 +3,7 @@ import { toast } from 'react-toastify';
 import axios from 'axios';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
-const API_URL = 'https://genaizoom-1.onrender.com'; // FastAPI server URL
+const API_URL = 'https://genaizoom-1.onrender.com';
 
 const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
   const [imageFile, setImageFile] = useState(null);
@@ -81,7 +81,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
 
     socket.on('ai-image-uploaded', ({ url, userId, username, roomId: eventRoomId }) => {
       console.log(`Received ai-image-uploaded: url=${url}, userId=${userId}, username=${username}, eventRoomId=${eventRoomId}`);
-      // Removed the if (eventRoomId === roomId) check since server broadcasts only to the correct room
       setImageUrl(url);
       setCurrentUploader(userId);
       setUploaderUsername(username || getUsernameById(userId));
@@ -91,7 +90,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
 
     socket.on('ai-audio-uploaded', ({ url, userId, username, roomId: eventRoomId }) => {
       console.log(`Received ai-audio-uploaded: url=${url}, userId=${userId}, username=${username}, eventRoomId=${eventRoomId}`);
-      // Removed the if (eventRoomId === roomId) check since server broadcasts only to the correct room
       setAudioUrl(url);
       setCurrentUploader(userId);
       setUploaderUsername(username || getUsernameById(userId));
@@ -302,7 +300,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
   };
 
   const handlePlay = () => {
-    if (audioRef.current && audioUrl && isAudioReady && !isProcessing && !isBotLocked && currentUploader === currentUser.userId) {
+    if (audioRef.current && audioUrl && isAudioReady && !isProcessing && !isBotLocked) {
       socket.emit('ai-audio-play');
       setIsPlaying(true);
       audioRef.current.play().catch((err) => {
@@ -312,22 +310,18 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser, participants }) => {
       });
     } else if (isBotLocked) {
       toast.error('AI Bot is currently in use by another user.');
-    } else if (currentUploader !== currentUser.userId) {
-      toast.error('Only the uploader can control audio playback.');
     } else if (!isAudioReady) {
       toast.error('Audio is not ready yet. Please wait.');
     }
   };
 
   const handlePause = () => {
-    if (audioRef.current && audioUrl && !isBotLocked && currentUploader === currentUser.userId) {
+    if (audioRef.current && audioUrl && !isBotLocked) {
       socket.emit('ai-audio-pause');
       setIsPlaying(false);
       audioRef.current.pause();
     } else if (isBotLocked) {
       toast.error('AI Bot is currently in use by another user.');
-    } else if (currentUploader !== currentUser.userId) {
-      toast.error('Only the uploader can control audio playback.');
     }
   };
 

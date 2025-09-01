@@ -317,7 +317,7 @@ const Meeting = () => {
     socket.on('connect', handleConnect);
     socket.on('user-joined', handleUserJoined);
     socket.on('offer', handleOffer);
-    socket.on('answer', handleAnswer); // Fixed typo here
+    socket.on('answer', handleAnswer);
     socket.on('ice-candidate', handleIceCandidate);
     socket.on('user-left', handleUserLeft);
     socket.on('chat-message', handleChatMessage);
@@ -333,7 +333,7 @@ const Meeting = () => {
       socket.off('connect', handleConnect);
       socket.off('user-joined', handleUserJoined);
       socket.off('offer', handleOffer);
-      socket.off('answer', handleAnswer); // Fixed typo here
+      socket.off('answer', handleAnswer);
       socket.off('ice-candidate', handleIceCandidate);
       socket.off('user-left', handleUserLeft);
       socket.off('chat-message', handleChatMessage);
@@ -591,7 +591,7 @@ const Meeting = () => {
       if (currentTool === 'rectangle') {
         ctx.rect(startX, startY, endX - startX, endY - startY);
       } else if (currentTool === 'circle') {
-        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - sY, 2));
+        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)); // Fixed: sY -> startY
         ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
       }
       ctx.stroke();

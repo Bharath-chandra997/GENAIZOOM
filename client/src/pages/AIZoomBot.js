@@ -34,7 +34,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     });
 
     socket.on('ai-finish-processing', ({ response }) => {
-      console.log('Received ai-finish-processing:', response); // Debug
+      console.log('Received ai-finish-processing:', response);
       setIsProcessing(false);
       setCurrentUploader(null);
       setOutput(response);
@@ -54,8 +54,8 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
-        audioRef.current.src = url; // Update audio source
-        audioRef.current.load(); // Preload audio
+        audioRef.current.src = url;
+        audioRef.current.load();
       }
     });
 
@@ -99,7 +99,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     };
   }, [socket, roomId]);
 
-  // Preload audio and handle readiness
   useEffect(() => {
     if (audioRef.current && audioUrl) {
       audioRef.current.src = audioUrl;
@@ -115,7 +114,6 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     }
   }, [audioUrl]);
 
-  // Update volume
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
@@ -124,7 +122,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     if (e.target.files[0] && !isProcessing && !isBotLocked) {
       const file = e.target.files[0];
       if (!file.type.startsWith('image/')) {
-        toast.error('Please upload a valid image file.');
+        toast.error('Please upload a valid image file (e.g., JPEG, PNG).');
         return;
       }
       setImageFile(file);
@@ -177,8 +175,9 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   };
 
   const handleUpload = async () => {
-    if (isProcessing || (!imageFile && !audioFile) || isBotLocked) {
+    if (isProcessing || !imageFile || isBotLocked) {
       if (isBotLocked) toast.error('AI Bot is currently in use by another user.');
+      if (!imageFile) toast.error('Please upload an image file for AI prediction.');
       return;
     }
     try {
@@ -187,30 +186,25 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       socket.emit('ai-start-processing', { userId: currentUser.userId });
 
       const formData = new FormData();
-      if (imageFile) formData.append('file', imageFile); // Match backend's expected field name
-      if (audioFile) formData.append('file', audioFile);
-
-      if (!imageFile && !audioFile) {
-        toast.error('Please upload at least one file.');
-        socket.emit('ai-bot-unlocked', { roomId });
-        setIsProcessing(false);
-        return;
-      }
+      formData.append('file', imageFile); // Send only image file for PathVQA
 
       const { data } = await axios.post(`${API_URL}/predict`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 60000, // 60-second timeout to prevent 504 errors
+        timeout: 60000,
       });
       console.log('FastAPI Response:', data);
 
       const response = data.answer || 'No answer provided by AI.';
       socket.emit('ai-finish-processing', { response });
-      setOutput(response); // Set output directly for uploader
+      setOutput(response);
     } catch (err) {
       console.error('AI prediction error:', err);
-      toast.error(err.response?.data?.detail || 'Failed to get AI answer.');
+      console.error('Error details:', err.response?.data?.detail);
+      const errorMessage = err.response?.data?.detail || 'Failed to get AI answer.';
+      toast.error(errorMessage);
+      setOutput(`Error: ${errorMessage}`);
       socket.emit('ai-bot-unlocked', { roomId });
       setIsProcessing(false);
       setCurrentUploader(null);
@@ -292,7 +286,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             htmlFor="image-upload"
             className="bg-primary-600 text-white py-2 px-4 rounded cursor-pointer hover:bg-primary-700 text-center"
           >
-            Upload Image 📸
+            Upload Image for AI Prediction 📸
           </label>
           <input
             id="image-upload"
@@ -319,7 +313,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             htmlFor="audio-upload"
             className="bg-primary-600 text-white py-2 px-4 rounded cursor-pointer hover:bg-primary-700 text-center"
           >
-            Upload Audio 🎤
+            Upload Audio for Playback 🎤
           </label>
           <input
             id="audio-upload"
@@ -379,7 +373,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         </div>
         <button
           onClick={handleUpload}
-          disabled={(!imageFile && !audioFile) || isProcessing || isBotLocked}
+          disabled={!imageFile || isProcessing || isBotLocked}
           className="w-full bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
         >
           {isProcessing ? (

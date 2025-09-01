@@ -178,10 +178,7 @@ const Meeting = () => {
 
     socket.on('user-joined', async ({ userId, username, isHost }) => {
       setParticipants((prev) => {
-        if (prev.some(p => p.userId === userId)) {
-          console.warn('Duplicate user-joined event for:', userId);
-          return prev;
-        }
+        if (prev.some(p => p.userId === userId)) return prev;
         return [...prev, { userId, username, stream: null, isLocal: false, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
       });
 
@@ -401,19 +398,22 @@ const Meeting = () => {
   };
 
   const toggleVideo = async () => {
-    const videoTrack = localStreamRef.current?.getVideoTracks()[0];
+    if (!localStreamRef.current) return;
+    const videoTrack = localStreamRef.current.getVideoTracks()[0];
     if (videoTrack.enabled) {
       videoTrack.enabled = false;
       setIsVideoEnabled(false);
       setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: false } : p));
+      socketRef.current.emit('toggle-video', { enabled: false, roomId });
     } else {
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const newStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 15 } });
         const newVideoTrack = newStream.getVideoTracks()[0];
         await replaceTrack(newVideoTrack, false);
         localCameraTrackRef.current = newVideoTrack;
         setIsVideoEnabled(true);
         setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: true } : p));
+        socketRef.current.emit('toggle-video', { enabled: true, roomId });
       } catch (err) {
         console.error('Error enabling video:', err);
         toast.error('Failed to start video.');

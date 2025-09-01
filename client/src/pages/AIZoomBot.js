@@ -121,15 +121,20 @@ const AIZoomBot = ({
       setIsProcessing(true);
       socket.emit('ai-start-processing', { userId: socket.id, username: currentUser.username, roomId });
 
-      // Simulate AI processing with both image and audio (replace with actual AI API call)
-      const response = await new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({ message: 'Processed image and audio successfully!' });
-        }, 2000);
+      // Call the AI processing endpoint
+      const response = await axios.post(`${SERVER_URL}/process-ai`, {
+        imageUrl,
+        audioUrl,
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${currentUser.token}`,
+        },
       });
 
-      setOutput(JSON.stringify(response, null, 2));
-      socket.emit('ai-finish-processing', { response, roomId });
+      const modelOutput = response.data.result || response.data; // Adjust based on your API response structure
+      setOutput(JSON.stringify(modelOutput, null, 2));
+      socket.emit('ai-finish-processing', { response: modelOutput, roomId });
       setIsProcessing(false);
     } catch (error) {
       console.error('Processing error:', error);
@@ -258,7 +263,7 @@ const AIZoomBot = ({
         </button>
         {output && (
           <div className="mt-4">
-            <h3 className="text-md font-medium">AI Output</h3>
+            <h3 className="text-md font-medium">AI Model Output</h3>
             <pre className="bg-gray-800 p-2 rounded text-sm overflow-auto">{output}</pre>
           </div>
         )}

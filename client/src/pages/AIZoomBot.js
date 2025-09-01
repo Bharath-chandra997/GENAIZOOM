@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { FiUpload, FiX, FiPlay, FiPause } from 'react-icons/fi';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
-const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com'; // Replace with your actual AI model API URL
+const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; // FastAPI predict endpoint
 
 const AIZoomBot = ({
   onClose,
@@ -97,8 +97,8 @@ const AIZoomBot = ({
         setSelectedAudio(null);
       }
     } catch (error) {
-      console.error('Upload error:', error);
-      toast.error(`Failed to upload ${type}.`);
+      console.error(`Upload ${type} error:`, error.response || error.message);
+      toast.error(`Failed to upload ${type}: ${error.message}`);
     } finally {
       setIsBotLocked(false);
       socket.emit('ai-bot-unlocked', { roomId });
@@ -107,8 +107,8 @@ const AIZoomBot = ({
 
   // Handle AI processing
   const handleProcess = async () => {
-    if (!imageUrl || !audioUrl) {
-      toast.error('Please upload both an image and an audio file to process.');
+    if (!selectedImage || !selectedAudio) {
+      toast.error('Please select both an image and an audio file to process.');
       return;
     }
     if (isBotLocked && currentUploader !== socket.id) {
@@ -122,24 +122,29 @@ const AIZoomBot = ({
       setIsProcessing(true);
       socket.emit('ai-start-processing', { userId: socket.id, username: currentUser.username, roomId });
 
-      // Call the AI model API
-      const response = await axios.post(AI_MODEL_API_URL, {
-        imageUrl,
-        audioUrl,
-      }, {
+      console.log('Sending AI request to:', AI_MODEL_API_URL);
+      const formData = new FormData();
+      formData.append('image', selectedImage);
+      formData.append('audio', selectedAudio);
+
+      const response = await axios.post(AI_MODEL_API_URL, formData, {
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${currentUser.token}`,
+          'Content-Type': 'multipart/form-data',
         },
       });
 
-      const modelOutput = response.data.result || response.data; // Adjust based on your API response structure
+      console.log('AI response:', response.data);
+      const modelOutput = response.data.result || response.data;
       setOutput(JSON.stringify(modelOutput, null, 2));
       socket.emit('ai-finish-processing', { response: modelOutput, roomId });
       setIsProcessing(false);
     } catch (error) {
-      console.error('AI processing error:', error);
-      toast.error('Failed to process with AI.');
+      console.error('AI processing error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      toast.error(`Failed to process with AI: ${error.response?.statusText || error.message}`);
       setIsProcessing(false);
     } finally {
       setIsBotLocked(false);
@@ -150,6 +155,7 @@ const AIZoomBot = ({
   // Synchronize audio playback with isPlaying state
   useEffect(() => {
     if (audioRef.current && audioUrl) {
+      console.log('Audio playback state:', { isPlaying, audioUrl });
       if (isPlaying) {
         audioRef.current.play().catch((error) => {
           console.error('Audio play error:', error);
@@ -187,7 +193,7 @@ const AIZoomBot = ({
           <button
             onClick={() => handleUpload(selectedImage, 'image')}
             disabled={isProcessing || !selectedImage || (isBotLocked && currentUploader !== socket.id)}
-            className="mt-2 w-full p-2 bg-blue-600 hover:bg-blue-500 rounded flex items-center justify-center"
+            className="mt-2 w-full p-2 bg-blue-600 hover:bg-blue-500 rounded flex items-center justify-center disabled:bg-gray-600"
           >
             <FiUpload className="mr-2" /> Upload Image
           </button>
@@ -204,7 +210,7 @@ const AIZoomBot = ({
           <button
             onClick={() => handleUpload(selectedAudio, 'audio')}
             disabled={isProcessing || !selectedAudio || (isBotLocked && currentUploader !== socket.id)}
-            className="mt-2 w-full p-2 bg-blue-600 hover:bg-blue-500 rounded flex items-center justify-center"
+            className="mt-2 w-full p-2 bg-blue-600 hover:bg-blue-500 rounded flex items-center justify-center disabled:bg-gray-600"
           >
             <FiUpload className="mr-2" /> Upload Audio
           </button>
@@ -257,7 +263,7 @@ const AIZoomBot = ({
         )}
         <button
           onClick={handleProcess}
-          disabled={isProcessing || !imageUrl || !audioUrl || (isBotLocked && currentUploader !== socket.id)}
+          disabled={isProcessing || !selectedImage || !selectedAudio || (isBotLocked && currentUploader !== socket.id)}
           className="w-full p-2 bg-purple-600 hover:bg-purple-500 rounded disabled:bg-gray-600"
         >
           {isProcessing ? 'Processing...' : 'Process with AI'}

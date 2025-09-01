@@ -30,13 +30,13 @@ const Meeting = () => {
 
   // State
   const [participants, setParticipants] = useState([]);
-  const [messages, setMessages] = useState(() => JSON.parse(localStorage.getItem(`messages_${roomId}`)) || []);
+  const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
   const [isAIBotOpen, setIsAIBotOpen] = useState(false);
-  const [isAudioMuted, setIsAudioMuted] = useState(() => localStorage.getItem(`audioMuted_${roomId}`) === 'true');
-  const [isVideoEnabled, setIsVideoEnabled] = useState(() => localStorage.getItem(`videoEnabled_${roomId}`) !== 'false');
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [filmstripSize] = useState(6);
   const [currentOffset, setCurrentOffset] = useState(0);
@@ -113,6 +113,7 @@ const Meeting = () => {
     }
   }, []);
 
+  // Create Peer Connection
   const createPeerConnection = useCallback(
     async (remoteSocketId) => {
       const iceServers = await getIceServers();
@@ -144,6 +145,7 @@ const Meeting = () => {
     [getIceServers]
   );
 
+  // Setup Socket Listeners
   const setupSocketListeners = useCallback((socket) => {
     socket.on('connect', () => {
       console.log('Socket connected:', socket.id);
@@ -165,8 +167,8 @@ const Meeting = () => {
           stream: localStreamRef.current,
           isLocal: true,
           isHost,
-          videoEnabled: isVideoEnabled,
-          audioEnabled: !isAudioMuted,
+          videoEnabled: true,
+          audioEnabled: true,
           isScreenSharing: false
         };
         setParticipants([localParticipant, ...remoteParticipants]);
@@ -176,20 +178,29 @@ const Meeting = () => {
 
     socket.on('user-joined', async ({ userId, username, isHost }) => {
       setParticipants((prev) => {
-        if (prev.some(p => p.userId === userId)) return prev;
+        if (prev.some(p => p.userId === userId)) {
+          console.warn('Duplicate user-joined event for:', userId);
+          return prev;
+        }
         return [...prev, { userId, username, stream: null, isLocal: false, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
       });
 
       try {
         const pc = await createPeerConnection(userId);
         if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+          localStreamRef.current.getTracks().forEach(track => {
+            console.log('Adding track for user:', userId, track);
+            pc.addTrack(track, localStreamRef.current);
+          });
+        } else {
+          console.warn('localStreamRef.current is null for user:', userId);
+          return;
         }
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('offer', { to: userId, offer, username: user.username });
       } catch (err) {
-        console.error('Error in user-joined handler:', err);
+        console.error('Error in user-joined handler:', err, { userId, username });
         toast.error(`Failed to connect to user ${username}.`);
       }
     });
@@ -210,7 +221,7 @@ const Meeting = () => {
         await pc.setLocalDescription(answer);
         socket.emit('answer', { to: from, answer });
       } catch (err) {
-        console.error('Error in offer handler:', err);
+        console.error('Error in offer handler:', err, { from, username });
         toast.error(`Failed to process offer from ${username}.`);
       }
     });
@@ -236,6 +247,7 @@ const Meeting = () => {
     socket.on('user-left', (userId) => {
       const pc = peerConnections.current.get(userId);
       if (pc) {
+        pc.getSenders().forEach(sender => sender.track && sender.track.stop());
         pc.close();
         peerConnections.current.delete(userId);
       }
@@ -243,33 +255,9 @@ const Meeting = () => {
       toast.info('A user has left the meeting.');
     });
 
-    socket.on('chat-message', (payload) => {
-      setMessages(prev => {
-        const newMessages = [...prev, payload];
-        localStorage.setItem(`messages_${roomId}`, JSON.stringify(newMessages));
-        return newMessages;
-      });
-    });
-
-    socket.on('screen-share-start', ({ userId }) => {
-      setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p));
-    });
-
-    socket.on('screen-share-stop', ({ userId }) => {
-      setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p));
-    });
-
-    socket.on('toggle-video', ({ userId, enabled }) => {
-      setParticipants(prev =>
-        prev.map(p => p.userId === userId ? { ...p, videoEnabled: enabled } : p)
-      );
-    });
-
-    socket.on('toggle-audio', ({ userId, enabled }) => {
-      setParticipants(prev =>
-        prev.map(p => p.userId === userId ? { ...p, audioEnabled: enabled } : p)
-      );
-    });
+    socket.on('chat-message', (payload) => setMessages(prev => [...prev, payload]));
+    socket.on('screen-share-start', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p)));
+    socket.on('screen-share-stop', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p)));
 
     socket.on('error', ({ message }) => toast.error(message));
 
@@ -322,7 +310,7 @@ const Meeting = () => {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     });
-  }, [createPeerConnection, roomId, user, isVideoEnabled, isAudioMuted]);
+  }, [createPeerConnection, roomId, user]);
 
   useEffect(() => {
     const initialize = async () => {
@@ -339,8 +327,6 @@ const Meeting = () => {
         });
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
-        localCameraTrackRef.current.enabled = isVideoEnabled;
-        stream.getAudioTracks()[0].enabled = !isAudioMuted;
         console.log('Local stream initialized:', stream);
 
         socketRef.current = io(SERVER_URL, {
@@ -363,16 +349,13 @@ const Meeting = () => {
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
-      if (screenStreamRef.current) {
-        screenStreamRef.current.getTracks().forEach(track => track.stop());
-      }
       peerConnections.current.forEach(pc => pc.close());
       peerConnections.current.clear();
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
     };
-  }, [roomId, user, navigate, setupSocketListeners, isVideoEnabled, isAudioMuted]);
+  }, [roomId, user, navigate, setupSocketListeners]);
 
   useEffect(() => {
     const canvas = annotationCanvasRef.current;
@@ -388,78 +371,61 @@ const Meeting = () => {
     return () => resizeObserver.disconnect();
   }, [mainViewParticipant]);
 
-  useEffect(() => {
-    localStorage.setItem(`messages_${roomId}`, JSON.stringify(messages));
-  }, [messages, roomId]);
+  const replaceTrack = useCallback(
+    async (newTrack, isScreenShare = false) => {
+      const localStream = localStreamRef.current;
+      if (!localStream) return;
 
-  useEffect(() => {
-    localStorage.setItem(`audioMuted_${roomId}`, isAudioMuted);
-    localStorage.setItem(`videoEnabled_${roomId}`, isVideoEnabled);
-  }, [isAudioMuted, isVideoEnabled, roomId]);
+      const oldTrack = localStream.getVideoTracks()[0];
+      if (oldTrack) oldTrack.stop();
 
-  const replaceTrack = useCallback(async (newTrack, isScreenShare = false) => {
-    try {
-      for (const pc of peerConnections.current.values()) {
-        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
-        if (sender) await sender.replaceTrack(newTrack);
-      }
-      const oldTrack = localStreamRef.current.getVideoTracks()[0];
-      localStreamRef.current.removeTrack(oldTrack);
-      localStreamRef.current.addTrack(newTrack);
-      oldTrack.stop();
+      localStream.removeTrack(oldTrack);
+      localStream.addTrack(newTrack);
+      peerConnections.current.forEach((pc) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+        if (sender) sender.replaceTrack(newTrack);
+      });
       setParticipants((prev) => prev.map((p) => p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p));
       socketRef.current.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop', { userId: socketRef.current.id });
-    } catch (err) {
-      console.error('Error replacing track:', err);
-      toast.error('Failed to update video track.');
-    }
-  }, []);
+    },
+    []
+  );
 
-  const toggleAudio = useCallback(() => {
+  const toggleAudio = () => {
     const audioTrack = localStreamRef.current?.getAudioTracks()[0];
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       setIsAudioMuted(!audioTrack.enabled);
       setParticipants(prev => prev.map(p => p.isLocal ? { ...p, audioEnabled: audioTrack.enabled } : p));
-      socketRef.current.emit('toggle-audio', { userId: socketRef.current.id, enabled: audioTrack.enabled });
     }
-  }, []);
+  };
 
-  const toggleVideo = useCallback(async () => {
-    if (!localStreamRef.current) return;
-    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+  const toggleVideo = async () => {
+    const videoTrack = localStreamRef.current?.getVideoTracks()[0];
     if (videoTrack.enabled) {
       videoTrack.enabled = false;
       setIsVideoEnabled(false);
       setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: false } : p));
-      socketRef.current.emit('toggle-video', { userId: socketRef.current.id, enabled: false });
     } else {
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 15 } });
+        const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
         const newVideoTrack = newStream.getVideoTracks()[0];
         await replaceTrack(newVideoTrack, false);
         localCameraTrackRef.current = newVideoTrack;
         setIsVideoEnabled(true);
         setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: true } : p));
-        socketRef.current.emit('toggle-video', { userId: socketRef.current.id, enabled: true });
       } catch (err) {
         console.error('Error enabling video:', err);
         toast.error('Failed to start video.');
       }
     }
-  }, [replaceTrack]);
+  };
 
-  const handleScreenShare = useCallback(async () => {
+  const handleScreenShare = async () => {
     if (isSharingScreen) {
-      try {
-        await replaceTrack(localCameraTrackRef.current, false);
-        setIsSharingScreen(false);
-        screenStreamRef.current?.getTracks().forEach(track => track.stop());
-        screenStreamRef.current = null;
-      } catch (err) {
-        console.error('Error stopping screen share:', err);
-        toast.error('Failed to stop screen sharing.');
-      }
+      await replaceTrack(localCameraTrackRef.current, false);
+      setIsSharingScreen(false);
+      screenStreamRef.current?.getTracks().forEach(track => track.stop());
     } else {
       try {
         const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -468,30 +434,24 @@ const Meeting = () => {
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
         screenTrack.onended = async () => {
-          try {
-            await replaceTrack(localCameraTrackRef.current, false);
-            setIsSharingScreen(false);
-            screenStreamRef.current = null;
-          } catch (err) {
-            console.error('Error handling screen share end:', err);
-            toast.error('Failed to end screen sharing.');
-          }
+          await replaceTrack(localCameraTrackRef.current, false);
+          setIsSharingScreen(false);
         };
       } catch (err) {
         console.error('Screen share error:', err);
         toast.error('Screen sharing failed.');
       }
     }
-  }, [isSharingScreen, replaceTrack]);
+  };
 
-  const handleSwipe = useCallback((direction) => {
+  const handleSwipe = (direction) => {
     setCurrentOffset((prev) => {
       const newOffset = prev + direction;
       return Math.max(0, Math.min(newOffset, totalFilmstripPages - 1));
     });
-  }, [totalFilmstripPages]);
+  };
 
-  const handleToolbarMouseDown = useCallback((e) => {
+  const handleToolbarMouseDown = (e) => {
     const toolbar = e.currentTarget.parentElement;
     const rect = toolbar.getBoundingClientRect();
     dragInfo.current = {
@@ -501,24 +461,24 @@ const Meeting = () => {
     };
     window.addEventListener('mousemove', handleToolbarMouseMove);
     window.addEventListener('mouseup', handleToolbarMouseUp);
-  }, []);
+  };
 
-  const handleToolbarMouseMove = useCallback((e) => {
+  const handleToolbarMouseMove = (e) => {
     if (dragInfo.current.isDragging) {
       setToolbarPosition({
-        x: Math.max(0, e.clientX - dragInfo.current.offsetX),
-        y: Math.max(0, e.clientY - dragInfo.current.offsetY),
+        x: e.clientX - dragInfo.current.offsetX,
+        y: e.clientY - dragInfo.current.offsetY,
       });
     }
-  }, []);
+  };
 
-  const handleToolbarMouseUp = useCallback(() => {
+  const handleToolbarMouseUp = () => {
     dragInfo.current.isDragging = false;
     window.removeEventListener('mousemove', handleToolbarMouseMove);
     window.removeEventListener('mouseup', handleToolbarMouseUp);
-  }, []);
+  };
 
-  const handleMouseDown = useCallback((e) => {
+  const handleMouseDown = (e) => {
     const canvas = annotationCanvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -538,9 +498,9 @@ const Meeting = () => {
       ctx.beginPath();
       ctx.moveTo(x, y);
     }
-  }, [currentTool, currentBrushSize]);
+  };
 
-  const handleMouseMove = useCallback((e) => {
+  const handleMouseMove = (e) => {
     if (!drawingStateRef.current.isDrawing || !e.buttons) return;
     const canvas = annotationCanvasRef.current;
     if (!canvas) return;
@@ -553,9 +513,9 @@ const Meeting = () => {
       ctx.lineTo(x, y);
       ctx.stroke();
     }
-  }, [currentTool]);
+  };
 
-  const handleMouseUp = useCallback((e) => {
+  const handleMouseUp = (e) => {
     if (!drawingStateRef.current.isDrawing) return;
     const canvas = annotationCanvasRef.current;
     if (!canvas) return;
@@ -589,28 +549,22 @@ const Meeting = () => {
       ctx.stroke();
     }
     drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
-  }, [currentTool, currentBrushSize]);
+  };
 
-  const handleParticipantClick = useCallback((userId) => {
+  const handleParticipantClick = (userId) => {
     setPinnedParticipantId(userId);
     setCurrentOffset(0);
-  }, []);
+  };
 
-  const clearAnnotations = useCallback(() => {
+  const clearAnnotations = () => {
     const canvas = annotationCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     socketRef.current.emit('clear-canvas');
-  }, []);
+  };
 
-  if (isLoading) {
-    return (
-      <div className="h-screen bg-black flex items-center justify-center">
-        <LoadingSpinner size="large" />
-      </div>
-    );
-  }
+  if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
   return (
     <div className="h-screen bg-black flex flex-col overflow-hidden text-white">
@@ -620,13 +574,8 @@ const Meeting = () => {
       </div>
       <div className="flex-1 flex overflow-hidden relative">
         <div 
-          className="flex-1 flex flex-col relative p-4 gap-4 min-w-0"
-          onWheel={(e) => {
-            if (e.deltaY !== 0 && totalFilmstripPages > 1) {
-              e.preventDefault();
-              handleSwipe(e.deltaY > 0 ? 1 : -1);
-            }
-          }}
+          className="flex-1 flex flex-col relative p-4 gap-4"
+          onWheel={(e) => { if (e.deltaY !== 0 && totalFilmstripPages > 1) { e.preventDefault(); handleSwipe(e.deltaY > 0 ? 1 : -1); } }}
         >
           {isSomeoneScreenSharing && (
             <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
@@ -641,7 +590,7 @@ const Meeting = () => {
             </div>
           )}
           <div className="flex-1 min-h-0 relative" ref={mainVideoContainerRef}>
-            {mainViewParticipant ? (
+            {mainViewParticipant && (
               <div className="w-full h-full cursor-pointer" onClick={() => setPinnedParticipantId(null)} title="Click to unpin and return to default view">
                 <VideoPlayer
                   key={mainViewParticipant.userId}
@@ -650,14 +599,10 @@ const Meeting = () => {
                   isLocal={mainViewParticipant.isLocal}
                 />
               </div>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-800 text-gray-300">
-                No participant selected
-              </div>
             )}
             <canvas
               ref={annotationCanvasRef}
-              className="absolute top-0 left-0 w-full h-full"
+              className="absolute top-0 left-0"
               style={{ pointerEvents: isSomeoneScreenSharing ? 'auto' : 'none', zIndex: 10, touchAction: 'none' }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
@@ -669,9 +614,9 @@ const Meeting = () => {
             <div className="h-40 w-full relative">
               <div className="absolute inset-0 flex transition-transform duration-300 ease-in-out" style={{ transform: `translateX(-${currentOffset * 100}%)` }}>
                 {Array.from({ length: totalFilmstripPages }, (_, i) => (
-                  <div key={i} className="flex-shrink-0 w-full h-full grid grid-cols-6 gap-4 justify-center">
+                  <div key={i} className={`flex-shrink-0 w-full h-full grid grid-cols-6 gap-4 justify-center`}>
                     {filmstripParticipants.slice(i * filmstripSize, (i + 1) * filmstripSize).map((p) => (
-                      <div key={p.userId} className="h-full cursor-pointer" onClick={() => handleParticipantClick(p.userId)} title={`Focus on ${p.username}`}>
+                      <div key={p.userId} className="h-full cursor-pointer" onClick={() => handleParticipantClick(p.userId)} title={`Click to focus on ${p.username}`}>
                         <VideoPlayer participant={p} isLocal={p.isLocal}/>
                       </div>
                     ))}
@@ -688,63 +633,24 @@ const Meeting = () => {
             </div>
           )}
         </div>
-        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen || isAIBotOpen ? 'w-80 min-w-[320px]' : 'w-0'} overflow-hidden`}>
-          {isChatOpen && (
-            <Chat 
-              messages={messages} 
-              onSendMessage={(message) => {
-                const payload = { message, username: user.username, timestamp: new Date().toISOString() };
-                socketRef.current.emit('send-chat-message', payload);
-                setMessages((prev) => {
-                  const newMessages = [...prev, payload];
-                  localStorage.setItem(`messages_${roomId}`, JSON.stringify(newMessages));
-                  return newMessages;
-                });
-              }} 
-              currentUser={user} 
-              onClose={() => setIsChatOpen(false)} 
-            />
-          )}
-          {isParticipantsOpen && (
-            <Participants 
-              participants={participants} 
-              currentUser={user} 
-              onClose={() => setIsParticipantsOpen(false)} 
-              roomId={roomId} 
-            />
-          )}
-          {isAIBotOpen && (
-            <AIZoomBot 
-              onClose={() => setIsAIBotOpen(false)} 
-              roomId={roomId} 
-              socket={socketRef.current} 
-              currentUser={user} 
-            />
-          )}
+        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen || isAIBotOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
+          {isChatOpen && <Chat messages={messages} onSendMessage={(message) => {
+            const payload = { message, username: user.username, timestamp: new Date().toISOString() };
+            socketRef.current.emit('send-chat-message', payload);
+            setMessages((prev) => [...prev, payload]);
+          }} currentUser={user} onClose={() => setIsChatOpen(false)} />}
+          {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
+          {isAIBotOpen && <AIZoomBot onClose={() => setIsAIBotOpen(false)} roomId={roomId} socket={socketRef.current} currentUser={user} />}
         </div>
       </div>
       <div className="bg-gray-900 border-t border-gray-700 p-4 flex justify-center gap-4 z-20">
-        <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
-          {isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}
-        </button>
-        <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
-          {isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}
-        </button>
-        <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
-          {isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}
-        </button>
-        <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
-          Chat 💬
-        </button>
-        <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">
-          Participants 👥
-        </button>
-        <button onClick={() => { setIsAIBotOpen(o => !o); setIsChatOpen(false); setIsParticipantsOpen(false); }} className="p-2 rounded-full text-white bg-purple-600 hover:bg-purple-500">
-          AI 🤖
-        </button>
-        <button onClick={() => navigate('/home')} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">
-          Exit Room 📞
-        </button>
+        <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</button>
+        <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</button>
+        <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>
+        <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
+        <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
+        <button onClick={() => { setIsAIBotOpen(o => !o); setIsChatOpen(false); setIsParticipantsOpen(false); }} className="p-2 rounded-full text-white bg-purple-600 hover:bg-purple-500">AI 🤖</button>
+        <button onClick={() => navigate('/home')} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
       </div>
     </div>
   );

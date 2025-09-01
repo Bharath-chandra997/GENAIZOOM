@@ -8,8 +8,8 @@ const API_URL = 'https://genaizoom-1.onrender.com'; // FastAPI server URL
 const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [imageFile, setImageFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
-  const [imageUrl, setImageUrl] = useState(null);
-  const [audioUrl, setAudioUrl] = useState(null);
+  const [imageUrl, setImageUrl] = useState('');
+  const [audioUrl, setAudioUrl] = useState('');
   const [output, setOutput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentUploader, setCurrentUploader] = useState(null);
@@ -18,6 +18,16 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
   const [isBotLocked, setIsBotLocked] = useState(false);
   const [isAudioReady, setIsAudioReady] = useState(false);
   const audioRef = useRef(null);
+
+  // Load persisted state from localStorage on mount
+  useEffect(() => {
+    const savedImageUrl = localStorage.getItem(`aizoom_image_${roomId}`);
+    const savedAudioUrl = localStorage.getItem(`aizoom_audio_${roomId}`);
+    const savedOutput = localStorage.getItem(`aizoom_output_${roomId}`);
+    if (savedImageUrl) setImageUrl(savedImageUrl);
+    if (savedAudioUrl) setAudioUrl(savedAudioUrl);
+    if (savedOutput) setOutput(savedOutput);
+  }, [roomId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -34,25 +44,36 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     });
 
     socket.on('ai-finish-processing', ({ response }) => {
+      console.log('Received ai-finish-processing:', response); // Debug
       setIsProcessing(false);
       setCurrentUploader(null);
-      setOutput(response);
+      const displayResponse = typeof response === 'object' ? JSON.stringify(response) : response;
+      setOutput(displayResponse);
+      localStorage.setItem(`aizoom_output_${roomId}`, displayResponse);
       socket.emit('ai-bot-unlocked', { roomId });
     });
 
-    socket.on('ai-image-uploaded', ({ url, userId }) => {
-      setImageUrl(url);
-      setCurrentUploader(userId);
+    socket.on('ai-image-uploaded', ({ url, userId, roomId: eventRoomId }) => {
+      if (eventRoomId === roomId) {
+        setImageUrl(url);
+        setCurrentUploader(userId);
+        localStorage.setItem(`aizoom_image_${roomId}`, url);
+      }
     });
 
-    socket.on('ai-audio-uploaded', ({ url, userId }) => {
-      setAudioUrl(url);
-      setCurrentUploader(userId);
-      setIsPlaying(false);
-      setIsAudioReady(false);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
+    socket.on('ai-audio-uploaded', ({ url, userId, roomId: eventRoomId }) => {
+      if (eventRoomId === roomId) {
+        setAudioUrl(url);
+        setCurrentUploader(userId);
+        setIsPlaying(false);
+        setIsAudioReady(false);
+        localStorage.setItem(`aizoom_audio_${roomId}`, url);
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+          audioRef.current.src = url;
+          audioRef.current.load();
+        }
       }
     });
 
@@ -64,6 +85,8 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
           toast.error('Failed to play audio. Ensure you have interacted with the page (e.g., click Play).');
           setIsPlaying(false);
         });
+      } else {
+        toast.error('Audio not ready or unavailable.');
       }
     });
 
@@ -92,16 +115,9 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       socket.off('ai-bot-locked');
       socket.off('ai-bot-unlocked');
     };
-  }, [socket, roomId]);
+  }, [socket, roomId, audioUrl]);
 
-  // Load persisted output from localStorage on mount
-  useEffect(() => {
-    const savedOutput = localStorage.getItem(`aizoom_output_${roomId}`);
-    if (savedOutput) {
-      setOutput(savedOutput);
-    }
-  }, [roomId]);
-
+  // Preload audio and handle readiness
   useEffect(() => {
     if (audioRef.current && audioUrl) {
       audioRef.current.src = audioUrl;
@@ -117,6 +133,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
     }
   }, [audioUrl]);
 
+  // Update volume
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
@@ -138,8 +155,9 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             'Authorization': `Bearer ${currentUser.token}`,
           },
         });
-        socket.emit('ai-image-uploaded', { url: data.url, userId: currentUser.userId });
         setImageUrl(data.url);
+        localStorage.setItem(`aizoom_image_${roomId}`, data.url);
+        socket.emit('ai-image-uploaded', { url: data.url, userId: currentUser.userId, roomId });
       } catch (err) {
         console.error('Image upload error:', err);
         toast.error('Image upload failed.');
@@ -166,8 +184,9 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
             'Authorization': `Bearer ${currentUser.token}`,
           },
         });
-        socket.emit('ai-audio-uploaded', { url: data.url, userId: currentUser.userId });
         setAudioUrl(data.url);
+        localStorage.setItem(`aizoom_audio_${roomId}`, data.url);
+        socket.emit('ai-audio-uploaded', { url: data.url, userId: currentUser.userId, roomId });
       } catch (err) {
         console.error('Audio upload error:', err);
         toast.error('Audio upload failed.');
@@ -183,7 +202,7 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
       return;
     }
     try {
-      setIsProcessing(true); // Start processing (shows spinner)
+      setIsProcessing(true);
       socket.emit('ai-bot-locked', { userId: currentUser.userId, roomId });
       socket.emit('ai-start-processing', { userId: currentUser.userId });
 
@@ -202,11 +221,15 @@ const AIZoomBot = ({ onClose, roomId, socket, currentUser }) => {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 60000, // 60-second timeout to prevent 504 errors
       });
       console.log('FastAPI Response:', data); // Debug FastAPI response
 
-      const response = data.result || 'No answer provided by AI.';
+      const displayResponse = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
+      const response = data.result || displayResponse || 'No answer provided by AI.';
       socket.emit('ai-finish-processing', { response });
+      setOutput(response);
+      localStorage.setItem(`aizoom_output_${roomId}`, response);
     } catch (err) {
       console.error('AI prediction error:', err);
       toast.error(err.response?.data?.detail || 'Failed to get AI answer.');

@@ -734,7 +734,33 @@ const Meeting = () => {
   // Save session data when relevant state changes
   useEffect(() => {
     if (sessionRestored) {
+      // Always keep server in sync with latest session data
       saveCurrentSession();
+      // Also push to server to ensure other users get most recent state
+      try {
+        const token = user?.token;
+        if (token) {
+          const aiStatePayload = {
+            isProcessing,
+            currentUploader,
+            uploaderUsername,
+            output,
+          };
+          axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/ai-state`, aiStatePayload, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => {});
+          if (imageUrl) {
+            axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, {
+              type: 'image', url: imageUrl, uploadedBy: currentUploader, uploadedByUsername: uploaderUsername
+            }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+          }
+          if (audioUrl) {
+            axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, {
+              type: 'audio', url: audioUrl, uploadedBy: currentUploader, uploadedByUsername: uploaderUsername
+            }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+          }
+        }
+      } catch {}
     }
   }, [imageUrl, audioUrl, isProcessing, currentUploader, uploaderUsername, output, messages, saveCurrentSession, sessionRestored]);
 
@@ -955,6 +981,31 @@ const Meeting = () => {
     socketRef.current?.emit('clear-canvas');
   };
 
+  const handleExitRoom = () => {
+    try {
+      // Emit leave-room to server so it can clean up session if room becomes empty
+      socketRef.current?.emit('leave-room');
+    } catch (e) {
+      console.warn('Error emitting leave-room:', e);
+    }
+    try {
+      // Clear local persisted session for this meeting
+      localStorage.removeItem(`meeting_session_${roomId}`);
+    } catch (e) {
+      console.warn('Error clearing local session:', e);
+    }
+    // Reset key AI bot state locally to avoid flashing old data when re-entering another room
+    setImageUrl('');
+    setAudioUrl('');
+    setOutput('');
+    setIsProcessing(false);
+    setCurrentUploader(null);
+    setUploaderUsername('');
+    setIsBotLocked(false);
+    setIsPlaying(false);
+    navigate('/home');
+  };
+
   if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
   return (
@@ -1069,7 +1120,7 @@ const Meeting = () => {
         <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
         <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
         <button onClick={() => { setIsAIBotOpen(o => !o); setIsChatOpen(false); setIsParticipantsOpen(false); }} className="p-2 rounded-full text-white bg-purple-600 hover:bg-purple-500">AI 🤖</button>
-        <button onClick={() => navigate('/home')} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
+        <button onClick={handleExitRoom} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
       </div>
     </div>
   );

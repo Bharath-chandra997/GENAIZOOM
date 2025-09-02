@@ -815,7 +815,48 @@ io.on('connection', (socket) => {
     delete socketIdToUsername[socket.id];
   };
 
-  socket.on('leave-room', handleDisconnect);
+  socket.on('leave-room', async () => {
+    const disconnectedUser = socketIdToUsername[socket.id] || 'A user';
+    const roomId = socketToRoom[socket.id];
+    info(`${disconnectedUser} (${socket.id}) requested to leave room ${roomId || 'none'}`);
+
+    if (roomId) {
+      try {
+        // Mark user inactive in session
+        await MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $set: { 
+              [`activeParticipants.$[elem].isActive`]: false,
+              [`activeParticipants.$[elem].lastSeen`]: new Date()
+            }
+          },
+          { arrayFilters: [{ 'elem.socketId': socket.id }] }
+        );
+      } catch (err) {
+        logError('Error updating participant status on leave-room:', err);
+      }
+
+      // Leave the socket room immediately and notify others
+      socket.leave(roomId);
+      socket.to(roomId).emit('user-left', socket.id);
+
+      // If room becomes empty, clear MeetingSession immediately
+      const room = io.sockets.adapter.rooms.get(roomId);
+      const roomSize = room ? room.size : 0;
+      if (roomSize === 0) {
+        try {
+          info(`Room ${roomId} is now empty. Deleting MeetingSession...`);
+          await MeetingSession.deleteOne({ roomId });
+        } catch (err) {
+          logError('Error deleting MeetingSession on empty room (leave-room):', err);
+        }
+      }
+    }
+
+    delete socketToRoom[socket.id];
+    delete socketIdToUsername[socket.id];
+  });
   socket.on('disconnect', handleDisconnect);
 });
 

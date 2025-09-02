@@ -54,6 +54,10 @@ const Meeting = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBotLocked, setIsBotLocked] = useState(false);
   const [uploaderUsername, setUploaderUsername] = useState('');
+  
+  // Session persistence state
+  const [sessionRestored, setSessionRestored] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   // Refs
   const socketRef = useRef(null);
@@ -97,6 +101,75 @@ const Meeting = () => {
     const participant = participants.find(p => p.userId === userId);
     return participant ? (participant.isLocal ? user.username : participant.username) : 'Another user';
   }, [participants, user.username]);
+
+  // Session persistence functions
+  const saveSessionToStorage = useCallback((data) => {
+    try {
+      localStorage.setItem(`meeting_session_${roomId}`, JSON.stringify({
+        ...data,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      console.error('Error saving session to storage:', error);
+    }
+  }, [roomId]);
+
+  const loadSessionFromStorage = useCallback(() => {
+    try {
+      const stored = localStorage.getItem(`meeting_session_${roomId}`);
+      if (stored) {
+        const data = JSON.parse(stored);
+        // Check if session is not too old (24 hours)
+        if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+          return data;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading session from storage:', error);
+    }
+    return null;
+  }, [roomId]);
+
+  const restoreSessionData = useCallback((sessionData) => {
+    if (sessionData) {
+      // Restore uploaded files
+      if (sessionData.uploadedFiles) {
+        const imageFile = sessionData.uploadedFiles.find(f => f.type === 'image');
+        const audioFile = sessionData.uploadedFiles.find(f => f.type === 'audio');
+        
+        if (imageFile) {
+          setImageUrl(imageFile.url);
+          setCurrentUploader(imageFile.uploadedBy);
+          setUploaderUsername(imageFile.uploadedByUsername);
+        }
+        
+        if (audioFile) {
+          setAudioUrl(audioFile.url);
+          setCurrentUploader(audioFile.uploadedBy);
+          setUploaderUsername(audioFile.uploadedByUsername);
+        }
+      }
+      
+      // Restore AI state
+      if (sessionData.aiState) {
+        if (sessionData.aiState.output) {
+          setOutput(sessionData.aiState.output);
+        }
+        if (sessionData.aiState.isProcessing) {
+          setIsProcessing(true);
+          setCurrentUploader(sessionData.aiState.currentUploader);
+          setUploaderUsername(sessionData.aiState.uploaderUsername);
+        }
+      }
+      
+      // Restore chat messages
+      if (sessionData.chatMessages) {
+        setMessages(sessionData.chatMessages);
+      }
+      
+      setSessionRestored(true);
+    }
+  }, []);
 
   // Fetch ICE Servers
   const getIceServers = useCallback(async () => {
@@ -158,6 +231,40 @@ const Meeting = () => {
     },
     [getIceServers]
   );
+
+  // Save session data when it changes
+  const saveCurrentSession = useCallback(() => {
+    const sessionData = {
+      uploadedFiles: [],
+      aiState: {
+        isProcessing,
+        currentUploader,
+        uploaderUsername,
+        output
+      },
+      chatMessages: messages
+    };
+    
+    if (imageUrl) {
+      sessionData.uploadedFiles.push({
+        type: 'image',
+        url: imageUrl,
+        uploadedBy: currentUploader,
+        uploadedByUsername: uploaderUsername
+      });
+    }
+    
+    if (audioUrl) {
+      sessionData.uploadedFiles.push({
+        type: 'audio',
+        url: audioUrl,
+        uploadedBy: currentUploader,
+        uploadedByUsername: uploaderUsername
+      });
+    }
+    
+    saveSessionToStorage(sessionData);
+  }, [imageUrl, audioUrl, isProcessing, currentUploader, uploaderUsername, output, messages, saveSessionToStorage]);
 
   // AI Zoom Bot Socket Handlers
   const handleAiStartProcessing = useCallback(({ userId, username }) => {
@@ -231,7 +338,11 @@ const Meeting = () => {
   const setupSocketListeners = useCallback((socket) => {
     const handleConnect = () => {
       console.log('Socket connected:', socket.id);
-      socket.emit('join-room', { roomId, username: user.username }, (otherUsers) => {
+      socket.emit('join-room', { 
+        roomId, 
+        username: user.username, 
+        isReconnect: isReconnecting 
+      }, (otherUsers, sessionData) => {
         const isHost = otherUsers.length === 0;
         const remoteParticipants = otherUsers.map(u => ({
           userId: u.userId,
@@ -254,6 +365,19 @@ const Meeting = () => {
           isScreenSharing: false
         };
         setParticipants([localParticipant, ...remoteParticipants]);
+        
+        // Restore session data if reconnecting
+        if (isReconnecting && sessionData) {
+          restoreSessionData(sessionData);
+        } else if (isReconnecting) {
+          // Fallback to local storage if server doesn't have session data
+          const storedSession = loadSessionFromStorage();
+          if (storedSession) {
+            restoreSessionData(storedSession);
+          }
+        }
+        
+        setIsReconnecting(false);
         setIsLoading(false);
       });
     };
@@ -414,6 +538,12 @@ const Meeting = () => {
     socket.on('ai-bot-unlocked', handleAiBotUnlocked);
     socket.on('ai-audio-play', handleAiAudioPlay);
     socket.on('ai-audio-pause', handleAiAudioPause);
+    
+    // Session restoration event
+    socket.on('session-restored', (sessionData) => {
+      console.log('Session restored from server:', sessionData);
+      restoreSessionData(sessionData);
+    });
 
     return () => {
       socket.off('connect', handleConnect);
@@ -438,6 +568,7 @@ const Meeting = () => {
       socket.off('ai-bot-unlocked', handleAiBotUnlocked);
       socket.off('ai-audio-play', handleAiAudioPlay);
       socket.off('ai-audio-pause', handleAiAudioPause);
+      socket.off('session-restored');
     };
   }, [
     createPeerConnection,
@@ -451,7 +582,8 @@ const Meeting = () => {
     handleAiBotLocked,
     handleAiBotUnlocked,
     handleAiAudioPlay,
-    handleAiAudioPause
+    handleAiAudioPause,
+    restoreSessionData
   ]);
 
   useEffect(() => {
@@ -473,6 +605,15 @@ const Meeting = () => {
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
         console.log('Local stream initialized:', stream);
+
+        // Check if we have a stored session
+        const storedSession = loadSessionFromStorage();
+        const isReconnecting = !!storedSession;
+        
+        if (isReconnecting) {
+          setIsReconnecting(true);
+          console.log('Attempting to reconnect to meeting...');
+        }
 
         socketRef.current = io(SERVER_URL, {
           auth: { token: user.token },
@@ -508,6 +649,13 @@ const Meeting = () => {
     };
     initialize();
   }, [roomId, user, navigate, setupSocketListeners]);
+
+  // Save session data when relevant state changes
+  useEffect(() => {
+    if (sessionRestored) {
+      saveCurrentSession();
+    }
+  }, [imageUrl, audioUrl, isProcessing, currentUploader, uploaderUsername, output, messages, saveCurrentSession, sessionRestored]);
 
   useEffect(() => {
     const canvas = annotationCanvasRef.current;

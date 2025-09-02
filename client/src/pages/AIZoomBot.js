@@ -32,6 +32,9 @@ const AIZoomBot = ({
   const [selectedAudio, setSelectedAudio] = useState(null);
   const audioRef = useRef(null);
 
+  // Check if AI processing is available
+  const canProcessAI = selectedImage || imageUrl || selectedAudio || audioUrl;
+  
   // Handle image file selection
   const handleImageChange = (e) => {
     if (isBotLocked && currentUploader !== socket.id) {
@@ -275,7 +278,7 @@ const AIZoomBot = ({
         )}
         <button
           onClick={handleProcess}
-          disabled={isProcessing || !selectedImage || !selectedAudio || (isBotLocked && currentUploader !== socket.id)}
+          disabled={isProcessing || !canProcessAI || (isBotLocked && currentUploader !== socket.id)}
           className="w-full p-2 bg-purple-600 hover:bg-purple-500 rounded disabled:bg-gray-600"
         >
           {isProcessing ? 'Processing...' : 'Process with AI'}

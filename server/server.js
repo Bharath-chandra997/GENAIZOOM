@@ -16,6 +16,7 @@ const meetingRoutes = require('./routes/meetings');
 const { info, logError } = require('./utils/logger');
 const User = require('./models/User');
 const Meeting = require('./models/Meeting');
+const MeetingSession = require('./models/MeetingSession');
 
 // Environment Variable Checks
 if (!process.env.JWT_SECRET) {
@@ -206,6 +207,101 @@ app.get('/ice-servers', async (req, res) => {
   }
 });
 
+// Meeting Session Endpoints
+app.get('/api/meeting-session/:roomId', authenticate, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const session = await MeetingSession.findOne({ roomId });
+    if (!session) {
+      return res.status(404).json({ error: 'Meeting session not found' });
+    }
+    res.json(session);
+  } catch (error) {
+    logError('Error fetching meeting session:', error);
+    res.status(500).json({ error: 'Failed to fetch meeting session' });
+  }
+});
+
+app.post('/api/meeting-session/:roomId/participant', authenticate, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { userId, username, socketId } = req.body;
+    
+    let session = await MeetingSession.findOne({ roomId });
+    if (!session) {
+      session = new MeetingSession({ roomId });
+    }
+    
+    session.addParticipant(userId, username, socketId);
+    await session.save();
+    
+    res.json(session);
+  } catch (error) {
+    logError('Error updating meeting session participant:', error);
+    res.status(500).json({ error: 'Failed to update meeting session' });
+  }
+});
+
+app.post('/api/meeting-session/:roomId/upload', authenticate, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { type, url, uploadedBy, uploadedByUsername, filename, size } = req.body;
+    
+    let session = await MeetingSession.findOne({ roomId });
+    if (!session) {
+      session = new MeetingSession({ roomId });
+    }
+    
+    session.addUploadedFile({ type, url, uploadedBy, uploadedByUsername, filename, size });
+    await session.save();
+    
+    res.json(session);
+  } catch (error) {
+    logError('Error updating meeting session upload:', error);
+    res.status(500).json({ error: 'Failed to update meeting session' });
+  }
+});
+
+app.post('/api/meeting-session/:roomId/ai-state', authenticate, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const aiStateData = req.body;
+    
+    let session = await MeetingSession.findOne({ roomId });
+    if (!session) {
+      session = new MeetingSession({ roomId });
+    }
+    
+    session.updateAIState(aiStateData);
+    await session.save();
+    
+    res.json(session);
+  } catch (error) {
+    logError('Error updating meeting session AI state:', error);
+    res.status(500).json({ error: 'Failed to update meeting session' });
+  }
+});
+
+app.post('/api/meeting-session/:roomId/chat', authenticate, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const messageData = req.body;
+    
+    let session = await MeetingSession.findOne({ roomId });
+    if (!session) {
+      session = new MeetingSession({ roomId });
+    }
+    
+    session.addChatMessage(messageData);
+    await session.save();
+    
+    res.json(session);
+  } catch (error) {
+    logError('Error updating meeting session chat:', error);
+    res.status(500).json({ error: 'Failed to update meeting session' });
+  }
+});
+
 // File Upload Endpoints with Cloudinary
 app.post('/upload/image', authenticate, upload.single('file'), async (req, res) => {
   try {
@@ -268,20 +364,45 @@ io.on('connection', (socket) => {
   const { username, userId } = socket.user;
   info(`Socket connected: ${socket.id} for user ${username} (${userId})`);
 
-  socket.on('join-room', ({ roomId, username }, callback) => {
+  socket.on('join-room', async ({ roomId, username, isReconnect = false }, callback) => {
     if (!roomId) {
       socket.emit('error', { message: 'Invalid room ID' });
       info(`Join-room failed: Invalid room ID for ${username} (${socket.id})`);
       return;
     }
+    
     socket.join(roomId);
     socketToRoom[socket.id] = roomId;
     socketIdToUsername[socket.id] = username;
+    
+    // Update meeting session
+    try {
+      await MeetingSession.findOneAndUpdate(
+        { roomId },
+        { 
+          $set: { 
+            [`activeParticipants.$[elem].socketId`]: socket.id,
+            [`activeParticipants.$[elem].lastSeen`]: new Date(),
+            [`activeParticipants.$[elem].isActive`]: true
+          }
+        },
+        { 
+          arrayFilters: [{ 'elem.userId': userId }],
+          upsert: true,
+          new: true
+        }
+      );
+    } catch (err) {
+      logError('Error updating meeting session:', err);
+    }
+    
     const room = io.sockets.adapter.rooms.get(roomId);
     const isFirst = room.size === 1;
     if (isFirst) {
       roomHosts.set(roomId, socket.id);
     }
+    
+    // Get other users from the room
     const otherUsers = [];
     room.forEach((id) => {
       if (id !== socket.id) {
@@ -292,9 +413,34 @@ io.on('connection', (socket) => {
         });
       }
     });
-    info(`User ${username} (${socket.id}) joined room ${roomId} with ${otherUsers.length} other users`);
-    callback(otherUsers);
-    socket.to(roomId).emit('user-joined', { userId: socket.id, username, isHost: isFirst });
+    
+    // If this is a reconnection, get the existing session data
+    let sessionData = null;
+    if (isReconnect) {
+      try {
+        const session = await MeetingSession.findOne({ roomId });
+        if (session) {
+          sessionData = {
+            uploadedFiles: session.uploadedFiles,
+            aiState: session.aiState,
+            chatMessages: session.chatMessages.slice(-50), // Last 50 messages
+          };
+        }
+      } catch (err) {
+        logError('Error fetching session data for reconnection:', err);
+      }
+    }
+    
+    info(`User ${username} (${socket.id}) ${isReconnect ? 'reconnected to' : 'joined'} room ${roomId} with ${otherUsers.length} other users`);
+    
+    // Send session data if reconnecting
+    if (isReconnect && sessionData) {
+      socket.emit('session-restored', sessionData);
+    }
+    
+    callback(otherUsers, sessionData);
+    socket.to(roomId).emit('user-joined', { userId: socket.id, username, isHost: isFirst, isReconnect });
+    
     if (otherUsers.length > 0) {
       try {
         Meeting.updateOne(
@@ -342,7 +488,7 @@ io.on('connection', (socket) => {
     io.to(payload.to).emit('ice-candidate', { from: socket.id, candidate: payload.candidate });
   });
 
-  socket.on('send-chat-message', (payload) => {
+  socket.on('send-chat-message', async (payload) => {
     const roomId = socketToRoom[socket.id];
     if (!roomId) {
       socket.emit('error', { message: 'Not in a room' });
@@ -352,6 +498,27 @@ io.on('connection', (socket) => {
       socket.emit('error', { message: 'Invalid message payload' });
       return;
     }
+    
+    // Persist chat message to meeting session
+    try {
+      await MeetingSession.findOneAndUpdate(
+        { roomId },
+        { 
+          $push: { 
+            chatMessages: {
+              message: payload.message,
+              username: payload.username,
+              timestamp: payload.timestamp,
+              userId: socket.user.userId
+            }
+          }
+        },
+        { upsert: true }
+      );
+    } catch (err) {
+      logError('Error persisting chat message to session:', err);
+    }
+    
     info(`Broadcasting chat message from ${socketIdToUsername[socket.id]} in room ${roomId}`);
     socket.to(roomId).emit('chat-message', payload);
   });
@@ -392,34 +559,119 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('ai-image-uploaded', ({ url, userId }) => {
+  socket.on('ai-image-uploaded', async ({ url, userId, username, filename, size }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
       info(`Broadcasting ai-image-uploaded from ${socketIdToUsername[socket.id]} in room ${roomId}`);
-      socket.to(roomId).emit('ai-image-uploaded', { url, userId });
+      
+      // Persist to meeting session
+      try {
+        await MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $push: { 
+              uploadedFiles: {
+                type: 'image',
+                url,
+                uploadedBy: userId,
+                uploadedByUsername: username,
+                filename,
+                size
+              }
+            }
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        logError('Error persisting image upload to session:', err);
+      }
+      
+      socket.to(roomId).emit('ai-image-uploaded', { url, userId, username });
     }
   });
 
-  socket.on('ai-audio-uploaded', ({ url, userId }) => {
+  socket.on('ai-audio-uploaded', async ({ url, userId, username, filename, size }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
       info(`Broadcasting ai-audio-uploaded from ${socketIdToUsername[socket.id]} in room ${roomId}`);
-      socket.to(roomId).emit('ai-audio-uploaded', { url, userId });
+      
+      // Persist to meeting session
+      try {
+        await MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $push: { 
+              uploadedFiles: {
+                type: 'audio',
+                url,
+                uploadedBy: userId,
+                uploadedByUsername: username,
+                filename,
+                size
+              }
+            }
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        logError('Error persisting audio upload to session:', err);
+      }
+      
+      socket.to(roomId).emit('ai-audio-uploaded', { url, userId, username });
     }
   });
 
-  socket.on('ai-start-processing', ({ userId }) => {
+  socket.on('ai-start-processing', async ({ userId, username }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
       info(`Broadcasting ai-start-processing from ${socketIdToUsername[socket.id]} in room ${roomId}`);
-      socket.to(roomId).emit('ai-start-processing', { userId });
+      
+      // Persist AI state to meeting session
+      try {
+        await MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $set: { 
+              'aiState.isProcessing': true,
+              'aiState.currentUploader': userId,
+              'aiState.uploaderUsername': username,
+              'aiState.startedAt': new Date()
+            }
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        logError('Error persisting AI start state to session:', err);
+      }
+      
+      socket.to(roomId).emit('ai-start-processing', { userId, username });
     }
   });
 
-  socket.on('ai-finish-processing', ({ response }) => {
+  socket.on('ai-finish-processing', async ({ response }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
       info(`Broadcasting ai-finish-processing from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      
+      // Persist AI completion state to meeting session
+      try {
+        await MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $set: { 
+              'aiState.isProcessing': false,
+              'aiState.output': JSON.stringify(response),
+              'aiState.completedAt': new Date(),
+              'aiState.currentUploader': null,
+              'aiState.uploaderUsername': null
+            }
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        logError('Error persisting AI finish state to session:', err);
+      }
+      
       socket.to(roomId).emit('ai-finish-processing', { response });
     }
   });
@@ -454,22 +706,62 @@ io.on('connection', (socket) => {
     });
   });
 
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
     const disconnectedUser = socketIdToUsername[socket.id] || 'A user';
     const roomId = socketToRoom[socket.id];
     info(`${disconnectedUser} (${socket.id}) disconnected from room ${roomId || 'none'}`);
+    
     if (roomId) {
-      socket.to(roomId).emit('user-left', socket.id);
-      const room = io.sockets.adapter.rooms.get(roomId);
-      const remaining = room ? room.size - 1 : 0;
-      if (remaining === 0) {
-        try {
-          Meeting.updateOne({ roomId, endTime: { $exists: false } }, { endTime: new Date() });
-        } catch (err) {
-          logError('Error ending meeting', err);
-        }
+      // Don't immediately remove the user - they might be reconnecting
+      // Just mark them as inactive in the session
+      try {
+        await MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $set: { 
+              [`activeParticipants.$[elem].isActive`]: false,
+              [`activeParticipants.$[elem].lastSeen`]: new Date()
+            }
+          },
+          { 
+            arrayFilters: [{ 'elem.socketId': socket.id }]
+          }
+        );
+      } catch (err) {
+        logError('Error updating participant status on disconnect:', err);
       }
+      
+      // Only emit user-left if they're not reconnecting within a reasonable time
+      // We'll use a timeout to handle this
+      setTimeout(async () => {
+        try {
+          const session = await MeetingSession.findOne({ roomId });
+          if (session) {
+            const participant = session.activeParticipants.find(p => p.socketId === socket.id);
+            if (participant && !participant.isActive) {
+              // Check if they've been inactive for more than 30 seconds
+              const now = new Date();
+              if (now - participant.lastSeen > 30000) {
+                socket.to(roomId).emit('user-left', socket.id);
+                
+                // Clean up the session if no active participants
+                const activeParticipants = session.activeParticipants.filter(p => p.isActive);
+                if (activeParticipants.length === 0) {
+                  try {
+                    Meeting.updateOne({ roomId, endTime: { $exists: false } }, { endTime: new Date() });
+                  } catch (err) {
+                    logError('Error ending meeting', err);
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          logError('Error checking participant status after disconnect timeout:', err);
+        }
+      }, 30000); // 30 second timeout
     }
+    
     delete socketToRoom[socket.id];
     delete socketIdToUsername[socket.id];
   };

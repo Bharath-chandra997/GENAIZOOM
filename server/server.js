@@ -414,27 +414,25 @@ io.on('connection', (socket) => {
       }
     });
     
-    // If this is a reconnection, get the existing session data
+    // Always get the existing session data for new users
     let sessionData = null;
-    if (isReconnect) {
-      try {
-        const session = await MeetingSession.findOne({ roomId });
-        if (session) {
-          sessionData = {
-            uploadedFiles: session.uploadedFiles,
-            aiState: session.aiState,
-            chatMessages: session.chatMessages.slice(-50), // Last 50 messages
-          };
-        }
-      } catch (err) {
-        logError('Error fetching session data for reconnection:', err);
+    try {
+      const session = await MeetingSession.findOne({ roomId });
+      if (session) {
+        sessionData = {
+          uploadedFiles: session.uploadedFiles,
+          aiState: session.aiState,
+          chatMessages: session.chatMessages.slice(-50), // Last 50 messages
+        };
       }
+    } catch (err) {
+      logError('Error fetching session data:', err);
     }
     
     info(`User ${username} (${socket.id}) ${isReconnect ? 'reconnected to' : 'joined'} room ${roomId} with ${otherUsers.length} other users`);
     
-    // Send session data if reconnecting
-    if (isReconnect && sessionData) {
+    // Send session data if available
+    if (sessionData) {
       socket.emit('session-restored', sessionData);
     }
     
@@ -661,7 +659,7 @@ io.on('connection', (socket) => {
           { 
             $set: { 
               'aiState.isProcessing': false,
-              'aiState.output': JSON.stringify(response),
+              'aiState.output': typeof response === 'string' ? response : JSON.stringify(response),
               'aiState.completedAt': new Date(),
               'aiState.currentUploader': null,
               'aiState.uploaderUsername': null

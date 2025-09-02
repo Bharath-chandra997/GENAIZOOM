@@ -132,18 +132,22 @@ const Meeting = () => {
 
   const restoreSessionData = useCallback((sessionData) => {
     if (sessionData) {
+      console.log('Restoring session data:', sessionData);
+      
       // Restore uploaded files
-      if (sessionData.uploadedFiles) {
+      if (sessionData.uploadedFiles && sessionData.uploadedFiles.length > 0) {
         const imageFile = sessionData.uploadedFiles.find(f => f.type === 'image');
         const audioFile = sessionData.uploadedFiles.find(f => f.type === 'audio');
         
         if (imageFile) {
+          console.log('Restoring image:', imageFile);
           setImageUrl(imageFile.url);
           setCurrentUploader(imageFile.uploadedBy);
           setUploaderUsername(imageFile.uploadedByUsername);
         }
         
         if (audioFile) {
+          console.log('Restoring audio:', audioFile);
           setAudioUrl(audioFile.url);
           setCurrentUploader(audioFile.uploadedBy);
           setUploaderUsername(audioFile.uploadedByUsername);
@@ -152,8 +156,39 @@ const Meeting = () => {
       
       // Restore AI state
       if (sessionData.aiState) {
+        console.log('Restoring AI state:', sessionData.aiState);
         if (sessionData.aiState.output) {
-          setOutput(sessionData.aiState.output);
+          // Parse the output if it's a stringified JSON
+          let output = sessionData.aiState.output;
+          if (typeof output === 'string') {
+            try {
+              const parsed = JSON.parse(output);
+              if (typeof parsed === 'object') {
+                // Extract the actual answer from the parsed response
+                if (parsed.answer) {
+                  output = parsed.answer;
+                } else if (parsed.response) {
+                  output = parsed.response;
+                } else if (parsed.text) {
+                  output = parsed.text;
+                } else if (parsed.result) {
+                  output = parsed.result;
+                } else if (parsed.data && parsed.data.answer) {
+                  output = parsed.data.answer;
+                } else if (parsed.data && parsed.data.response) {
+                  output = parsed.data.response;
+                } else {
+                  // If no specific answer field, show the first string value
+                  const firstStringValue = Object.values(parsed).find(val => typeof val === 'string');
+                  output = firstStringValue || output;
+                }
+              }
+            } catch (e) {
+              // If parsing fails, use the original string
+              console.log('Could not parse AI output, using as string:', output);
+            }
+          }
+          setOutput(output);
         }
         if (sessionData.aiState.isProcessing) {
           setIsProcessing(true);
@@ -164,6 +199,7 @@ const Meeting = () => {
       
       // Restore chat messages
       if (sessionData.chatMessages) {
+        console.log('Restoring chat messages:', sessionData.chatMessages);
         setMessages(sessionData.chatMessages);
       }
       
@@ -279,11 +315,37 @@ const Meeting = () => {
   }, [getUsernameById]);
 
   const handleAiFinishProcessing = useCallback(({ response }) => {
-    console.log(`Received ai-finish-processing: response=${response}`);
+    console.log(`Received ai-finish-processing: response=`, response);
     setIsProcessing(false);
     setCurrentUploader(null);
     setUploaderUsername('');
-    const displayResponse = typeof response === 'object' ? JSON.stringify(response, null, 2) : response;
+    
+    // Extract clean answer from response
+    let displayResponse = '';
+    if (typeof response === 'object') {
+      // Try to find common answer fields
+      if (response.answer) {
+        displayResponse = response.answer;
+      } else if (response.response) {
+        displayResponse = response.response;
+      } else if (response.text) {
+        displayResponse = response.text;
+      } else if (response.result) {
+        displayResponse = response.result;
+      } else if (response.data && response.data.answer) {
+        displayResponse = response.data.answer;
+      } else if (response.data && response.data.response) {
+        displayResponse = response.data.response;
+      } else {
+        // If no specific answer field, show the first string value
+        const firstStringValue = Object.values(response).find(val => typeof val === 'string');
+        displayResponse = firstStringValue || JSON.stringify(response, null, 2);
+      }
+    } else {
+      displayResponse = String(response);
+    }
+    
+    console.log(`Setting output to:`, displayResponse);
     setOutput(displayResponse);
   }, []);
 
@@ -377,13 +439,15 @@ const Meeting = () => {
         };
         setParticipants([localParticipant, ...remoteParticipants]);
         
-        // Restore session data if reconnecting
-        if (isReconnecting && sessionData) {
+        // Restore session data if reconnecting or if we have session data from server
+        if (sessionData) {
+          console.log('Restoring session data from server:', sessionData);
           restoreSessionData(sessionData);
-        } else if (isReconnecting) {
-          // Fallback to local storage if server doesn't have session data
+        } else {
+          // Always check local storage for session data on initial load or reconnection
           const storedSession = loadSessionFromStorage();
           if (storedSession) {
+            console.log('Restoring session data from local storage:', storedSession);
             restoreSessionData(storedSession);
           }
         }

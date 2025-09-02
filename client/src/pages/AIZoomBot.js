@@ -30,10 +30,10 @@ const AIZoomBot = ({
 }) => {
   // Clear output when component mounts to ensure fresh state
   useEffect(() => {
-    if (!isProcessing) {
+    if (!isProcessing && !output) {
       setOutput('');
     }
-  }, [isProcessing, setOutput]);
+  }, [isProcessing, setOutput, output]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
   const audioRef = useRef(null);
@@ -215,6 +215,10 @@ const AIZoomBot = ({
           displayOutput = modelOutput.text;
         } else if (modelOutput.result) {
           displayOutput = modelOutput.result;
+        } else if (modelOutput.data && modelOutput.data.answer) {
+          displayOutput = modelOutput.data.answer;
+        } else if (modelOutput.data && modelOutput.data.response) {
+          displayOutput = modelOutput.data.response;
         } else {
           // If no specific answer field, show the first string value
           const firstStringValue = Object.values(modelOutput).find(val => typeof val === 'string');
@@ -224,6 +228,7 @@ const AIZoomBot = ({
         displayOutput = String(modelOutput);
       }
       
+      console.log('Display output:', displayOutput);
       setOutput(displayOutput);
       socket.emit('ai-finish-processing', { response: modelOutput, roomId });
       setIsProcessing(false);
@@ -275,6 +280,16 @@ const AIZoomBot = ({
         {isBotLocked && currentUploader !== socket.id && (
           <div className="mb-4 p-2 bg-yellow-600 text-white rounded">
             {uploaderUsername} is currently uploading or processing.
+          </div>
+        )}
+        {imageUrl && (
+          <div className="mb-2 p-2 bg-green-600 text-white rounded text-sm">
+            ✓ Image file restored from session
+          </div>
+        )}
+        {audioUrl && (
+          <div className="mb-2 p-2 bg-green-600 text-white rounded text-sm">
+            ✓ Audio file restored from session
           </div>
         )}
         <div className="mb-4">

@@ -635,7 +635,8 @@ io.on('connection', (socket) => {
               'aiState.isProcessing': true,
               'aiState.currentUploader': userId,
               'aiState.uploaderUsername': username,
-              'aiState.startedAt': new Date()
+              'aiState.startedAt': new Date(),
+              'aiState.output': '' // Clear previous output
             }
           },
           { upsert: true }
@@ -673,6 +674,56 @@ io.on('connection', (socket) => {
       }
       
       socket.to(roomId).emit('ai-finish-processing', { response });
+    }
+  });
+
+  socket.on('ai-bot-locked', async ({ userId, username, roomId }) => {
+    if (roomId) {
+      info(`Broadcasting ai-bot-locked from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      
+      // Persist bot locked state to meeting session
+      try {
+        await MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $set: { 
+              'aiState.isProcessing': false,
+              'aiState.currentUploader': userId,
+              'aiState.uploaderUsername': username,
+              'aiState.startedAt': new Date()
+            }
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        logError('Error persisting AI bot locked state to session:', err);
+      }
+      
+      socket.to(roomId).emit('ai-bot-locked', { userId, username });
+    }
+  });
+
+  socket.on('ai-bot-unlocked', async ({ roomId }) => {
+    if (roomId) {
+      info(`Broadcasting ai-bot-unlocked from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      
+      // Persist bot unlocked state to meeting session
+      try {
+        await MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $set: { 
+              'aiState.currentUploader': null,
+              'aiState.uploaderUsername': null
+            }
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        logError('Error persisting AI bot unlocked state to session:', err);
+      }
+      
+      socket.to(roomId).emit('ai-bot-unlocked');
     }
   });
 

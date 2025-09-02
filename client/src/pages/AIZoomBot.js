@@ -28,6 +28,12 @@ const AIZoomBot = ({
   handlePlayAudio,
   handlePauseAudio,
 }) => {
+  // Clear output when component mounts to ensure fresh state
+  useEffect(() => {
+    if (!isProcessing) {
+      setOutput('');
+    }
+  }, [isProcessing, setOutput]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
   const audioRef = useRef(null);
@@ -37,8 +43,12 @@ const AIZoomBot = ({
   
   // Handle image file selection
   const handleImageChange = (e) => {
-    if (isBotLocked && currentUploader !== socket.id) {
-      toast.error('Another user is currently uploading or processing.');
+    if (isBotLocked) {
+      if (currentUploader === socket.id) {
+        toast.error('You are already uploading or processing. Please wait.');
+      } else {
+        toast.error(`${uploaderUsername || 'Another user'} is currently uploading or processing. Please wait.`);
+      }
       return;
     }
     const file = e.target.files[0];
@@ -49,8 +59,12 @@ const AIZoomBot = ({
 
   // Handle audio file selection
   const handleAudioChange = (e) => {
-    if (isBotLocked && currentUploader !== socket.id) {
-      toast.error('Another user is currently uploading or processing.');
+    if (isBotLocked) {
+      if (currentUploader === socket.id) {
+        toast.error('You are already uploading or processing. Please wait.');
+      } else {
+        toast.error(`${uploaderUsername || 'Another user'} is currently uploading or processing. Please wait.`);
+      }
       return;
     }
     const file = e.target.files[0];
@@ -72,12 +86,19 @@ const AIZoomBot = ({
       toast.error(`Please select an ${type} file to upload.`);
       return;
     }
-    if (isBotLocked && currentUploader !== socket.id) {
-      toast.error('Another user is currently uploading or processing.');
+    
+    // Check if anyone is currently uploading or processing
+    if (isBotLocked) {
+      if (currentUploader === socket.id) {
+        toast.error('You are already uploading or processing. Please wait.');
+      } else {
+        toast.error(`${uploaderUsername || 'Another user'} is currently uploading or processing. Please wait.`);
+      }
       return;
     }
 
     try {
+      // Lock the bot immediately to prevent others from uploading
       setIsBotLocked(true);
       socket.emit('ai-bot-locked', { userId: socket.id, username: currentUser.username, roomId });
 
@@ -94,10 +115,24 @@ const AIZoomBot = ({
       const { url } = response.data;
       if (type === 'image') {
         setImageUrl(url);
-        socket.emit('ai-image-uploaded', { url, userId: socket.id, username: currentUser.username, roomId });
+        socket.emit('ai-image-uploaded', { 
+          url, 
+          userId: socket.id, 
+          username: currentUser.username, 
+          roomId,
+          filename: file.name,
+          size: file.size
+        });
       } else {
         setAudioUrl(url);
-        socket.emit('ai-audio-uploaded', { url, userId: socket.id, username: currentUser.username, roomId });
+        socket.emit('ai-audio-uploaded', { 
+          url, 
+          userId: socket.id, 
+          username: currentUser.username, 
+          roomId,
+          filename: file.name,
+          size: file.size
+        });
       }
 
       toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully!`);
@@ -108,20 +143,28 @@ const AIZoomBot = ({
       setIsBotLocked(false);
       socket.emit('ai-bot-unlocked', { roomId });
     }
-  }, [isBotLocked, currentUploader, socket, currentUser, roomId, setImageUrl, setAudioUrl, setIsBotLocked]);
+  }, [isBotLocked, currentUploader, socket, currentUser, roomId, setImageUrl, setAudioUrl, setIsBotLocked, uploaderUsername]);
 
   // Handle AI processing
   const handleProcess = async () => {
-    if (!selectedImage || !selectedAudio) {
-      toast.error('Please select both an image and an audio file to process.');
+    // Check if we have files to process (either selected or already uploaded)
+    const hasImage = selectedImage || imageUrl;
+    const hasAudio = selectedAudio || audioUrl;
+    
+    if (!hasImage || !hasAudio) {
+      toast.error('Please ensure both an image and an audio file are available for processing.');
       return;
     }
+    
     if (isBotLocked && currentUploader !== socket.id) {
-      toast.error('Another user is currently processing.');
+      toast.error('Another user is currently uploading or processing.');
       return;
     }
 
     try {
+      // Clear previous output before starting new processing
+      setOutput('');
+      
       setIsBotLocked(true);
       socket.emit('ai-bot-locked', { userId: socket.id, username: currentUser.username, roomId });
       setIsProcessing(true);
@@ -129,8 +172,27 @@ const AIZoomBot = ({
 
       console.log('Sending AI request to:', AI_MODEL_API_URL);
       const formData = new FormData();
-      formData.append('image', selectedImage);
-      formData.append('audio', selectedAudio);
+      
+      // Use selected files if available, otherwise use uploaded URLs
+      if (selectedImage) {
+        formData.append('image', selectedImage);
+      } else if (imageUrl) {
+        // Download the image from URL and convert to file
+        const imageResponse = await fetch(imageUrl);
+        const imageBlob = await imageResponse.blob();
+        const imageFile = new File([imageBlob], 'uploaded_image.jpg', { type: 'image/jpeg' });
+        formData.append('image', imageFile);
+      }
+      
+      if (selectedAudio) {
+        formData.append('audio', selectedAudio);
+      } else if (audioUrl) {
+        // Download the audio from URL and convert to file
+        const audioResponse = await fetch(audioUrl);
+        const audioBlob = await audioResponse.blob();
+        const audioFile = new File([audioBlob], 'uploaded_audio.mp3', { type: 'audio/mpeg' });
+        formData.append('audio', audioFile);
+      }
 
       const response = await axios.post(AI_MODEL_API_URL, formData, {
         headers: {
@@ -140,7 +202,29 @@ const AIZoomBot = ({
 
       console.log('AI response:', response.data);
       const modelOutput = response.data.result || response.data;
-      setOutput(JSON.stringify(modelOutput, null, 2));
+      
+      // Extract only the answer from the response, not the full JSON
+      let displayOutput = '';
+      if (typeof modelOutput === 'object') {
+        // Try to find common answer fields
+        if (modelOutput.answer) {
+          displayOutput = modelOutput.answer;
+        } else if (modelOutput.response) {
+          displayOutput = modelOutput.response;
+        } else if (modelOutput.text) {
+          displayOutput = modelOutput.text;
+        } else if (modelOutput.result) {
+          displayOutput = modelOutput.result;
+        } else {
+          // If no specific answer field, show the first string value
+          const firstStringValue = Object.values(modelOutput).find(val => typeof val === 'string');
+          displayOutput = firstStringValue || JSON.stringify(modelOutput, null, 2);
+        }
+      } else {
+        displayOutput = String(modelOutput);
+      }
+      
+      setOutput(displayOutput);
       socket.emit('ai-finish-processing', { response: modelOutput, roomId });
       setIsProcessing(false);
     } catch (error) {
@@ -172,6 +256,13 @@ const AIZoomBot = ({
     }
   }, [isPlaying, audioUrl]);
 
+  // Clear output when processing starts
+  useEffect(() => {
+    if (isProcessing) {
+      setOutput('');
+    }
+  }, [isProcessing]);
+
   return (
     <div className="bg-gray-900 h-full flex flex-col text-white p-4">
       <div className="flex justify-between items-center mb-4">
@@ -192,12 +283,12 @@ const AIZoomBot = ({
             type="file"
             accept="image/*"
             onChange={handleImageChange}
-            disabled={isBotLocked && currentUploader !== socket.id}
+            disabled={isBotLocked}
             className="w-full p-2 bg-gray-800 rounded text-white"
           />
           <button
             onClick={() => handleUpload(selectedImage, 'image')}
-            disabled={isProcessing || !selectedImage || (isBotLocked && currentUploader !== socket.id)}
+            disabled={isProcessing || !selectedImage || isBotLocked}
             className="mt-2 w-full p-2 bg-blue-600 hover:bg-blue-500 rounded flex items-center justify-center disabled:bg-gray-600"
           >
             <FiUpload className="mr-2" /> Upload Image
@@ -209,12 +300,12 @@ const AIZoomBot = ({
             type="file"
             accept="audio/*"
             onChange={handleAudioChange}
-            disabled={isBotLocked && currentUploader !== socket.id}
+            disabled={isBotLocked}
             className="w-full p-2 bg-gray-800 rounded text-white"
           />
           <button
             onClick={() => handleUpload(selectedAudio, 'audio')}
-            disabled={isProcessing || !selectedAudio || (isBotLocked && currentUploader !== socket.id)}
+            disabled={isProcessing || !selectedAudio || isBotLocked}
             className="mt-2 w-full p-2 bg-blue-600 hover:bg-blue-500 rounded flex items-center justify-center disabled:bg-gray-600"
           >
             <FiUpload className="mr-2" /> Upload Audio
@@ -278,7 +369,7 @@ const AIZoomBot = ({
         )}
         <button
           onClick={handleProcess}
-          disabled={isProcessing || !canProcessAI || (isBotLocked && currentUploader !== socket.id)}
+          disabled={isProcessing || !canProcessAI || isBotLocked}
           className="w-full p-2 bg-purple-600 hover:bg-purple-500 rounded disabled:bg-gray-600"
         >
           {isProcessing ? 'Processing...' : 'Process with AI'}

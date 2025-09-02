@@ -273,6 +273,9 @@ const Meeting = () => {
     setCurrentUploader(userId);
     setUploaderUsername(username || getUsernameById(userId));
     setIsPlaying(false);
+    
+    // Clear output when AI processing starts
+    setOutput('');
   }, [getUsernameById]);
 
   const handleAiFinishProcessing = useCallback(({ response }) => {
@@ -304,6 +307,11 @@ const Meeting = () => {
     setIsBotLocked(true);
     setCurrentUploader(userId);
     setUploaderUsername(username || getUsernameById(userId));
+    
+    // Clear output when someone else starts processing
+    if (userId !== socketRef.current?.id) {
+      setOutput('');
+    }
   }, [getUsernameById]);
 
   const handleAiBotUnlocked = useCallback(() => {
@@ -311,6 +319,9 @@ const Meeting = () => {
     setIsBotLocked(false);
     setCurrentUploader(null);
     setUploaderUsername('');
+    
+    // Keep the output when unlocked, but clear processing state
+    setIsProcessing(false);
   }, []);
 
   const handleAiAudioPlay = useCallback(() => {
@@ -382,7 +393,13 @@ const Meeting = () => {
       });
     };
 
-    const handleUserJoined = async ({ userId, username, isHost }) => {
+    const handleUserJoined = async ({ userId, username, isHost, isReconnect }) => {
+      // Skip adding user if this is a reconnection and we already have them
+      if (isReconnect) {
+        console.log('Skipping user-joined for reconnection:', username);
+        return;
+      }
+      
       setParticipants((prev) => {
         if (prev.some(p => p.userId === userId)) return prev;
         return [...prev, { userId, username, stream: null, isLocal: false, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
@@ -656,6 +673,13 @@ const Meeting = () => {
       saveCurrentSession();
     }
   }, [imageUrl, audioUrl, isProcessing, currentUploader, uploaderUsername, output, messages, saveCurrentSession, sessionRestored]);
+
+  // Clear output when AI processing starts
+  useEffect(() => {
+    if (isProcessing) {
+      setOutput('');
+    }
+  }, [isProcessing]);
 
   useEffect(() => {
     const canvas = annotationCanvasRef.current;

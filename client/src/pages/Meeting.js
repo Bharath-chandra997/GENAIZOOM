@@ -1059,25 +1059,17 @@ const Meeting = () => {
             />
           </div>
           {filmstripParticipants.length > 0 && (
-            <div className="h-40 w-full relative">
-              <div className="absolute inset-0 flex transition-transform duration-300 ease-in-out" style={{ transform: `translateX(-${currentOffset * 100}%)` }}>
-                {Array.from({ length: totalFilmstripPages }, (_, i) => (
-                  <div key={i} className={`flex-shrink-0 w-full h-full grid grid-cols-6 gap-4 justify-center`}>
-                    {filmstripParticipants.slice(i * filmstripSize, (i + 1) * filmstripSize).map((p) => (
-                      <div key={p.userId} className="h-full cursor-pointer" onClick={() => handleParticipantClick(p.userId)} title={`Click to focus on ${p.username}`}>
-                        <VideoPlayer participant={p} isLocal={p.isLocal}/>
-                      </div>
-                    ))}
+            <div className="w-full relative">
+              <div className="grid gap-4"
+                   style={{
+                     gridTemplateColumns: `repeat(${Math.min(6, Math.max(1, Math.ceil(Math.sqrt(filmstripParticipants.length + 1))))}, minmax(0, 1fr))`
+                   }}>
+                {filmstripParticipants.map((p) => (
+                  <div key={p.userId} className="w-full cursor-pointer" onClick={() => handleParticipantClick(p.userId)} title={`Click to focus on ${p.username}`}>
+                    <VideoPlayer participant={p} isLocal={p.isLocal} />
                   </div>
                 ))}
               </div>
-              {totalFilmstripPages > 1 && (
-                <div className="absolute bottom-[-10px] left-0 right-0 flex justify-center gap-2">
-                  {Array.from({ length: totalFilmstripPages }, (_, i) => (
-                    <button key={i} onClick={() => setCurrentOffset(i)} className={`w-2.5 h-2.5 rounded-full ${currentOffset === i ? 'bg-white' : 'bg-gray-500'}`} />
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </div>

@@ -860,9 +860,9 @@ const Meeting = () => {
   };
 
   const handleSwipe = (direction) => {
-    setCurrentOffset((prev) => {
-      const newOffset = prev + direction;
-      return Math.max(0, Math.min(newOffset, totalFilmstripPages - 1));
+    setGridPage((prev) => {
+      const next = prev + direction;
+      return Math.max(0, Math.min(next, totalGridPages - 1));
     });
   };
 
@@ -1016,7 +1016,7 @@ const Meeting = () => {
         <div 
           className="flex-1 flex flex-col relative p-4 gap-4"
           onWheel={(e) => {
-            if (e.deltaY !== 0 && totalFilmstripPages > 1) {
+            if (e.deltaY !== 0 && totalGridPages > 1) {
               e.preventDefault();
               handleSwipe(e.deltaY > 0 ? 1 : -1);
             }

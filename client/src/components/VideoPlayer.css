@@ -49,8 +49,13 @@
   object-position: center;
   background: #000;
   -webkit-transform: translateZ(0);
-  transform: translateZ(0);
+  transform: none; /* Ensure remote videos are not mirrored */
   will-change: transform;
+}
+
+/* Mirror only when explicitly applied (for local preview) */
+.video-element.mirror {
+  transform: scaleX(-1);
 }
 
 .video-overlay {

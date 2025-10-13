@@ -60,12 +60,12 @@ const VideoPlayer = ({ participant, isPinned, isLocal }) => {
   return (
     <div className={`video-container relative w-full h-full bg-gray-800 rounded-lg overflow-hidden border-2 ${borderColor} transition-all duration-300`}>
        {/* ... (rest of the VideoPlayer JSX is the same as the last version) ... */}
-       <video
+      <video
          ref={videoRef}
          autoPlay
          playsInline
          muted={isLocal}
-         className={`w-full h-full object-cover ${isLocal && !participant.isScreenSharing ? 'transform scale-x-[-1]' : ''}`}
+         className={`video-element ${isLocal && !participant.isScreenSharing ? 'mirror' : ''}`}
        />
        {/* ... name overlay etc ... */}
        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">

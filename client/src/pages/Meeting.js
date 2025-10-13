@@ -9,7 +9,6 @@ import Participants from '../components/Participants';
 import LoadingSpinner from '../components/LoadingSpinner';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
-import AIZoomBot from '../pages/AIZoomBot';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
@@ -34,7 +33,7 @@ const Meeting = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
-  const [isAIBotOpen, setIsAIBotOpen] = useState(false);
+  const [showAiMiniCard, setShowAiMiniCard] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
@@ -54,6 +53,8 @@ const Meeting = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBotLocked, setIsBotLocked] = useState(false);
   const [uploaderUsername, setUploaderUsername] = useState('');
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedAudio, setSelectedAudio] = useState(null);
   
   // Session persistence state
   const [sessionRestored, setSessionRestored] = useState(false);
@@ -1080,46 +1081,44 @@ const Meeting = () => {
             </div>
           )}
         </div>
-        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen || isAIBotOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
+        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
           {isChatOpen && <Chat messages={messages} onSendMessage={(message) => {
             const payload = { message, username: user.username, timestamp: new Date().toISOString() };
             socketRef.current?.emit('send-chat-message', payload);
             setMessages((prev) => [...prev, payload]);
           }} currentUser={user} onClose={() => setIsChatOpen(false)} />}
           {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
-          {isAIBotOpen && (
-            <AIZoomBot
-              onClose={() => setIsAIBotOpen(false)}
-              roomId={roomId}
-              socket={socketRef.current}
-              currentUser={user}
-              participants={participants}
-              imageUrl={imageUrl}
-              setImageUrl={setImageUrl}
-              audioUrl={audioUrl}
-              setAudioUrl={setAudioUrl}
-              output={output}
-              setOutput={setOutput}
-              isProcessing={isProcessing}
-              setIsProcessing={setIsProcessing}
-              currentUploader={currentUploader}
-              isBotLocked={isBotLocked}
-              setIsBotLocked={setIsBotLocked}
-              uploaderUsername={uploaderUsername}
-              isPlaying={isPlaying}
-              handlePlayAudio={handlePlayAudio}
-              handlePauseAudio={handlePauseAudio}
-            />
-          )}
         </div>
       </div>
-      <div className="bg-gray-900 border-t border-gray-700 p-4 flex justify-center gap-4 z-20">
+      <div className="bg-gray-900 border-t border-gray-700 p-4 flex justify-center gap-4 z-20 relative">
         <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</button>
         <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</button>
         <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>
-        <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
-        <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); setIsAIBotOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
-        <button onClick={() => { setIsAIBotOpen(o => !o); setIsChatOpen(false); setIsParticipantsOpen(false); }} className="p-2 rounded-full text-white bg-purple-600 hover:bg-purple-500">AI 🤖</button>
+        <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
+        <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
+        <div className="relative">
+          <button onClick={() => setShowAiMiniCard(v => !v)} className="p-2 rounded text-white bg-purple-600 hover:bg-purple-500">AI Tools</button>
+          {showAiMiniCard && (
+            <div className="absolute bottom-12 right-0 w-80 bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl">
+              {isBotLocked && currentUploader !== socketRef.current?.id && (
+                <div className="mb-2 text-xs p-2 bg-yellow-700 rounded">{uploaderUsername || 'Another user'} is processing...</div>
+              )}
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm mb-1">Upload Image</label>
+                  <input type="file" accept="image/*" onChange={(e)=>{ if(!(isBotLocked && currentUploader !== socketRef.current?.id)){ const f=e.target.files?.[0]; if(f) setSelectedImage(f);} }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Upload Audio</label>
+                  <input type="file" accept="audio/*" onChange={(e)=>{ if(!(isBotLocked && currentUploader !== socketRef.current?.id)){ const f=e.target.files?.[0]; if(f) setSelectedAudio(f);} }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
+                </div>
+                <button onClick={async ()=>{ const hasImg=!!(selectedImage||imageUrl); const hasAud=!!(selectedAudio||audioUrl); if(!hasImg||!hasAud){ toast.error('Please upload both image and audio to process.'); return;} if(isBotLocked && currentUploader !== socketRef.current?.id){ toast.error('Another user is currently processing. Please wait.'); return;} try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); let effImg=imageUrl; let effAud=audioUrl; if(selectedImage && !effImg){ const fd=new FormData(); fd.append('file', selectedImage); const r=await axios.post(`${SERVER_URL}/upload/image`, fd, { headers:{ 'Content-Type':'multipart/form-data', Authorization:`Bearer ${user.token}` }}); effImg=r.data?.url; setImageUrl(effImg); socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId }); }
+                  if(selectedAudio && !effAud){ const fd2=new FormData(); fd2.append('file', selectedAudio); const r2=await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers:{ 'Content-Type':'multipart/form-data', Authorization:`Bearer ${user.token}` }}); effAud=r2.data?.url; setAudioUrl(effAud); socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId }); }
+                  setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3=new FormData(); if(effImg){ const ir=await fetch(effImg); const ib=await ir.blob(); fd3.append('image', new File([ib], 'image.jpg', { type: ib.type||'image/jpeg' })); } if(effAud){ const ar=await fetch(effAud); const ab=await ar.blob(); fd3.append('audio', new File([ab], 'audio.mp3', { type: ab.type||'audio/mpeg' })); } const AI_MODEL_API_URL='https://genaizoom-1.onrender.com/predict'; const resp=await axios.post(AI_MODEL_API_URL, fd3, { headers:{ 'Content-Type':'multipart/form-data' }}); const modelOutput=resp.data?.result||resp.data; let disp=''; if(typeof modelOutput==='object'){ disp = modelOutput.answer||modelOutput.response||modelOutput.text||modelOutput.result||(modelOutput.data&&(modelOutput.data.answer||modelOutput.data.response))||''; if(!disp){ const firstStr=Object.values(modelOutput).find(v=>typeof v==='string'); disp=firstStr||JSON.stringify(modelOutput, null, 2); } } else { disp=String(modelOutput);} setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); } catch(e){ console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
+              </div>
+            </div>
+          )}
+        </div>
         <button onClick={handleExitRoom} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
       </div>
     </div>

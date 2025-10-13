@@ -43,6 +43,9 @@ const Meeting = () => {
   const [toolbarPosition, setToolbarPosition] = useState({ x: 20, y: 20 });
   const [currentTool, setCurrentTool] = useState('pen');
   const [currentBrushSize, setCurrentBrushSize] = useState(5);
+  const [gridPage, setGridPage] = useState(0);
+  const touchStartXRef = useRef(0);
+  const touchDeltaRef = useRef(0);
 
   // State for AI Zoom Bot (shared across users)
   const [imageUrl, setImageUrl] = useState('');
@@ -86,17 +89,11 @@ const Meeting = () => {
     return participants.find(p => p.userId === pinnedParticipantId) || defaultMainParticipant;
   }, [pinnedParticipantId, defaultMainParticipant, participants]);
 
-  const filmstripParticipants = useMemo(() => {
-    if (!mainViewParticipant) return [];
-    return participants.filter(p => p.userId !== mainViewParticipant.userId);
-  }, [participants, mainViewParticipant]);
-
   const isSomeoneScreenSharing = useMemo(() => 
     participants.some(p => p.isScreenSharing), 
     [participants]
   );
-
-  const totalFilmstripPages = Math.ceil(filmstripParticipants.length / filmstripSize);
+  const totalGridPages = useMemo(() => Math.max(1, Math.ceil(participants.length / 4)), [participants.length]);
 
   const getUsernameById = useCallback((userId) => {
     const participant = participants.find(p => p.userId === userId);
@@ -1037,17 +1034,66 @@ const Meeting = () => {
               />
             </div>
           )}
-          <div className="flex-1 min-h-0 relative" ref={mainVideoContainerRef}>
-            {mainViewParticipant && (
-              <div className="w-full h-full cursor-pointer" onClick={() => setPinnedParticipantId(null)} title="Click to unpin and return to default view">
-                <VideoPlayer
-                  key={mainViewParticipant.userId}
-                  participant={mainViewParticipant}
-                  isPinned={!!pinnedParticipantId}
-                  isLocal={mainViewParticipant.isLocal}
-                />
-              </div>
-            )}
+          <div className="flex-1 min-h-0 relative" ref={mainVideoContainerRef}
+               onTouchStart={(e)=>{ touchStartXRef.current = e.touches[0].clientX; touchDeltaRef.current = 0; }}
+               onTouchMove={(e)=>{ touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
+               onTouchEnd={()=>{ if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev)=>{
+                   const dir = touchDeltaRef.current < 0 ? 1 : -1; const np = Math.max(0, Math.min(prev+dir, totalGridPages-1)); return np; }); } }}>
+            {/* Responsive grid: 2x2 pages; special cases for 2 and 3 participants */}
+            {(() => {
+              const count = participants.length;
+              const pageStart = gridPage * 4;
+              const pageItems = participants.slice(pageStart, pageStart + 4);
+              if (count === 1) {
+                const p = participants[0];
+                return (
+                  <div className="w-full h-full">
+                    <VideoPlayer participant={p} isLocal={p.isLocal} />
+                  </div>
+                );
+              }
+              if (count === 2) {
+                return (
+                  <div className="grid grid-cols-2 gap-4 w-full h-full">
+                    {participants.map((p)=> (
+                      <div key={p.userId} className="w-full"><VideoPlayer participant={p} isLocal={p.isLocal} /></div>
+                    ))}
+                  </div>
+                );
+              }
+              if (count === 3) {
+                const [a,b,c] = participants;
+                return (
+                  <div className="grid grid-cols-2 gap-4 w-full h-full">
+                    <div className="w-full"><VideoPlayer participant={a} isLocal={a.isLocal} /></div>
+                    <div className="w-full"><VideoPlayer participant={b} isLocal={b.isLocal} /></div>
+                    <div className="col-span-2 flex justify-center">
+                      <div className="w-1/2 min-w-[240px]"><VideoPlayer participant={c} isLocal={c.isLocal} /></div>
+                    </div>
+                  </div>
+                );
+              }
+              // 4 or more -> paginated 2x2
+              return (
+                <div className="w-full h-full">
+                  <div className="grid grid-cols-2 gap-4">
+                    {pageItems.map((p)=> (
+                      <div key={p.userId} className="w-full"><VideoPlayer participant={p} isLocal={p.isLocal} /></div>
+                    ))}
+                  </div>
+                  {totalGridPages > 1 && (
+                    <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-2">
+                      <button onClick={()=> setGridPage(p=> Math.max(0, p-1))} className="px-2 py-1 bg-gray-700 rounded">‹</button>
+                      {Array.from({ length: totalGridPages }, (_, i) => (
+                        <button key={i} onClick={()=> setGridPage(i)} className={`w-2.5 h-2.5 rounded-full ${gridPage===i?'bg-white':'bg-gray-500'}`} />
+                      ))}
+                      <button onClick={()=> setGridPage(p=> Math.min(totalGridPages-1, p+1))} className="px-2 py-1 bg-gray-700 rounded">›</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <canvas
               ref={annotationCanvasRef}
               className="absolute top-0 left-0"
@@ -1058,20 +1104,6 @@ const Meeting = () => {
               onMouseLeave={handleMouseUp}
             />
           </div>
-          {filmstripParticipants.length > 0 && (
-            <div className="w-full relative">
-              <div className="grid gap-4"
-                   style={{
-                     gridTemplateColumns: `repeat(${Math.min(6, Math.max(1, Math.ceil(Math.sqrt(filmstripParticipants.length + 1))))}, minmax(0, 1fr))`
-                   }}>
-                {filmstripParticipants.map((p) => (
-                  <div key={p.userId} className="w-full cursor-pointer" onClick={() => handleParticipantClick(p.userId)} title={`Click to focus on ${p.username}`}>
-                    <VideoPlayer participant={p} isLocal={p.isLocal} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
         <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
           {isChatOpen && <Chat messages={messages} onSendMessage={(message) => {

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import './VideoPlayer.css'
-const VideoPlayer = ({ participant, isPinned, isLocal }) => {
+const VideoPlayer = ({ participant, isPinned, isLocal, className = '' }) => {
   const videoRef = useRef(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioContextRef = useRef(null);
@@ -58,7 +58,7 @@ const VideoPlayer = ({ participant, isPinned, isLocal }) => {
   const borderColor = isSpeaking ? 'border-green-400 shadow-lg shadow-green-400/50' : 'border-gray-700';
 
   return (
-    <div className={`video-container relative w-full h-full bg-gray-800 rounded-lg overflow-hidden border-2 ${borderColor} transition-all duration-300`}>
+    <div className={`video-container ${className} relative w-full bg-gray-800 rounded-lg overflow-hidden border-2 ${borderColor} transition-all duration-300`}>
        {/* ... (rest of the VideoPlayer JSX is the same as the last version) ... */}
       <video
          ref={videoRef}

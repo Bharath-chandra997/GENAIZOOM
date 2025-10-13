@@ -1047,16 +1047,18 @@ const Meeting = () => {
               if (count === 1) {
                 const p = participants[0];
                 return (
-                  <div className="w-full h-full">
-                    <VideoPlayer participant={p} isLocal={p.isLocal} />
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-full max-w-5xl px-1">
+                      <VideoPlayer participant={p} isLocal={p.isLocal} className="mx-auto" />
+                    </div>
                   </div>
                 );
               }
               if (count === 2) {
                 return (
-                  <div className="grid grid-cols-2 gap-1 w-full">
+                  <div className="grid grid-cols-2 gap-1 w-full mx-auto max-w-7xl">
                     {participants.map((p)=> (
-                      <div key={p.userId} className="w-full"><VideoPlayer participant={p} isLocal={p.isLocal} /></div>
+                      <div key={p.userId} className="w-full"><VideoPlayer participant={p} isLocal={p.isLocal} className="mx-auto" /></div>
                     ))}
                   </div>
                 );
@@ -1064,11 +1066,11 @@ const Meeting = () => {
               if (count === 3) {
                 const [a,b,c] = participants;
                 return (
-                  <div className="grid grid-cols-2 gap-1 w-full">
-                    <div className="w-full"><VideoPlayer participant={a} isLocal={a.isLocal} /></div>
-                    <div className="w-full"><VideoPlayer participant={b} isLocal={b.isLocal} /></div>
+                  <div className="grid grid-cols-2 gap-1 w-full mx-auto max-w-7xl">
+                    <div className="w-full"><VideoPlayer participant={a} isLocal={a.isLocal} className="mx-auto" /></div>
+                    <div className="w-full"><VideoPlayer participant={b} isLocal={b.isLocal} className="mx-auto" /></div>
                     <div className="col-span-2 flex justify-center">
-                      <div className="w-1/2 min-w-[200px]"><VideoPlayer participant={c} isLocal={c.isLocal} /></div>
+                      <div className="w-1/2 min-w-[240px] max-w-xl"><VideoPlayer participant={c} isLocal={c.isLocal} className="mx-auto" /></div>
                     </div>
                   </div>
                 );
@@ -1076,9 +1078,9 @@ const Meeting = () => {
               // 4 or more -> paginated 2x2
               return (
                 <div className="w-full h-full">
-                  <div className="grid grid-cols-2 gap-1">
+                  <div className="grid grid-cols-2 gap-1 mx-auto max-w-7xl">
                     {pageItems.map((p)=> (
-                      <div key={p.userId} className="w-full"><VideoPlayer participant={p} isLocal={p.isLocal} /></div>
+                      <div key={p.userId} className="w-full"><VideoPlayer participant={p} isLocal={p.isLocal} className="mx-auto" /></div>
                     ))}
                   </div>
                   {totalGridPages > 1 && (

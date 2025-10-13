@@ -35,7 +35,7 @@
   box-shadow: var(--shadow-md);
   transition: all var(--transition-base);
   aspect-ratio: 16 / 9;
-  max-height: 38vh; /* reduce card height to avoid overflow */
+  max-height: 46vh; /* slightly taller for clearer view */
 }
 
 .video-container.speaking {

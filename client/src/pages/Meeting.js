@@ -1007,14 +1007,14 @@ const Meeting = () => {
   if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
   return (
-    <div className="min-h-screen bg-black flex flex-col text-white">
+    <div className="h-screen bg-black flex flex-col overflow-hidden text-white">
       <div className="bg-gray-900 px-2 py-1 flex items-center justify-between z-20">
         <h1 className="text-lg font-semibold">Meeting: {roomId}</h1>
         <span>Participants: {participants.length}</span>
       </div>
-      <div className="flex-1 flex relative">
+      <div className="flex-1 flex relative overflow-hidden">
         <div 
-          className="flex-1 flex flex-col relative p-1 gap-1"
+          className="flex-1 flex flex-col relative p-1 gap-1 overflow-hidden"
           onWheel={(e) => {
             if (e.deltaY !== 0 && totalGridPages > 1) {
               e.preventDefault();
@@ -1034,7 +1034,7 @@ const Meeting = () => {
               />
             </div>
           )}
-          <div className="flex-1 min-h-0 relative" ref={mainVideoContainerRef}
+          <div className="flex-1 min-h-0 relative overflow-hidden" ref={mainVideoContainerRef}
                onTouchStart={(e)=>{ touchStartXRef.current = e.touches[0].clientX; touchDeltaRef.current = 0; }}
                onTouchMove={(e)=>{ touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
                onTouchEnd={()=>{ if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev)=>{

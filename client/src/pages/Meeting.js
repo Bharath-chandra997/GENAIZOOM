@@ -1007,14 +1007,14 @@ const Meeting = () => {
   if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
   return (
-    <div className="h-screen bg-black flex flex-col overflow-hidden text-white">
-      <div className="bg-gray-900 px-3 py-2 flex items-center justify-between z-20">
+    <div className="min-h-screen bg-black flex flex-col text-white">
+      <div className="bg-gray-900 px-2 py-1 flex items-center justify-between z-20">
         <h1 className="text-lg font-semibold">Meeting: {roomId}</h1>
         <span>Participants: {participants.length}</span>
       </div>
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex relative">
         <div 
-          className="flex-1 flex flex-col relative p-2 gap-2"
+          className="flex-1 flex flex-col relative p-1 gap-1"
           onWheel={(e) => {
             if (e.deltaY !== 0 && totalGridPages > 1) {
               e.preventDefault();
@@ -1054,7 +1054,7 @@ const Meeting = () => {
               }
               if (count === 2) {
                 return (
-                  <div className="grid grid-cols-2 gap-2 w-full h-full">
+                  <div className="grid grid-cols-2 gap-1 w-full">
                     {participants.map((p)=> (
                       <div key={p.userId} className="w-full"><VideoPlayer participant={p} isLocal={p.isLocal} /></div>
                     ))}
@@ -1064,11 +1064,11 @@ const Meeting = () => {
               if (count === 3) {
                 const [a,b,c] = participants;
                 return (
-                  <div className="grid grid-cols-2 gap-2 w-full h-full">
+                  <div className="grid grid-cols-2 gap-1 w-full">
                     <div className="w-full"><VideoPlayer participant={a} isLocal={a.isLocal} /></div>
                     <div className="w-full"><VideoPlayer participant={b} isLocal={b.isLocal} /></div>
                     <div className="col-span-2 flex justify-center">
-                      <div className="w-1/2 min-w-[240px]"><VideoPlayer participant={c} isLocal={c.isLocal} /></div>
+                      <div className="w-1/2 min-w-[200px]"><VideoPlayer participant={c} isLocal={c.isLocal} /></div>
                     </div>
                   </div>
                 );
@@ -1076,13 +1076,13 @@ const Meeting = () => {
               // 4 or more -> paginated 2x2
               return (
                 <div className="w-full h-full">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-1">
                     {pageItems.map((p)=> (
                       <div key={p.userId} className="w-full"><VideoPlayer participant={p} isLocal={p.isLocal} /></div>
                     ))}
                   </div>
                   {totalGridPages > 1 && (
-                    <div className="absolute bottom-1 left-0 right-0 flex items-center justify-center gap-2">
+                    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2">
                       <button onClick={()=> setGridPage(p=> Math.max(0, p-1))} className="px-2 py-1 bg-gray-700 rounded">‹</button>
                       {Array.from({ length: totalGridPages }, (_, i) => (
                         <button key={i} onClick={()=> setGridPage(i)} className={`w-2.5 h-2.5 rounded-full ${gridPage===i?'bg-white':'bg-gray-500'}`} />
@@ -1114,7 +1114,7 @@ const Meeting = () => {
           {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
         </div>
       </div>
-      <div className="bg-gray-900 border-t border-gray-700 px-3 py-2 flex justify-center gap-2 z-20 relative">
+      <div className="bg-gray-900 border-t border-gray-700 px-2 py-1 flex justify-center gap-1 z-20 relative">
         <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</button>
         <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</button>
         <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>

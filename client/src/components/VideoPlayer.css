@@ -27,7 +27,7 @@
 .video-container {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: auto;
   background: var(--dark-gray);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -77,9 +77,6 @@
   :root {
     --spacing-sm: 4px;
     --spacing-md: 8px;
-  }
-  .video-container {
-    aspect-ratio: 4 / 3; /* Better use of space on small screens */
   }
 }
 

@@ -89,7 +89,17 @@ const Meeting = () => {
   // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
-  // AI Participant
+  // ✅ FIXED: AI Participant with proper socketId and stable functions
+  const handlePlayAudio = useCallback(() => {
+    setIsPlaying(true);
+    socketRef.current?.emit('ai-audio-play', { roomId });
+  }, [roomId]);
+
+  const handlePauseAudio = useCallback(() => {
+    setIsPlaying(false);
+    socketRef.current?.emit('ai-audio-pause', { roomId });
+  }, [roomId]);
+
   const aiParticipant = useMemo(() => ({
     userId: 'ai-bot',
     username: 'AI Zoom Bot',
@@ -107,12 +117,33 @@ const Meeting = () => {
     isBotLocked,
     currentUploader,
     uploaderUsername,
-    handlePlay: () => handlePlayAudio(),
-    handlePause: () => handlePauseAudio(),
-  }), [imageUrl, audioUrl, output, isProcessing, isPlaying, isBotLocked, currentUploader, uploaderUsername]);
+    // ✅ Pass stable functions
+    handlePlay: handlePlayAudio,
+    handlePause: handlePauseAudio,
+    // ✅ Add socket ID for lock status checking
+    socketId: socketRef.current?.id,
+  }), [
+    imageUrl, 
+    audioUrl, 
+    output, 
+    isProcessing, 
+    isPlaying, 
+    isBotLocked, 
+    currentUploader, 
+    uploaderUsername,
+    handlePlayAudio,
+    handlePauseAudio,
+    socketRef.current?.id
+  ]);
 
-  // Display participants including AI bot
-  const displayParticipants = useMemo(() => [aiParticipant, ...participants], [aiParticipant, participants]);
+  // ✅ FIXED: Display participants with socketId
+  const displayParticipants = useMemo(() => {
+    const participantsWithSocketId = participants.map(p => ({
+      ...p,
+      socketId: p.userId // ✅ Ensure regular participants have socketId
+    }));
+    return [aiParticipant, ...participantsWithSocketId];
+  }, [aiParticipant, participants]);
 
   // Derived State
   const defaultMainParticipant = useMemo(() => {
@@ -501,17 +532,6 @@ const Meeting = () => {
     setIsPlaying(false);
   }, []);
 
-  // Audio control handlers
-  const handlePlayAudio = useCallback(() => {
-    setIsPlaying(true);
-    socketRef.current?.emit('ai-audio-play', { roomId });
-  }, [roomId]);
-
-  const handlePauseAudio = useCallback(() => {
-    setIsPlaying(false);
-    socketRef.current?.emit('ai-audio-pause', { roomId });
-  }, [roomId]);
-
   // Setup Socket Listeners
   const setupSocketListeners = useCallback((socket) => {
     const handleConnect = () => {
@@ -522,6 +542,7 @@ const Meeting = () => {
         isReconnect: isReconnecting 
       }, (otherUsers, sessionData) => {
         const isHost = otherUsers.length === 0;
+        // ✅ Add socketId to participants
         const remoteParticipants = otherUsers.map(u => ({
           userId: u.userId,
           username: u.username,
@@ -530,7 +551,8 @@ const Meeting = () => {
           isHost: u.isHost || false,
           videoEnabled: true,
           audioEnabled: true,
-          isScreenSharing: false
+          isScreenSharing: false,
+          socketId: u.userId // ✅ Add socketId
         }));
         const localParticipant = {
           userId: socket.id,
@@ -540,7 +562,8 @@ const Meeting = () => {
           isHost,
           videoEnabled: true,
           audioEnabled: true,
-          isScreenSharing: false
+          isScreenSharing: false,
+          socketId: socket.id // ✅ Add socketId
         };
         setParticipants([localParticipant, ...remoteParticipants]);
         
@@ -571,7 +594,17 @@ const Meeting = () => {
       
       setParticipants((prev) => {
         if (prev.some(p => p.userId === userId)) return prev;
-        return [...prev, { userId, username, stream: null, isLocal: false, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
+        return [...prev, { 
+          userId, 
+          username, 
+          stream: null, 
+          isLocal: false, 
+          isHost, 
+          videoEnabled: true, 
+          audioEnabled: true, 
+          isScreenSharing: false,
+          socketId: userId // ✅ Add socketId
+        }];
       });
 
       try {
@@ -605,7 +638,17 @@ const Meeting = () => {
     const handleOffer = async ({ from, offer, username }) => {
       setParticipants((prev) => {
         if (prev.some(p => p.userId === from)) return prev;
-        return [...prev, { userId: from, username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false }];
+        return [...prev, { 
+          userId: from, 
+          username, 
+          stream: null, 
+          isLocal: false, 
+          isHost: false, 
+          videoEnabled: true, 
+          audioEnabled: true, 
+          isScreenSharing: false,
+          socketId: from // ✅ Add socketId
+        }];
       });
 
       try {
@@ -807,7 +850,8 @@ const Meeting = () => {
     handleAiBotUnlocked,
     handleAiAudioPlay,
     handleAiAudioPause,
-    restoreSessionData
+    restoreSessionData,
+    isReconnecting
   ]);
 
   useEffect(() => {
@@ -1184,6 +1228,17 @@ const Meeting = () => {
 
   if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
+  // ✅ FIXED: Pass socketId to ALL VideoPlayer components
+  const renderVideoPlayer = (participant, isLocal, className = "mx-auto") => (
+    <VideoPlayer 
+      participant={participant} 
+      isLocal={isLocal} 
+      isMirroringBrowser={isMirroringBrowser}
+      socketId={socketRef.current?.id}  // ✅ ADD socketId prop
+      className={className}
+    />
+  );
+
   return (
     <div className="h-screen bg-black flex flex-col overflow-hidden text-white">
       <div className="bg-gray-900 px-2 py-1 flex items-center justify-between z-20">
@@ -1227,7 +1282,7 @@ const Meeting = () => {
                 return (
                   <div className="w-full h-full flex items-center justify-center">
                     <div className="w-full max-w-md">
-                      <VideoPlayer participant={p} isLocal={p.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" />
+                      {renderVideoPlayer(p, p.isLocal)}
                     </div>
                   </div>
                 );
@@ -1237,7 +1292,7 @@ const Meeting = () => {
                   <div className="flex flex-col items-center justify-center h-full gap-4 max-w-4xl mx-auto">
                     {displayParticipants.map((p)=> (
                       <div key={p.userId} className="w-3/4 max-w-xl h-auto">
-                        <VideoPlayer participant={p} isLocal={p.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" />
+                        {renderVideoPlayer(p, p.isLocal)}
                       </div>
                     ))}
                   </div>
@@ -1247,10 +1302,16 @@ const Meeting = () => {
                 const [a,b,c] = displayParticipants;
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-2">
-                    <div className="w-full h-full flex items-center justify-center"><VideoPlayer participant={a} isLocal={a.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" /></div>
-                    <div className="w-full h-full flex items-center justify-center"><VideoPlayer participant={b} isLocal={b.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" /></div>
+                    <div className="w-full h-full flex items-center justify-center">
+                      {renderVideoPlayer(a, a.isLocal)}
+                    </div>
+                    <div className="w-full h-full flex items-center justify-center">
+                      {renderVideoPlayer(b, b.isLocal)}
+                    </div>
                     <div className="md:col-span-2 h-full flex justify-center items-center">
-                      <div className="w-full md:w-1/2 min-w-[200px] max-w-sm"><VideoPlayer participant={c} isLocal={c.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" /></div>
+                      <div className="w-full md:w-1/2 min-w-[200px] max-w-sm">
+                        {renderVideoPlayer(c, c.isLocal)}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1260,7 +1321,9 @@ const Meeting = () => {
                 <div className="w-full h-full">
                   <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-2">
                     {pageItems.map((p)=> (
-                      <div key={p.userId} className="w-full h-full flex items-center justify-center"><VideoPlayer participant={p} isLocal={p.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" /></div>
+                      <div key={p.userId} className="w-full h-full flex items-center justify-center">
+                        {renderVideoPlayer(p, p.isLocal)}
+                      </div>
                     ))}
                   </div>
                   {totalGridPages > 1 && (

@@ -1249,16 +1249,13 @@ const Meeting = () => {
 
               if (count === 2) {
                 return (
-                  <div className="flex flex-col md:flex-row h-full w-full max-w-6xl mx-auto gap-4 p-4">
-                    {displayParticipants.map((p, index) => (
-                      <div
-                        key={p.userId}
-                        className="flex-1 min-w-0"
-                        style={{ aspectRatio: "16/9" }}
-                      >
-                        {renderVideoPlayer(p, p.isLocal, "w-full h-full object-cover")}
-                      </div>
-                    ))}
+                  <div className="flex h-full w-full">
+                    <div className="flex-1 h-full flex items-center justify-center p-1">
+                      {renderVideoPlayer(displayParticipants[0], displayParticipants[0].isLocal, "w-full h-full object-cover")}
+                    </div>
+                    <div className="flex-1 h-full flex items-center justify-center p-1">
+                      {renderVideoPlayer(displayParticipants[1], displayParticipants[1].isLocal, "w-full h-full object-cover")}
+                    </div>
                   </div>
                 );
               }
@@ -1266,7 +1263,7 @@ const Meeting = () => {
               if (count === 3) {
                 const [a, b, c] = displayParticipants;
                 return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-2 p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-1 p-1">
                     <div className="w-full h-full flex items-center justify-center">
                       {renderVideoPlayer(a, a.isLocal, "w-full h-auto")}
                     </div>
@@ -1284,8 +1281,8 @@ const Meeting = () => {
 
               // 4 or more -> paginated 2x2
               return (
-                <div className="w-full h-full p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-4">
+                <div className="w-full h-full p-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-1">
                     {pageItems.map((p) => (
                       <div
                         key={p.userId}

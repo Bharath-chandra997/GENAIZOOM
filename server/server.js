@@ -127,83 +127,88 @@ passport.use(
   )
 );
 
-// Twilio ICE Server Caching
-const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+// Optimized ICE Server Caching with Fast Fallback
+const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN 
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN) 
+  : null;
+
 let cachedIceServers = null;
 let iceServersExpiry = null;
+let isFetchingIceServers = false;
+
+// Fast fallback ICE servers (optimized for speed)
+const fastFallbackIceServers = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  {
+    urls: 'turn:openrelay.metered.ca:80',
+    username: 'openrelayproject',
+    credential: 'openrelayprojectsecret',
+  },
+  {
+    urls: 'turns:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayprojectsecret',
+  },
+];
+
 const fetchIceServers = async () => {
+  // Prevent concurrent fetches
+  if (isFetchingIceServers) {
+    return cachedIceServers || fastFallbackIceServers;
+  }
+
   try {
-    let iceServers = [];
-    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
-      const token = await twilioClient.tokens.create();
-      iceServers = [...token.iceServers];
-      info('Fetched Twilio ICE servers');
-    } else {
-      info('No Twilio credentials, using fallback servers');
+    isFetchingIceServers = true;
+    let iceServers = [...fastFallbackIceServers];
+
+    // Try to get Twilio servers with timeout
+    if (twilioClient) {
+      try {
+        const tokenPromise = twilioClient.tokens.create();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Twilio timeout')), 3000)
+        );
+        
+        const token = await Promise.race([tokenPromise, timeoutPromise]);
+        iceServers = [...token.iceServers, ...fastFallbackIceServers];
+        info('Fetched Twilio ICE servers');
+      } catch (error) {
+        info('Twilio ICE servers timeout/error, using fallback');
+      }
     }
-    iceServers = [
-      ...iceServers,
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayprojectsecret',
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayprojectsecret',
-      },
-      {
-        urls: 'turns:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayprojectsecret',
-      },
-    ];
+
     cachedIceServers = iceServers;
-    iceServersExpiry = Date.now() + 24 * 60 * 60 * 1000;
-    info('Cached ICE servers:', iceServers.map(s => s.urls));
+    iceServersExpiry = Date.now() + 12 * 60 * 60 * 1000; // 12 hours cache
+    info('Cached optimized ICE servers:', iceServers.map(s => s.urls));
     return iceServers;
   } catch (error) {
-    logError('Twilio ICE server error', error);
-    return [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayprojectsecret',
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayprojectsecret',
-      },
-      {
-        urls: 'turns:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayprojectsecret',
-      },
-    ];
+    logError('ICE server fetch error', error);
+    return fastFallbackIceServers;
+  } finally {
+    isFetchingIceServers = false;
   }
 };
 
-// ICE Servers Endpoint
+// Optimized ICE Servers Endpoint with immediate response
 app.get('/ice-servers', async (req, res) => {
   try {
+    // Always serve cached servers immediately for faster response
     if (cachedIceServers && iceServersExpiry && Date.now() < iceServersExpiry) {
-      info('Serving cached ICE servers');
       res.json(cachedIceServers);
-    } else {
-      const iceServers = await fetchIceServers();
-      res.json(iceServers);
+      return;
+    }
+
+    // If no cache, serve fallback immediately and refresh in background
+    res.json(fastFallbackIceServers);
+    
+    // Refresh cache in background if needed
+    if (!isFetchingIceServers) {
+      fetchIceServers().catch(err => logError('Background ICE server refresh failed', err));
     }
   } catch (error) {
     logError('ICE servers endpoint error', error);
-    res.status(500).json({ error: 'Failed to fetch ICE servers' });
+    res.json(fastFallbackIceServers); // Always return fallback
   }
 });
 

@@ -75,6 +75,11 @@ const Meeting = () => {
   const remoteDrawingStates = useRef(new Map());
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
   const isInitialized = useRef(false);
+  
+  // Connection optimization refs
+  const connectionTimeouts = useRef(new Map());
+  const iceServersCache = useRef(null);
+  const lastIceFetch = useRef(0);
 
   // Derived State
   const defaultMainParticipant = useMemo(() => {
@@ -205,23 +210,41 @@ const Meeting = () => {
     }
   }, []);
 
-  // Fetch ICE Servers
+  // Optimized ICE Servers with caching and timeout
   const getIceServers = useCallback(async () => {
+    const now = Date.now();
+    const cacheExpiry = 5 * 60 * 1000; // 5 minutes cache
+    
+    // Return cached servers if still valid
+    if (iceServersCache.current && (now - lastIceFetch.current) < cacheExpiry) {
+      return iceServersCache.current;
+    }
+    
     try {
-      const { data } = await axios.get(`${SERVER_URL}/ice-servers`);
-      console.log('ICE Servers:', data);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+      
+      const { data } = await axios.get(`${SERVER_URL}/ice-servers`, {
+        signal: controller.signal,
+        timeout: 2000
+      });
+      
+      clearTimeout(timeoutId);
+      console.log('ICE Servers fetched:', data.length, 'servers');
+      
+      // Cache the servers
+      iceServersCache.current = data;
+      lastIceFetch.current = now;
+      
       return data;
     } catch (error) {
-      console.error('Error fetching ICE servers:', error);
-      return [
+      console.warn('ICE servers fetch failed, using fallback:', error.message);
+      // Fast fallback servers
+      const fallbackServers = [
         { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
         {
           urls: 'turn:openrelay.metered.ca:80',
-          username: 'openrelayproject',
-          credential: 'openrelayprojectsecret',
-        },
-        {
-          urls: 'turn:openrelay.metered.ca:443',
           username: 'openrelayproject',
           credential: 'openrelayprojectsecret',
         },
@@ -231,35 +254,68 @@ const Meeting = () => {
           credential: 'openrelayprojectsecret',
         },
       ];
+      
+      // Cache fallback servers too
+      iceServersCache.current = fallbackServers;
+      lastIceFetch.current = now;
+      
+      return fallbackServers;
     }
   }, []);
 
-  // Create Peer Connection
+  // Optimized Peer Connection with better configuration
   const createPeerConnection = useCallback(
     async (remoteSocketId) => {
       const iceServers = await getIceServers();
-      const pc = new RTCPeerConnection({ iceServers });
+      const pc = new RTCPeerConnection({ 
+        iceServers,
+        iceCandidatePoolSize: 10, // Pre-gather ICE candidates
+        bundlePolicy: 'max-bundle', // Reduce connection overhead
+        rtcpMuxPolicy: 'require' // Reduce port usage
+      });
+      
+      // Set connection timeout with cleanup
+      const connectionTimeout = setTimeout(() => {
+        if (pc.connectionState === 'connecting') {
+          console.warn('Connection timeout for user:', remoteSocketId);
+          pc.close();
+          peerConnections.current.delete(remoteSocketId);
+          connectionTimeouts.current.delete(remoteSocketId);
+        }
+      }, 8000); // 8 second timeout for faster failure detection
+      
+      connectionTimeouts.current.set(remoteSocketId, connectionTimeout);
       
       pc.ontrack = (event) => {
+        clearTimeout(connectionTimeout);
+        connectionTimeouts.current.delete(remoteSocketId);
         setParticipants((prev) =>
           prev.map((p) =>
             p.userId === remoteSocketId ? { ...p, stream: event.streams[0] } : p
           )
         );
       };
+      
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
         }
       };
+      
       pc.onconnectionstatechange = () => {
         console.log('Peer connection state:', pc.connectionState, 'for user:', remoteSocketId);
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        if (pc.connectionState === 'connected') {
+          clearTimeout(connectionTimeout);
+          connectionTimeouts.current.delete(remoteSocketId);
+        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          clearTimeout(connectionTimeout);
+          connectionTimeouts.current.delete(remoteSocketId);
           pc.close();
           peerConnections.current.delete(remoteSocketId);
           setParticipants((prev) => prev.filter((p) => p.userId !== remoteSocketId));
         }
       };
+      
       peerConnections.current.set(remoteSocketId, pc);
       return pc;
     },
@@ -684,13 +740,27 @@ const Meeting = () => {
       }
       try {
         setIsLoading(true);
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480, frameRate: 15 },
-          audio: true
-        });
+        
+        // Optimized media constraints for faster initialization
+        const mediaConstraints = {
+          video: {
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 15, max: 20 },
+            facingMode: 'user'
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 44100
+          }
+        };
+        
+        const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
-        console.log('Local stream initialized:', stream);
+        console.log('Optimized local stream initialized:', stream);
 
         // Check if we have a stored session
         const storedSession = loadSessionFromStorage();
@@ -705,8 +775,11 @@ const Meeting = () => {
           auth: { token: user.token },
           transports: ['websocket'],
           reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000
+          reconnectionAttempts: 3, // Reduced attempts
+          reconnectionDelay: 500, // Faster reconnection
+          reconnectionDelayMax: 2000,
+          timeout: 5000, // Connection timeout
+          forceNew: true // Force new connection for better reliability
         });
 
         const cleanupSocketListeners = setupSocketListeners(socketRef.current);
@@ -718,6 +791,11 @@ const Meeting = () => {
           }
           peerConnections.current.forEach(pc => pc.close());
           peerConnections.current.clear();
+          
+          // Cleanup connection timeouts
+          connectionTimeouts.current.forEach(timeout => clearTimeout(timeout));
+          connectionTimeouts.current.clear();
+          
           if (socketRef.current) {
             cleanupSocketListeners();
             socketRef.current.disconnect();
@@ -829,7 +907,13 @@ const Meeting = () => {
       socketRef.current?.emit('toggle-video', { enabled: false, roomId });
     } else {
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 15 } });
+        const newStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 15, max: 20 }
+          } 
+        });
         const newVideoTrack = newStream.getVideoTracks()[0];
         await replaceTrack(newVideoTrack, false);
         localCameraTrackRef.current = newVideoTrack;

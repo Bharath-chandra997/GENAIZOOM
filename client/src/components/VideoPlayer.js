@@ -14,28 +14,41 @@ const VideoPlayer = ({ participant, isPinned, isLocal, className = '' }) => {
       videoRef.current.srcObject = participant.stream;
     }
 
-    // Speaking detection logic
+    // Optimized speaking detection with reduced CPU usage
     if (participant?.stream && !isLocal && participant.audioEnabled) {
       try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const source = audioContext.createMediaStreamSource(participant.stream);
         const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 512;
+        
+        // Optimized settings for better performance
+        analyser.fftSize = 256; // Reduced from 512
+        analyser.smoothingTimeConstant = 0.8; // Smoother detection
+        analyser.minDecibels = -90;
+        analyser.maxDecibels = -10;
+        
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         source.connect(analyser);
         
         audioContextRef.current = audioContext;
         analyserRef.current = analyser;
 
-        const checkSpeaking = () => {
-          if (analyserRef.current) {
-            analyserRef.current.getByteFrequencyData(dataArray);
-            const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-            setIsSpeaking(average > 10); // Threshold for speaking
+        let lastCheck = 0;
+        const checkSpeaking = (timestamp) => {
+          // Throttle to 10fps instead of 60fps for better performance
+          if (timestamp - lastCheck > 100) {
+            if (analyserRef.current) {
+              analyserRef.current.getByteFrequencyData(dataArray);
+              // Only check lower frequencies for voice detection
+              const voiceFrequencies = dataArray.slice(0, Math.floor(dataArray.length * 0.3));
+              const average = voiceFrequencies.reduce((sum, value) => sum + value, 0) / voiceFrequencies.length;
+              setIsSpeaking(average > 15); // Slightly higher threshold
+            }
+            lastCheck = timestamp;
           }
           animationFrameRef.current = requestAnimationFrame(checkSpeaking);
         };
-        checkSpeaking();
+        checkSpeaking(0);
       } catch (error) {
         console.error("Failed to initialize audio analyser:", error);
       }

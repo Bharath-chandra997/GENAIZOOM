@@ -86,6 +86,34 @@ const Meeting = () => {
   const pendingOffers = useRef(new Map()); // Track pending offers
   const pendingAnswers = useRef(new Map()); // Track pending answers
 
+  // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
+  const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
+
+  // AI Participant
+  const aiParticipant = useMemo(() => ({
+    userId: 'ai-bot',
+    username: 'AI Zoom Bot',
+    isAI: true,
+    isLocal: false,
+    isHost: false,
+    videoEnabled: true,
+    audioEnabled: true,
+    isScreenSharing: false,
+    imageUrl,
+    audioUrl,
+    output,
+    isProcessing,
+    isPlaying,
+    isBotLocked,
+    currentUploader,
+    uploaderUsername,
+    handlePlay: () => handlePlayAudio(),
+    handlePause: () => handlePauseAudio(),
+  }), [imageUrl, audioUrl, output, isProcessing, isPlaying, isBotLocked, currentUploader, uploaderUsername]);
+
+  // Display participants including AI bot
+  const displayParticipants = useMemo(() => [aiParticipant, ...participants], [aiParticipant, participants]);
+
   // Derived State
   const defaultMainParticipant = useMemo(() => {
     const screenSharer = participants.find(p => p.isScreenSharing);
@@ -103,7 +131,7 @@ const Meeting = () => {
     participants.some(p => p.isScreenSharing), 
     [participants]
   );
-  const totalGridPages = useMemo(() => Math.max(1, Math.ceil(participants.length / 4)), [participants.length]);
+  const totalGridPages = useMemo(() => Math.max(1, Math.ceil(displayParticipants.length / 4)), [displayParticipants.length]);
 
   const getUsernameById = useCallback((userId) => {
     const participant = participants.find(p => p.userId === userId);
@@ -1191,36 +1219,38 @@ const Meeting = () => {
                    const dir = touchDeltaRef.current > 0 ? -1 : 1; const np = Math.max(0, Math.min(prev+dir, totalGridPages-1)); return np; }); } }}>
             {/* Responsive grid: 2x2 pages; special cases for 2 and 3 participants */}
             {(() => {
-              const count = participants.length;
+              const count = displayParticipants.length;
               const pageStart = gridPage * 4;
-              const pageItems = participants.slice(pageStart, pageStart + 4);
+              const pageItems = displayParticipants.slice(pageStart, pageStart + 4);
               if (count === 1) {
-                const p = participants[0];
+                const p = displayParticipants[0];
                 return (
                   <div className="w-full h-full flex items-center justify-center">
                     <div className="w-full max-w-md">
-                      <VideoPlayer participant={p} isLocal={p.isLocal} className="mx-auto" />
+                      <VideoPlayer participant={p} isLocal={p.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" />
                     </div>
                   </div>
                 );
               }
               if (count === 2) {
                 return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-2">
-                    {participants.map((p)=> (
-                      <div key={p.userId} className="w-full h-full flex items-center justify-center"><VideoPlayer participant={p} isLocal={p.isLocal} className="mx-auto" /></div>
+                  <div className="flex flex-col items-center justify-center h-full gap-4 max-w-4xl mx-auto">
+                    {displayParticipants.map((p)=> (
+                      <div key={p.userId} className="w-3/4 max-w-xl h-auto">
+                        <VideoPlayer participant={p} isLocal={p.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" />
+                      </div>
                     ))}
                   </div>
                 );
               }
               if (count === 3) {
-                const [a,b,c] = participants;
+                const [a,b,c] = displayParticipants;
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-2">
-                    <div className="w-full h-full flex items-center justify-center"><VideoPlayer participant={a} isLocal={a.isLocal} className="mx-auto" /></div>
-                    <div className="w-full h-full flex items-center justify-center"><VideoPlayer participant={b} isLocal={b.isLocal} className="mx-auto" /></div>
+                    <div className="w-full h-full flex items-center justify-center"><VideoPlayer participant={a} isLocal={a.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" /></div>
+                    <div className="w-full h-full flex items-center justify-center"><VideoPlayer participant={b} isLocal={b.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" /></div>
                     <div className="md:col-span-2 h-full flex justify-center items-center">
-                      <div className="w-full md:w-1/2 min-w-[200px] max-w-sm"><VideoPlayer participant={c} isLocal={c.isLocal} className="mx-auto" /></div>
+                      <div className="w-full md:w-1/2 min-w-[200px] max-w-sm"><VideoPlayer participant={c} isLocal={c.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" /></div>
                     </div>
                   </div>
                 );
@@ -1230,7 +1260,7 @@ const Meeting = () => {
                 <div className="w-full h-full">
                   <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-2">
                     {pageItems.map((p)=> (
-                      <div key={p.userId} className="w-full h-full flex items-center justify-center"><VideoPlayer participant={p} isLocal={p.isLocal} className="mx-auto" /></div>
+                      <div key={p.userId} className="w-full h-full flex items-center justify-center"><VideoPlayer participant={p} isLocal={p.isLocal} isMirroringBrowser={isMirroringBrowser} className="mx-auto" /></div>
                     ))}
                   </div>
                   {totalGridPages > 1 && (

@@ -58,7 +58,7 @@ const Meeting = () => {
   const [uploaderUsername, setUploaderUsername] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
-  
+
   // Session persistence state
   const [sessionRestored, setSessionRestored] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -75,16 +75,16 @@ const Meeting = () => {
   const remoteDrawingStates = useRef(new Map());
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
   const isInitialized = useRef(false);
-  
+
   // Connection optimization refs
   const connectionTimeouts = useRef(new Map());
   const iceServersCache = useRef(null);
   const lastIceFetch = useRef(0);
-  
+
   // Signaling state management
-  const signalingStates = useRef(new Map()); // Track signaling state per connection
-  const pendingOffers = useRef(new Map()); // Track pending offers
-  const pendingAnswers = useRef(new Map()); // Track pending answers
+  const signalingStates = useRef(new Map());
+  const pendingOffers = useRef(new Map());
+  const pendingAnswers = useRef(new Map());
 
   // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
@@ -117,19 +117,17 @@ const Meeting = () => {
     isBotLocked,
     currentUploader,
     uploaderUsername,
-    // ✅ Pass stable functions
     handlePlay: handlePlayAudio,
     handlePause: handlePauseAudio,
-    // ✅ Add socket ID for lock status checking
     socketId: socketRef.current?.id,
   }), [
-    imageUrl, 
-    audioUrl, 
-    output, 
-    isProcessing, 
-    isPlaying, 
-    isBotLocked, 
-    currentUploader, 
+    imageUrl,
+    audioUrl,
+    output,
+    isProcessing,
+    isPlaying,
+    isBotLocked,
+    currentUploader,
     uploaderUsername,
     handlePlayAudio,
     handlePauseAudio,
@@ -140,7 +138,7 @@ const Meeting = () => {
   const displayParticipants = useMemo(() => {
     const participantsWithSocketId = participants.map(p => ({
       ...p,
-      socketId: p.userId // ✅ Ensure regular participants have socketId
+      socketId: p.userId
     }));
     return [aiParticipant, ...participantsWithSocketId];
   }, [aiParticipant, participants]);
@@ -158,8 +156,8 @@ const Meeting = () => {
     return participants.find(p => p.userId === pinnedParticipantId) || defaultMainParticipant;
   }, [pinnedParticipantId, defaultMainParticipant, participants]);
 
-  const isSomeoneScreenSharing = useMemo(() => 
-    participants.some(p => p.isScreenSharing), 
+  const isSomeoneScreenSharing = useMemo(() =>
+    participants.some(p => p.isScreenSharing),
     [participants]
   );
   const totalGridPages = useMemo(() => Math.max(1, Math.ceil(displayParticipants.length / 4)), [displayParticipants.length]);
@@ -186,7 +184,6 @@ const Meeting = () => {
       const stored = localStorage.getItem(`meeting_session_${roomId}`);
       if (stored) {
         const data = JSON.parse(stored);
-        // Check if session is not too old (24 hours)
         if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
           return data;
         }
@@ -200,19 +197,18 @@ const Meeting = () => {
   const restoreSessionData = useCallback((sessionData) => {
     if (sessionData) {
       console.log('Restoring session data:', sessionData);
-      
-      // Restore uploaded files
+
       if (sessionData.uploadedFiles && sessionData.uploadedFiles.length > 0) {
         const imageFile = sessionData.uploadedFiles.find(f => f.type === 'image');
         const audioFile = sessionData.uploadedFiles.find(f => f.type === 'audio');
-        
+
         if (imageFile) {
           console.log('Restoring image:', imageFile);
           setImageUrl(imageFile.url);
           setCurrentUploader(imageFile.uploadedBy);
           setUploaderUsername(imageFile.uploadedByUsername);
         }
-        
+
         if (audioFile) {
           console.log('Restoring audio:', audioFile);
           setAudioUrl(audioFile.url);
@@ -220,18 +216,15 @@ const Meeting = () => {
           setUploaderUsername(audioFile.uploadedByUsername);
         }
       }
-      
-      // Restore AI state
+
       if (sessionData.aiState) {
         console.log('Restoring AI state:', sessionData.aiState);
         if (sessionData.aiState.output) {
-          // Parse the output if it's a stringified JSON
           let output = sessionData.aiState.output;
           if (typeof output === 'string') {
             try {
               const parsed = JSON.parse(output);
               if (typeof parsed === 'object') {
-                // Extract the actual answer from the parsed response
                 if (parsed.answer) {
                   output = parsed.answer;
                 } else if (parsed.response) {
@@ -245,13 +238,11 @@ const Meeting = () => {
                 } else if (parsed.data && parsed.data.response) {
                   output = parsed.data.response;
                 } else {
-                  // If no specific answer field, show the first string value
                   const firstStringValue = Object.values(parsed).find(val => typeof val === 'string');
                   output = firstStringValue || output;
                 }
               }
             } catch (e) {
-              // If parsing fails, use the original string
               console.log('Could not parse AI output, using as string:', output);
             }
           }
@@ -263,13 +254,12 @@ const Meeting = () => {
           setUploaderUsername(sessionData.aiState.uploaderUsername);
         }
       }
-      
-      // Restore chat messages
+
       if (sessionData.chatMessages) {
         console.log('Restoring chat messages:', sessionData.chatMessages);
         setMessages(sessionData.chatMessages);
       }
-      
+
       setSessionRestored(true);
     }
   }, []);
@@ -277,33 +267,30 @@ const Meeting = () => {
   // Optimized ICE Servers with caching and timeout
   const getIceServers = useCallback(async () => {
     const now = Date.now();
-    const cacheExpiry = 5 * 60 * 1000; // 5 minutes cache
-    
-    // Return cached servers if still valid
+    const cacheExpiry = 5 * 60 * 1000;
+
     if (iceServersCache.current && (now - lastIceFetch.current) < cacheExpiry) {
       return iceServersCache.current;
     }
-    
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
-      
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
       const { data } = await axios.get(`${SERVER_URL}/ice-servers`, {
         signal: controller.signal,
         timeout: 2000
       });
-      
+
       clearTimeout(timeoutId);
       console.log('ICE Servers fetched:', data.length, 'servers');
-      
-      // Cache the servers
+
       iceServersCache.current = data;
       lastIceFetch.current = now;
-      
+
       return data;
     } catch (error) {
       console.warn('ICE servers fetch failed, using fallback:', error.message);
-      // Fast fallback servers
       const fallbackServers = [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
@@ -318,11 +305,10 @@ const Meeting = () => {
           credential: 'openrelayprojectsecret',
         },
       ];
-      
-      // Cache fallback servers too
+
       iceServersCache.current = fallbackServers;
       lastIceFetch.current = now;
-      
+
       return fallbackServers;
     }
   }, []);
@@ -330,24 +316,21 @@ const Meeting = () => {
   // Optimized Peer Connection with signaling state management
   const createPeerConnection = useCallback(
     async (remoteSocketId) => {
-      // Check if connection already exists
       if (peerConnections.current.has(remoteSocketId)) {
         console.log('Connection already exists for user:', remoteSocketId);
         return peerConnections.current.get(remoteSocketId);
       }
 
       const iceServers = await getIceServers();
-      const pc = new RTCPeerConnection({ 
+      const pc = new RTCPeerConnection({
         iceServers,
-        iceCandidatePoolSize: 10, // Pre-gather ICE candidates
-        bundlePolicy: 'max-bundle', // Reduce connection overhead
-        rtcpMuxPolicy: 'require' // Reduce port usage
+        iceCandidatePoolSize: 10,
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
       });
-      
-      // Initialize signaling state
+
       signalingStates.current.set(remoteSocketId, 'new');
-      
-      // Set connection timeout with cleanup
+
       const connectionTimeout = setTimeout(() => {
         if (pc.connectionState === 'connecting') {
           console.warn('Connection timeout for user:', remoteSocketId);
@@ -356,10 +339,10 @@ const Meeting = () => {
           connectionTimeouts.current.delete(remoteSocketId);
           signalingStates.current.delete(remoteSocketId);
         }
-      }, 8000); // 8 second timeout for faster failure detection
-      
+      }, 8000);
+
       connectionTimeouts.current.set(remoteSocketId, connectionTimeout);
-      
+
       pc.ontrack = (event) => {
         clearTimeout(connectionTimeout);
         connectionTimeouts.current.delete(remoteSocketId);
@@ -369,13 +352,13 @@ const Meeting = () => {
           )
         );
       };
-      
+
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
         }
       };
-      
+
       pc.onconnectionstatechange = () => {
         console.log('Peer connection state:', pc.connectionState, 'for user:', remoteSocketId);
         if (pc.connectionState === 'connected') {
@@ -384,7 +367,6 @@ const Meeting = () => {
           console.log('Successfully connected to user:', remoteSocketId);
         } else if (pc.connectionState === 'disconnected') {
           console.log('Connection disconnected for user:', remoteSocketId);
-          // Don't immediately remove on disconnect, allow for reconnection
         } else if (pc.connectionState === 'failed') {
           console.error('Connection failed for user:', remoteSocketId);
           clearTimeout(connectionTimeout);
@@ -397,7 +379,7 @@ const Meeting = () => {
           setParticipants((prev) => prev.filter((p) => p.userId !== remoteSocketId));
         }
       };
-      
+
       peerConnections.current.set(remoteSocketId, pc);
       return pc;
     },
@@ -416,7 +398,7 @@ const Meeting = () => {
       },
       chatMessages: messages
     };
-    
+
     if (imageUrl) {
       sessionData.uploadedFiles.push({
         type: 'image',
@@ -425,7 +407,7 @@ const Meeting = () => {
         uploadedByUsername: uploaderUsername
       });
     }
-    
+
     if (audioUrl) {
       sessionData.uploadedFiles.push({
         type: 'audio',
@@ -434,7 +416,7 @@ const Meeting = () => {
         uploadedByUsername: uploaderUsername
       });
     }
-    
+
     saveSessionToStorage(sessionData);
   }, [imageUrl, audioUrl, isProcessing, currentUploader, uploaderUsername, output, messages, saveSessionToStorage]);
 
@@ -445,8 +427,7 @@ const Meeting = () => {
     setCurrentUploader(userId);
     setUploaderUsername(username || getUsernameById(userId));
     setIsPlaying(false);
-    
-    // Clear output when AI processing starts
+
     setOutput('');
   }, [getUsernameById]);
 
@@ -455,11 +436,9 @@ const Meeting = () => {
     setIsProcessing(false);
     setCurrentUploader(null);
     setUploaderUsername('');
-    
-    // Extract clean answer from response
+
     let displayResponse = '';
     if (typeof response === 'object') {
-      // Try to find common answer fields
       if (response.answer) {
         displayResponse = response.answer;
       } else if (response.response) {
@@ -473,14 +452,13 @@ const Meeting = () => {
       } else if (response.data && response.data.response) {
         displayResponse = response.data.response;
       } else {
-        // If no specific answer field, show the first string value
         const firstStringValue = Object.values(response).find(val => typeof val === 'string');
         displayResponse = firstStringValue || JSON.stringify(response, null, 2);
       }
     } else {
       displayResponse = String(response);
     }
-    
+
     console.log(`Setting output to:`, displayResponse);
     setOutput(displayResponse);
   }, []);
@@ -505,8 +483,7 @@ const Meeting = () => {
     setIsBotLocked(true);
     setCurrentUploader(userId);
     setUploaderUsername(username || getUsernameById(userId));
-    
-    // Clear output when someone else starts processing
+
     if (userId !== socketRef.current?.id) {
       setOutput('');
     }
@@ -517,8 +494,7 @@ const Meeting = () => {
     setIsBotLocked(false);
     setCurrentUploader(null);
     setUploaderUsername('');
-    
-    // Keep the output when unlocked, but clear processing state
+
     setIsProcessing(false);
   }, []);
 
@@ -536,13 +512,12 @@ const Meeting = () => {
   const setupSocketListeners = useCallback((socket) => {
     const handleConnect = () => {
       console.log('Socket connected:', socket.id);
-      socket.emit('join-room', { 
-        roomId, 
-        username: user.username, 
-        isReconnect: isReconnecting 
+      socket.emit('join-room', {
+        roomId,
+        username: user.username,
+        isReconnect: isReconnecting
       }, (otherUsers, sessionData) => {
         const isHost = otherUsers.length === 0;
-        // ✅ Add socketId to participants
         const remoteParticipants = otherUsers.map(u => ({
           userId: u.userId,
           username: u.username,
@@ -552,7 +527,7 @@ const Meeting = () => {
           videoEnabled: true,
           audioEnabled: true,
           isScreenSharing: false,
-          socketId: u.userId // ✅ Add socketId
+          socketId: u.userId
         }));
         const localParticipant = {
           userId: socket.id,
@@ -563,55 +538,51 @@ const Meeting = () => {
           videoEnabled: true,
           audioEnabled: true,
           isScreenSharing: false,
-          socketId: socket.id // ✅ Add socketId
+          socketId: socket.id
         };
         setParticipants([localParticipant, ...remoteParticipants]);
-        
-        // Restore session data if reconnecting or if we have session data from server
+
         if (sessionData) {
           console.log('Restoring session data from server:', sessionData);
           restoreSessionData(sessionData);
         } else {
-          // Always check local storage for session data on initial load or reconnection
           const storedSession = loadSessionFromStorage();
           if (storedSession) {
             console.log('Restoring session data from local storage:', storedSession);
             restoreSessionData(storedSession);
           }
         }
-        
+
         setIsReconnecting(false);
         setIsLoading(false);
       });
     };
 
     const handleUserJoined = async ({ userId, username, isHost, isReconnect }) => {
-      // Skip adding user if this is a reconnection and we already have them
       if (isReconnect) {
         console.log('Skipping user-joined for reconnection:', username);
         return;
       }
-      
+
       setParticipants((prev) => {
         if (prev.some(p => p.userId === userId)) return prev;
-        return [...prev, { 
-          userId, 
-          username, 
-          stream: null, 
-          isLocal: false, 
-          isHost, 
-          videoEnabled: true, 
-          audioEnabled: true, 
+        return [...prev, {
+          userId,
+          username,
+          stream: null,
+          isLocal: false,
+          isHost,
+          videoEnabled: true,
+          audioEnabled: true,
           isScreenSharing: false,
-          socketId: userId // ✅ Add socketId
+          socketId: userId
         }];
       });
 
       try {
         const pc = await createPeerConnection(userId);
         const currentState = signalingStates.current.get(userId);
-        
-        // Only create offer if we're in the right state
+
         if (currentState === 'new' || currentState === 'stable') {
           if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => {
@@ -622,7 +593,7 @@ const Meeting = () => {
             console.warn('localStreamRef.current is null for user:', userId);
             return;
           }
-          
+
           signalingStates.current.set(userId, 'have-local-offer');
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
@@ -638,29 +609,28 @@ const Meeting = () => {
     const handleOffer = async ({ from, offer, username }) => {
       setParticipants((prev) => {
         if (prev.some(p => p.userId === from)) return prev;
-        return [...prev, { 
-          userId: from, 
-          username, 
-          stream: null, 
-          isLocal: false, 
-          isHost: false, 
-          videoEnabled: true, 
-          audioEnabled: true, 
+        return [...prev, {
+          userId: from,
+          username,
+          stream: null,
+          isLocal: false,
+          isHost: false,
+          videoEnabled: true,
+          audioEnabled: true,
           isScreenSharing: false,
-          socketId: from // ✅ Add socketId
+          socketId: from
         }];
       });
 
       try {
         const pc = await createPeerConnection(from);
         const currentState = signalingStates.current.get(from);
-        
-        // Only process offer if we're in the right state
+
         if (currentState === 'new' || currentState === 'stable') {
           if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
           }
-          
+
           signalingStates.current.set(from, 'have-remote-offer');
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
           const answer = await pc.createAnswer();
@@ -679,7 +649,7 @@ const Meeting = () => {
     const handleAnswer = ({ from, answer }) => {
       const pc = peerConnections.current.get(from);
       const currentState = signalingStates.current.get(from);
-      
+
       if (pc && currentState === 'have-local-offer') {
         pc.setRemoteDescription(new RTCSessionDescription(answer))
           .then(() => {
@@ -689,7 +659,6 @@ const Meeting = () => {
           })
           .catch(err => {
             console.error('Error setting remote description:', err);
-            // Reset state on error
             signalingStates.current.set(from, 'stable');
             pendingOffers.current.delete(from);
           });
@@ -716,7 +685,6 @@ const Meeting = () => {
       }
       setParticipants((prev) => {
         const updated = prev.filter((p) => p.userId !== userId);
-        // If the user who left was pinned, unpin them
         if (pinnedParticipantId === userId) {
           setPinnedParticipantId(null);
         }
@@ -805,8 +773,7 @@ const Meeting = () => {
     socket.on('ai-bot-unlocked', handleAiBotUnlocked);
     socket.on('ai-audio-play', handleAiAudioPlay);
     socket.on('ai-audio-pause', handleAiAudioPause);
-    
-    // Session restoration event
+
     socket.on('session-restored', (sessionData) => {
       console.log('Session restored from server:', sessionData);
       restoreSessionData(sessionData);
@@ -866,8 +833,7 @@ const Meeting = () => {
       }
       try {
         setIsLoading(true);
-        
-        // Optimized media constraints for faster initialization
+
         const mediaConstraints = {
           video: {
             width: { ideal: 480, max: 640 },
@@ -882,16 +848,15 @@ const Meeting = () => {
             sampleRate: 44100
           }
         };
-        
+
         const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
         console.log('Optimized local stream initialized:', stream);
 
-        // Check if we have a stored session
         const storedSession = loadSessionFromStorage();
         const isReconnecting = !!storedSession;
-        
+
         if (isReconnecting) {
           setIsReconnecting(true);
           console.log('Attempting to reconnect to meeting...');
@@ -901,11 +866,11 @@ const Meeting = () => {
           auth: { token: user.token },
           transports: ['websocket'],
           reconnection: true,
-          reconnectionAttempts: 3, // Reduced attempts
-          reconnectionDelay: 500, // Faster reconnection
+          reconnectionAttempts: 3,
+          reconnectionDelay: 500,
           reconnectionDelayMax: 2000,
-          timeout: 5000, // Connection timeout
-          forceNew: true // Force new connection for better reliability
+          timeout: 5000,
+          forceNew: true
         });
 
         const cleanupSocketListeners = setupSocketListeners(socketRef.current);
@@ -917,16 +882,14 @@ const Meeting = () => {
           }
           peerConnections.current.forEach(pc => pc.close());
           peerConnections.current.clear();
-          
-          // Cleanup connection timeouts
+
           connectionTimeouts.current.forEach(timeout => clearTimeout(timeout));
           connectionTimeouts.current.clear();
-          
-          // Cleanup signaling states
+
           signalingStates.current.clear();
           pendingOffers.current.clear();
           pendingAnswers.current.clear();
-          
+
           if (socketRef.current) {
             cleanupSocketListeners();
             socketRef.current.disconnect();
@@ -948,9 +911,7 @@ const Meeting = () => {
   // Save session data when relevant state changes
   useEffect(() => {
     if (sessionRestored) {
-      // Always keep server in sync with latest session data
       saveCurrentSession();
-      // Also push to server to ensure other users get most recent state
       try {
         const token = user?.token;
         if (token) {
@@ -1038,12 +999,12 @@ const Meeting = () => {
       socketRef.current?.emit('toggle-video', { enabled: false, roomId });
     } else {
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
             width: { ideal: 480, max: 640 },
             height: { ideal: 360, max: 480 },
             frameRate: { ideal: 15, max: 20 }
-          } 
+          }
         });
         const newVideoTrack = newStream.getVideoTracks()[0];
         await replaceTrack(newVideoTrack, false);
@@ -1203,18 +1164,15 @@ const Meeting = () => {
 
   const handleExitRoom = () => {
     try {
-      // Emit leave-room to server so it can clean up session if room becomes empty
       socketRef.current?.emit('leave-room');
     } catch (e) {
       console.warn('Error emitting leave-room:', e);
     }
     try {
-      // Clear local persisted session for this meeting
       localStorage.removeItem(`meeting_session_${roomId}`);
     } catch (e) {
       console.warn('Error clearing local session:', e);
     }
-    // Reset key AI bot state locally to avoid flashing old data when re-entering another room
     setImageUrl('');
     setAudioUrl('');
     setOutput('');
@@ -1228,13 +1186,12 @@ const Meeting = () => {
 
   if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
-  // ✅ FIXED: Pass socketId to ALL VideoPlayer components
   const renderVideoPlayer = (participant, isLocal, className = "mx-auto") => (
-    <VideoPlayer 
-      participant={participant} 
-      isLocal={isLocal} 
+    <VideoPlayer
+      participant={participant}
+      isLocal={isLocal}
       isMirroringBrowser={isMirroringBrowser}
-      socketId={socketRef.current?.id}  // ✅ ADD socketId prop
+      socketId={socketRef.current?.id}
       className={className}
     />
   );
@@ -1246,7 +1203,7 @@ const Meeting = () => {
         <span>Participants: {participants.length}</span>
       </div>
       <div className="flex-1 flex relative overflow-hidden">
-        <div 
+        <div
           className="flex-1 flex flex-col relative overflow-hidden"
           onWheel={(e) => {
             if (e.deltaX !== 0 && totalGridPages > 1) {
@@ -1257,8 +1214,8 @@ const Meeting = () => {
         >
           {isSomeoneScreenSharing && (
             <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
-              <AnnotationToolbar 
-                onMouseDown={handleToolbarMouseDown} 
+              <AnnotationToolbar
+                onMouseDown={handleToolbarMouseDown}
                 currentTool={currentTool}
                 setCurrentTool={setCurrentTool}
                 currentBrushSize={currentBrushSize}
@@ -1267,72 +1224,98 @@ const Meeting = () => {
               />
             </div>
           )}
-          <div className="flex-1 min-h-0 relative overflow-hidden h-full" ref={mainVideoContainerRef}
-               onTouchStart={(e)=>{ touchStartXRef.current = e.touches[0].clientX; touchDeltaRef.current = 0; }}
-               onTouchMove={(e)=>{ touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
-               onTouchEnd={()=>{ if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev)=>{
-                   const dir = touchDeltaRef.current > 0 ? -1 : 1; const np = Math.max(0, Math.min(prev+dir, totalGridPages-1)); return np; }); } }}>
-            {/* Responsive grid: 2x2 pages; special cases for 2 and 3 participants */}
+          <div
+            className="flex-1 min-h-0 relative overflow-hidden h-full"
+            ref={mainVideoContainerRef}
+            onTouchStart={(e) => { touchStartXRef.current = e.touches[0].clientX; touchDeltaRef.current = 0; }}
+            onTouchMove={(e) => { touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
+            onTouchEnd={() => { if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev) => { const dir = touchDeltaRef.current > 0 ? -1 : 1; const np = Math.max(0, Math.min(prev + dir, totalGridPages - 1)); return np; }); } }}
+          >
             {(() => {
               const count = displayParticipants.length;
               const pageStart = gridPage * 4;
               const pageItems = displayParticipants.slice(pageStart, pageStart + 4);
+
               if (count === 1) {
                 const p = displayParticipants[0];
                 return (
                   <div className="w-full h-full flex items-center justify-center">
-                    <div className="w-full max-w-md">
-                      {renderVideoPlayer(p, p.isLocal)}
+                    <div className="w-full max-w-3xl">
+                      {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
                     </div>
                   </div>
                 );
               }
+
               if (count === 2) {
                 return (
-                  <div className="flex flex-col items-center justify-center h-full gap-4 max-w-4xl mx-auto">
-                    {displayParticipants.map((p)=> (
-                      <div key={p.userId} className="w-3/4 max-w-xl h-auto">
-                        {renderVideoPlayer(p, p.isLocal)}
+                  <div className="flex flex-col md:flex-row h-full w-full max-w-6xl mx-auto gap-4 p-4">
+                    {displayParticipants.map((p, index) => (
+                      <div
+                        key={p.userId}
+                        className="flex-1 min-w-0"
+                        style={{ aspectRatio: "16/9" }}
+                      >
+                        {renderVideoPlayer(p, p.isLocal, "w-full h-full object-cover")}
                       </div>
                     ))}
                   </div>
                 );
               }
+
               if (count === 3) {
-                const [a,b,c] = displayParticipants;
+                const [a, b, c] = displayParticipants;
                 return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-2 p-4">
                     <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(a, a.isLocal)}
+                      {renderVideoPlayer(a, a.isLocal, "w-full h-auto")}
                     </div>
                     <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(b, b.isLocal)}
+                      {renderVideoPlayer(b, b.isLocal, "w-full h-auto")}
                     </div>
                     <div className="md:col-span-2 h-full flex justify-center items-center">
                       <div className="w-full md:w-1/2 min-w-[200px] max-w-sm">
-                        {renderVideoPlayer(c, c.isLocal)}
+                        {renderVideoPlayer(c, c.isLocal, "w-full h-auto")}
                       </div>
                     </div>
                   </div>
                 );
               }
+
               // 4 or more -> paginated 2x2
               return (
-                <div className="w-full h-full">
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-2">
-                    {pageItems.map((p)=> (
-                      <div key={p.userId} className="w-full h-full flex items-center justify-center">
-                        {renderVideoPlayer(p, p.isLocal)}
+                <div className="w-full h-full p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-4xl gap-4">
+                    {pageItems.map((p) => (
+                      <div
+                        key={p.userId}
+                        className="w-full h-full flex items-center justify-center"
+                      >
+                        {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
                       </div>
                     ))}
                   </div>
                   {totalGridPages > 1 && (
                     <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2">
-                      <button onClick={()=> setGridPage(p=> Math.max(0, p-1))} className="px-2 py-1 bg-gray-700 rounded">‹</button>
+                      <button
+                        onClick={() => setGridPage((p) => Math.max(0, p - 1))}
+                        className="px-2 py-1 bg-gray-700 rounded"
+                      >
+                        ‹
+                      </button>
                       {Array.from({ length: totalGridPages }, (_, i) => (
-                        <button key={i} onClick={()=> setGridPage(i)} className={`w-2.5 h-2.5 rounded-full ${gridPage===i?'bg-white':'bg-gray-500'}`} />
+                        <button
+                          key={i}
+                          onClick={() => setGridPage(i)}
+                          className={`w-2.5 h-2.5 rounded-full ${gridPage === i ? 'bg-white' : 'bg-gray-500'}`}
+                        />
                       ))}
-                      <button onClick={()=> setGridPage(p=> Math.min(totalGridPages-1, p+1))} className="px-2 py-1 bg-gray-700 rounded">›</button>
+                      <button
+                        onClick={() => setGridPage((p) => Math.min(totalGridPages - 1, p + 1))}
+                        className="px-2 py-1 bg-gray-700 rounded"
+                      >
+                        ›
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1350,7 +1333,9 @@ const Meeting = () => {
             />
           </div>
         </div>
-        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
+        <div
+          className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}
+        >
           {isChatOpen && <Chat messages={messages} onSendMessage={(message) => {
             const payload = { message, username: user.username, timestamp: new Date().toISOString() };
             socketRef.current?.emit('send-chat-message', payload);
@@ -1375,15 +1360,15 @@ const Meeting = () => {
               <div className="space-y-2">
                 <div>
                   <label className="block text-sm mb-1">Upload Image</label>
-                  <input type="file" accept="image/*" onChange={(e)=>{ if(!(isBotLocked && currentUploader !== socketRef.current?.id)){ const f=e.target.files?.[0]; if(f) setSelectedImage(f);} }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
+                  <input type="file" accept="image/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; if (f) setSelectedImage(f); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm mb-1">Upload Audio</label>
-                  <input type="file" accept="audio/*" onChange={(e)=>{ if(!(isBotLocked && currentUploader !== socketRef.current?.id)){ const f=e.target.files?.[0]; if(f) setSelectedAudio(f);} }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
+                  <input type="file" accept="audio/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; if (f) setSelectedAudio(f); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
                 </div>
-                <button onClick={async ()=>{ const hasImg=!!(selectedImage||imageUrl); const hasAud=!!(selectedAudio||audioUrl); if(!hasImg||!hasAud){ toast.error('Please upload both image and audio to process.'); return;} if(isBotLocked && currentUploader !== socketRef.current?.id){ toast.error('Another user is currently processing. Please wait.'); return;} try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); let effImg=imageUrl; let effAud=audioUrl; if(selectedImage && !effImg){ const fd=new FormData(); fd.append('file', selectedImage); const r=await axios.post(`${SERVER_URL}/upload/image`, fd, { headers:{ 'Content-Type':'multipart/form-data', Authorization:`Bearer ${user.token}` }}); effImg=r.data?.url; setImageUrl(effImg); socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId }); }
-                  if(selectedAudio && !effAud){ const fd2=new FormData(); fd2.append('file', selectedAudio); const r2=await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers:{ 'Content-Type':'multipart/form-data', Authorization:`Bearer ${user.token}` }}); effAud=r2.data?.url; setAudioUrl(effAud); socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId }); }
-                  setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3=new FormData(); if(effImg){ const ir=await fetch(effImg); const ib=await ir.blob(); fd3.append('image', new File([ib], 'image.jpg', { type: ib.type||'image/jpeg' })); } if(effAud){ const ar=await fetch(effAud); const ab=await ar.blob(); fd3.append('audio', new File([ab], 'audio.mp3', { type: ab.type||'audio/mpeg' })); } const AI_MODEL_API_URL='https://genaizoom-1.onrender.com/predict'; const resp=await axios.post(AI_MODEL_API_URL, fd3, { headers:{ 'Content-Type':'multipart/form-data' }}); const modelOutput=resp.data?.result||resp.data; let disp=''; if(typeof modelOutput==='object'){ disp = modelOutput.answer||modelOutput.response||modelOutput.text||modelOutput.result||(modelOutput.data&&(modelOutput.data.answer||modelOutput.data.response))||''; if(!disp){ const firstStr=Object.values(modelOutput).find(v=>typeof v==='string'); disp=firstStr||JSON.stringify(modelOutput, null, 2); } } else { disp=String(modelOutput);} setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); } catch(e){ console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
+                <button onClick={async () => { const hasImg = !!(selectedImage || imageUrl); const hasAud = !!(selectedAudio || audioUrl); if (!hasImg || !hasAud) { toast.error('Please upload both image and audio to process.'); return; } if (isBotLocked && currentUploader !== socketRef.current?.id) { toast.error('Another user is currently processing. Please wait.'); return; } try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); let effImg = imageUrl; let effAud = audioUrl; if (selectedImage && !effImg) { const fd = new FormData(); fd.append('file', selectedImage); const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effImg = r.data?.url; setImageUrl(effImg); socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId }); }
+                  if (selectedAudio && !effAud) { const fd2 = new FormData(); fd2.append('file', selectedAudio); const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effAud = r2.data?.url; setAudioUrl(effAud); socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId }); }
+                  setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3 = new FormData(); if (effImg) { const ir = await fetch(effImg); const ib = await ir.blob(); fd3.append('image', new File([ib], 'image.jpg', { type: ib.type || 'image/jpeg' })); } if (effAud) { const ar = await fetch(effAud); const ab = await ar.blob(); fd3.append('audio', new File([ab], 'audio.mp3', { type: ab.type || 'audio/mpeg' })); } const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.result || resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); } catch (e) { console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
               </div>
             </div>
           )}

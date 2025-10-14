@@ -89,7 +89,7 @@ const Meeting = () => {
   // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
-  // ✅ FIXED: AI Participant with proper socketId and stable functions
+  // AI Participant with proper socketId and stable functions
   const handlePlayAudio = useCallback(() => {
     setIsPlaying(true);
     socketRef.current?.emit('ai-audio-play', { roomId });
@@ -134,7 +134,7 @@ const Meeting = () => {
     socketRef.current?.id
   ]);
 
-  // ✅ FIXED: Display participants with socketId
+  // Display participants with socketId
   const displayParticipants = useMemo(() => {
     const participantsWithSocketId = participants.map(p => ({
       ...p,
@@ -694,13 +694,9 @@ const Meeting = () => {
     };
 
     const handleChatMessage = (payload) => setMessages(prev => [...prev, payload]);
-
     const handleScreenShareStart = ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p));
-
     const handleScreenShareStop = ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p));
-
     const handleError = ({ message }) => toast.error(message);
-
     const handleDrawingStart = ({ from, x, y, color, tool, size }) => {
       remoteDrawingStates.current.set(from, { color, tool, size });
       const canvas = annotationCanvasRef.current;
@@ -709,7 +705,6 @@ const Meeting = () => {
       ctx.beginPath();
       ctx.moveTo(x * canvas.width, y * canvas.height);
     };
-
     const handleDrawingMove = ({ from, x, y }) => {
       const state = remoteDrawingStates.current.get(from);
       const canvas = annotationCanvasRef.current;
@@ -722,7 +717,6 @@ const Meeting = () => {
       ctx.lineTo(x * canvas.width, y * canvas.height);
       ctx.stroke();
     };
-
     const handleDrawShape = ({ from, tool, startX, startY, endX, endY, color, size }) => {
       const canvas = annotationCanvasRef.current;
       if (!canvas) return;
@@ -743,7 +737,6 @@ const Meeting = () => {
       }
       ctx.stroke();
     };
-
     const handleClearCanvas = () => {
       const canvas = annotationCanvasRef.current;
       if (!canvas) return;
@@ -773,7 +766,6 @@ const Meeting = () => {
     socket.on('ai-bot-unlocked', handleAiBotUnlocked);
     socket.on('ai-audio-play', handleAiAudioPlay);
     socket.on('ai-audio-pause', handleAiAudioPause);
-
     socket.on('session-restored', (sessionData) => {
       console.log('Session restored from server:', sessionData);
       restoreSessionData(sessionData);
@@ -833,35 +825,20 @@ const Meeting = () => {
       }
       try {
         setIsLoading(true);
-
         const mediaConstraints = {
-          video: {
-            width: { ideal: 480, max: 640 },
-            height: { ideal: 360, max: 480 },
-            frameRate: { ideal: 15, max: 20 },
-            facingMode: 'user'
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 44100
-          }
+          video: { width: { ideal: 480, max: 640 }, height: { ideal: 360, max: 480 }, frameRate: { ideal: 15, max: 20 }, facingMode: 'user' },
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 44100 }
         };
-
         const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
         console.log('Optimized local stream initialized:', stream);
-
         const storedSession = loadSessionFromStorage();
         const isReconnecting = !!storedSession;
-
         if (isReconnecting) {
           setIsReconnecting(true);
           console.log('Attempting to reconnect to meeting...');
         }
-
         socketRef.current = io(SERVER_URL, {
           auth: { token: user.token },
           transports: ['websocket'],
@@ -872,7 +849,6 @@ const Meeting = () => {
           timeout: 5000,
           forceNew: true
         });
-
         const cleanupSocketListeners = setupSocketListeners(socketRef.current);
         return () => {
           console.log('Cleaning up Meeting component');
@@ -882,14 +858,11 @@ const Meeting = () => {
           }
           peerConnections.current.forEach(pc => pc.close());
           peerConnections.current.clear();
-
           connectionTimeouts.current.forEach(timeout => clearTimeout(timeout));
           connectionTimeouts.current.clear();
-
           signalingStates.current.clear();
           pendingOffers.current.clear();
           pendingAnswers.current.clear();
-
           if (socketRef.current) {
             cleanupSocketListeners();
             socketRef.current.disconnect();
@@ -908,77 +881,51 @@ const Meeting = () => {
     initialize();
   }, [roomId, user, navigate, setupSocketListeners]);
 
-  // Save session data when relevant state changes
   useEffect(() => {
     if (sessionRestored) {
       saveCurrentSession();
       try {
         const token = user?.token;
         if (token) {
-          const aiStatePayload = {
-            isProcessing,
-            currentUploader,
-            uploaderUsername,
-            output,
-          };
-          axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/ai-state`, aiStatePayload, {
-            headers: { Authorization: `Bearer ${token}` },
-          }).catch(() => {});
+          const aiStatePayload = { isProcessing, currentUploader, uploaderUsername, output };
+          axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/ai-state`, aiStatePayload, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
           if (imageUrl) {
-            axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, {
-              type: 'image', url: imageUrl, uploadedBy: currentUploader, uploadedByUsername: uploaderUsername
-            }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+            axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, { type: 'image', url: imageUrl, uploadedBy: currentUploader, uploadedByUsername: uploaderUsername }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
           }
           if (audioUrl) {
-            axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, {
-              type: 'audio', url: audioUrl, uploadedBy: currentUploader, uploadedByUsername: uploaderUsername
-            }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+            axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, { type: 'audio', url: audioUrl, uploadedBy: currentUploader, uploadedByUsername: uploaderUsername }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
           }
         }
       } catch {}
     }
   }, [imageUrl, audioUrl, isProcessing, currentUploader, uploaderUsername, output, messages, saveCurrentSession, sessionRestored]);
 
-  // Clear output when AI processing starts
-  useEffect(() => {
-    if (isProcessing) {
-      setOutput('');
-    }
-  }, [isProcessing]);
-
+  useEffect(() => { if (isProcessing) { setOutput(''); } }, [isProcessing]);
   useEffect(() => {
     const canvas = annotationCanvasRef.current;
     const container = mainVideoContainerRef.current;
     if (!container || !canvas) return;
-    const resizeCanvas = () => {
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
-    };
+    const resizeCanvas = () => { canvas.width = container.clientWidth; canvas.height = container.clientHeight; };
     resizeCanvas();
     const resizeObserver = new ResizeObserver(resizeCanvas);
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
   }, [mainViewParticipant]);
 
-  const replaceTrack = useCallback(
-    async (newTrack, isScreenShare = false) => {
-      const localStream = localStreamRef.current;
-      if (!localStream) return;
-
-      const oldTrack = localStream.getVideoTracks()[0];
-      if (oldTrack) oldTrack.stop();
-
-      localStream.removeTrack(oldTrack);
-      localStream.addTrack(newTrack);
-      peerConnections.current.forEach((pc) => {
-        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
-        if (sender) sender.replaceTrack(newTrack);
-      });
-      setParticipants((prev) => prev.map((p) => p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p));
-      socketRef.current?.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop', { userId: socketRef.current.id });
-    },
-    []
-  );
+  const replaceTrack = useCallback(async (newTrack, isScreenShare = false) => {
+    const localStream = localStreamRef.current;
+    if (!localStream) return;
+    const oldTrack = localStream.getVideoTracks()[0];
+    if (oldTrack) oldTrack.stop();
+    localStream.removeTrack(oldTrack);
+    localStream.addTrack(newTrack);
+    peerConnections.current.forEach((pc) => {
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender) sender.replaceTrack(newTrack);
+    });
+    setParticipants((prev) => prev.map((p) => p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p));
+    socketRef.current?.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop', { userId: socketRef.current.id });
+  }, []);
 
   const toggleAudio = () => {
     const audioTrack = localStreamRef.current?.getAudioTracks()[0];
@@ -999,13 +946,7 @@ const Meeting = () => {
       socketRef.current?.emit('toggle-video', { enabled: false, roomId });
     } else {
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 480, max: 640 },
-            height: { ideal: 360, max: 480 },
-            frameRate: { ideal: 15, max: 20 }
-          }
-        });
+        const newStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 480, max: 640 }, height: { ideal: 360, max: 480 }, frameRate: { ideal: 15, max: 20 } } });
         const newVideoTrack = newStream.getVideoTracks()[0];
         await replaceTrack(newVideoTrack, false);
         localCameraTrackRef.current = newVideoTrack;
@@ -1052,21 +993,14 @@ const Meeting = () => {
   const handleToolbarMouseDown = (e) => {
     const toolbar = e.currentTarget.parentElement;
     const rect = toolbar.getBoundingClientRect();
-    dragInfo.current = {
-      isDragging: true,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
-    };
+    dragInfo.current = { isDragging: true, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, };
     window.addEventListener('mousemove', handleToolbarMouseMove);
     window.addEventListener('mouseup', handleToolbarMouseUp);
   };
 
   const handleToolbarMouseMove = (e) => {
     if (dragInfo.current.isDragging) {
-      setToolbarPosition({
-        x: e.clientX - dragInfo.current.offsetX,
-        y: e.clientY - dragInfo.current.offsetY,
-      });
+      setToolbarPosition({ x: e.clientX - dragInfo.current.offsetX, y: e.clientY - dragInfo.current.offsetY, });
     }
   };
 
@@ -1083,7 +1017,6 @@ const Meeting = () => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
-
     if (currentTool === 'pen' || currentTool === 'eraser') {
       const myColor = getColorForId(socketRef.current?.id);
       const payload = { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize };
@@ -1123,15 +1056,7 @@ const Meeting = () => {
       const endX = e.clientX - rect.left;
       const endY = e.clientY - rect.top;
       const myColor = getColorForId(socketRef.current?.id);
-      const payload = {
-        tool: currentTool,
-        startX: startX / canvas.width,
-        startY: startY / canvas.height,
-        endX: endX / canvas.width,
-        endY: endY / canvas.height,
-        color: myColor,
-        size: currentBrushSize,
-      };
+      const payload = { tool: currentTool, startX: startX / canvas.width, startY: startY / canvas.height, endX: endX / canvas.width, endY: endY / canvas.height, color: myColor, size: currentBrushSize };
       socketRef.current?.emit('draw-shape', payload);
       const ctx = canvas.getContext('2d');
       ctx.strokeStyle = myColor;
@@ -1163,24 +1088,9 @@ const Meeting = () => {
   };
 
   const handleExitRoom = () => {
-    try {
-      socketRef.current?.emit('leave-room');
-    } catch (e) {
-      console.warn('Error emitting leave-room:', e);
-    }
-    try {
-      localStorage.removeItem(`meeting_session_${roomId}`);
-    } catch (e) {
-      console.warn('Error clearing local session:', e);
-    }
-    setImageUrl('');
-    setAudioUrl('');
-    setOutput('');
-    setIsProcessing(false);
-    setCurrentUploader(null);
-    setUploaderUsername('');
-    setIsBotLocked(false);
-    setIsPlaying(false);
+    try { socketRef.current?.emit('leave-room'); } catch (e) { console.warn('Error emitting leave-room:', e); }
+    try { localStorage.removeItem(`meeting_session_${roomId}`); } catch (e) { console.warn('Error clearing local session:', e); }
+    setImageUrl(''); setAudioUrl(''); setOutput(''); setIsProcessing(false); setCurrentUploader(null); setUploaderUsername(''); setIsBotLocked(false); setIsPlaying(false);
     navigate('/home');
   };
 
@@ -1190,6 +1100,7 @@ const Meeting = () => {
     <VideoPlayer
       participant={participant}
       isLocal={isLocal}
+      isPinned={pinnedParticipantId === participant.userId}
       isMirroringBrowser={isMirroringBrowser}
       socketId={socketRef.current?.id}
       className={className}
@@ -1214,14 +1125,7 @@ const Meeting = () => {
         >
           {isSomeoneScreenSharing && (
             <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
-              <AnnotationToolbar
-                onMouseDown={handleToolbarMouseDown}
-                currentTool={currentTool}
-                setCurrentTool={setCurrentTool}
-                currentBrushSize={currentBrushSize}
-                setCurrentBrushSize={setCurrentBrushSize}
-                clearCanvas={clearAnnotations}
-              />
+              <AnnotationToolbar onMouseDown={handleToolbarMouseDown} currentTool={currentTool} setCurrentTool={setCurrentTool} currentBrushSize={currentBrushSize} setCurrentBrushSize={setCurrentBrushSize} clearCanvas={clearAnnotations} />
             </div>
           )}
           <div
@@ -1231,18 +1135,19 @@ const Meeting = () => {
             onTouchMove={(e) => { touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
             onTouchEnd={() => { if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev) => { const dir = touchDeltaRef.current > 0 ? -1 : 1; const np = Math.max(0, Math.min(prev + dir, totalGridPages - 1)); return np; }); } }}
           >
-            {/***************************************************************/}
-            {/* START: MODIFIED LAYOUT LOGIC FOR LARGER VIDEO FRAMES */}
-            {/***************************************************************/}
+            {/****************************************************************/}
+            {/* START: REVISED LAYOUT FOR TALLER FRAMES AND SPACING          */}
+            {/****************************************************************/}
             {(() => {
               const count = displayParticipants.length;
               const pageStart = gridPage * 4;
               const pageItems = displayParticipants.slice(pageStart, pageStart + 4);
 
+              // 1 participant: Full screen with padding
               if (count === 1) {
                 const p = displayParticipants[0];
                 return (
-                  <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-full h-full flex items-center justify-center p-2">
                     <div className="w-full h-full">
                       {renderVideoPlayer(p, p.isLocal, "w-full h-full object-cover")}
                     </div>
@@ -1250,42 +1155,24 @@ const Meeting = () => {
                 );
               }
 
-              if (count === 2) {
+              // 2 or 3 participants: TALL vertical stack with spacing
+              if (count === 2 || count === 3) {
                 return (
-                  <div className="flex h-full w-full">
-                    <div className="flex-1 h-full flex items-center justify-center">
-                      {renderVideoPlayer(displayParticipants[0], displayParticipants[0].isLocal, "w-full h-full object-cover")}
-                    </div>
-                    <div className="flex-1 h-full flex items-center justify-center">
-                      {renderVideoPlayer(displayParticipants[1], displayParticipants[1].isLocal, "w-full h-full object-cover")}
-                    </div>
-                  </div>
-                );
-              }
-
-              if (count === 3) {
-                const [a, b, c] = displayParticipants;
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full">
-                    <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(a, a.isLocal, "w-full h-full object-cover")}
-                    </div>
-                    <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(b, b.isLocal, "w-full h-full object-cover")}
-                    </div>
-                    <div className="md:col-span-2 h-full flex justify-center items-center">
-                      <div className="w-full md:w-2/3 h-full">
-                        {renderVideoPlayer(c, c.isLocal, "w-full h-full object-cover")}
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 p-2">
+                    {displayParticipants.map(p => (
+                      <div key={p.userId} className="w-full flex-1 min-h-0">
+                         {/* Using object-contain to prevent cropping when aspect ratios differ */}
+                         {renderVideoPlayer(p, p.isLocal, "w-full h-full object-contain")}
                       </div>
-                    </div>
+                    ))}
                   </div>
                 );
               }
 
-              // 4 or more -> paginated 2x2
+              // 4 or more -> paginated 2x2 grid with spacing
               return (
-                <div className="w-full h-full">
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full">
+                <div className="w-full h-full p-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-2">
                     {pageItems.map((p) => (
                       <div
                         key={p.userId}
@@ -1297,34 +1184,19 @@ const Meeting = () => {
                   </div>
                   {totalGridPages > 1 && (
                     <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => setGridPage((p) => Math.max(0, p - 1))}
-                        className="px-2 py-1 bg-gray-700 bg-opacity-70 rounded"
-                      >
-                        ‹
-                      </button>
+                      <button onClick={() => setGridPage((p) => Math.max(0, p - 1))} className="px-2 py-1 bg-gray-700 bg-opacity-70 rounded">‹</button>
                       {Array.from({ length: totalGridPages }, (_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setGridPage(i)}
-                          className={`w-2.5 h-2.5 rounded-full ${gridPage === i ? 'bg-white' : 'bg-gray-500'}`}
-                        />
+                        <button key={i} onClick={() => setGridPage(i)} className={`w-2.5 h-2.5 rounded-full ${gridPage === i ? 'bg-white' : 'bg-gray-500'}`} />
                       ))}
-                      <button
-                        onClick={() => setGridPage((p) => Math.min(totalGridPages - 1, p + 1))}
-                        className="px-2 py-1 bg-gray-700 bg-opacity-70 rounded"
-                      >
-                        ›
-                      </button>
+                      <button onClick={() => setGridPage((p) => Math.min(totalGridPages - 1, p + 1))} className="px-2 py-1 bg-gray-700 bg-opacity-70 rounded">›</button>
                     </div>
                   )}
                 </div>
               );
             })()}
-            {/***************************************************************/}
-            {/* END: MODIFIED LAYOUT LOGIC */}
-            {/***************************************************************/}
-
+            {/****************************************************************/}
+            {/* END: REVISED LAYOUT                                          */}
+            {/****************************************************************/}
             <canvas
               ref={annotationCanvasRef}
               className="absolute top-0 left-0"
@@ -1336,9 +1208,7 @@ const Meeting = () => {
             />
           </div>
         </div>
-        <div
-          className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}
-        >
+        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
           {isChatOpen && <Chat messages={messages} onSendMessage={(message) => {
             const payload = { message, username: user.username, timestamp: new Date().toISOString() };
             socketRef.current?.emit('send-chat-message', payload);

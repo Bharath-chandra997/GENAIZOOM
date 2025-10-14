@@ -1023,9 +1023,9 @@ const Meeting = () => {
         <div 
           className="flex-1 flex flex-col relative overflow-hidden"
           onWheel={(e) => {
-            if (e.deltaY !== 0 && totalGridPages > 1) {
+            if (e.deltaX !== 0 && totalGridPages > 1) {
               e.preventDefault();
-              handleSwipe(e.deltaY > 0 ? 1 : -1);
+              handleSwipe(e.deltaX > 0 ? 1 : -1);
             }
           }}
         >
@@ -1045,7 +1045,7 @@ const Meeting = () => {
                onTouchStart={(e)=>{ touchStartXRef.current = e.touches[0].clientX; touchDeltaRef.current = 0; }}
                onTouchMove={(e)=>{ touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
                onTouchEnd={()=>{ if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev)=>{
-                   const dir = touchDeltaRef.current < 0 ? 1 : -1; const np = Math.max(0, Math.min(prev+dir, totalGridPages-1)); return np; }); } }}>
+                   const dir = touchDeltaRef.current > 0 ? -1 : 1; const np = Math.max(0, Math.min(prev+dir, totalGridPages-1)); return np; }); } }}>
             {/* Responsive grid: 2x2 pages; special cases for 2 and 3 participants */}
             {(() => {
               const count = participants.length;
@@ -1063,7 +1063,7 @@ const Meeting = () => {
               }
               if (count === 2) {
                 return (
-                  <div className="grid grid-cols-2 w-full h-full mx-auto max-w-7xl">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-7xl gap-2">
                     {participants.map((p)=> (
                       <div key={p.userId} className="w-full h-full flex items-center justify-center"><VideoPlayer participant={p} isLocal={p.isLocal} className="mx-auto" /></div>
                     ))}
@@ -1073,11 +1073,11 @@ const Meeting = () => {
               if (count === 3) {
                 const [a,b,c] = participants;
                 return (
-                  <div className="grid grid-cols-2 w-full h-full mx-auto max-w-7xl">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-7xl gap-2">
                     <div className="w-full h-full flex items-center justify-center"><VideoPlayer participant={a} isLocal={a.isLocal} className="mx-auto" /></div>
                     <div className="w-full h-full flex items-center justify-center"><VideoPlayer participant={b} isLocal={b.isLocal} className="mx-auto" /></div>
-                    <div className="col-span-2 h-full flex justify-center items-center">
-                      <div className="w-1/2 min-w-[240px] max-w-xl"><VideoPlayer participant={c} isLocal={c.isLocal} className="mx-auto" /></div>
+                    <div className="md:col-span-2 h-full flex justify-center items-center">
+                      <div className="w-full md:w-1/2 min-w-[240px] max-w-xl"><VideoPlayer participant={c} isLocal={c.isLocal} className="mx-auto" /></div>
                     </div>
                   </div>
                 );
@@ -1085,7 +1085,7 @@ const Meeting = () => {
               // 4 or more -> paginated 2x2
               return (
                 <div className="w-full h-full">
-                  <div className="grid grid-cols-2 w-full h-full mx-auto max-w-7xl">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full mx-auto max-w-7xl gap-2">
                     {pageItems.map((p)=> (
                       <div key={p.userId} className="w-full h-full flex items-center justify-center"><VideoPlayer participant={p} isLocal={p.isLocal} className="mx-auto" /></div>
                     ))}

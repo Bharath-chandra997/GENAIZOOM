@@ -36,7 +36,7 @@
   transition: all var(--transition-base);
   aspect-ratio: 16 / 9;
   max-height: 70vh; /* increased height for better visibility */
-  min-height: 300px; /* ensure minimum height */
+  min-height: 250px; /* reduced minimum height for better responsiveness */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -78,6 +78,13 @@
   color: var(--white);
 }
 
+@media (max-width: 1024px) {
+  .video-container {
+    max-height: 60vh;
+    min-height: 200px;
+  }
+}
+
 @media (max-width: 768px) {
   :root {
     --spacing-sm: 4px;
@@ -85,8 +92,15 @@
   }
   
   .video-container {
-    max-height: 50vh;
-    min-height: 200px;
+    max-height: 45vh;
+    min-height: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .video-container {
+    max-height: 40vh;
+    min-height: 150px;
   }
 }
 

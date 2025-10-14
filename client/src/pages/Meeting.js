@@ -80,6 +80,11 @@ const Meeting = () => {
   const connectionTimeouts = useRef(new Map());
   const iceServersCache = useRef(null);
   const lastIceFetch = useRef(0);
+  
+  // Signaling state management
+  const signalingStates = useRef(new Map()); // Track signaling state per connection
+  const pendingOffers = useRef(new Map()); // Track pending offers
+  const pendingAnswers = useRef(new Map()); // Track pending answers
 
   // Derived State
   const defaultMainParticipant = useMemo(() => {
@@ -263,9 +268,15 @@ const Meeting = () => {
     }
   }, []);
 
-  // Optimized Peer Connection with better configuration
+  // Optimized Peer Connection with signaling state management
   const createPeerConnection = useCallback(
     async (remoteSocketId) => {
+      // Check if connection already exists
+      if (peerConnections.current.has(remoteSocketId)) {
+        console.log('Connection already exists for user:', remoteSocketId);
+        return peerConnections.current.get(remoteSocketId);
+      }
+
       const iceServers = await getIceServers();
       const pc = new RTCPeerConnection({ 
         iceServers,
@@ -274,6 +285,9 @@ const Meeting = () => {
         rtcpMuxPolicy: 'require' // Reduce port usage
       });
       
+      // Initialize signaling state
+      signalingStates.current.set(remoteSocketId, 'new');
+      
       // Set connection timeout with cleanup
       const connectionTimeout = setTimeout(() => {
         if (pc.connectionState === 'connecting') {
@@ -281,6 +295,7 @@ const Meeting = () => {
           pc.close();
           peerConnections.current.delete(remoteSocketId);
           connectionTimeouts.current.delete(remoteSocketId);
+          signalingStates.current.delete(remoteSocketId);
         }
       }, 8000); // 8 second timeout for faster failure detection
       
@@ -307,9 +322,17 @@ const Meeting = () => {
         if (pc.connectionState === 'connected') {
           clearTimeout(connectionTimeout);
           connectionTimeouts.current.delete(remoteSocketId);
-        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          console.log('Successfully connected to user:', remoteSocketId);
+        } else if (pc.connectionState === 'disconnected') {
+          console.log('Connection disconnected for user:', remoteSocketId);
+          // Don't immediately remove on disconnect, allow for reconnection
+        } else if (pc.connectionState === 'failed') {
+          console.error('Connection failed for user:', remoteSocketId);
           clearTimeout(connectionTimeout);
           connectionTimeouts.current.delete(remoteSocketId);
+          signalingStates.current.delete(remoteSocketId);
+          pendingOffers.current.delete(remoteSocketId);
+          pendingAnswers.current.delete(remoteSocketId);
           pc.close();
           peerConnections.current.delete(remoteSocketId);
           setParticipants((prev) => prev.filter((p) => p.userId !== remoteSocketId));
@@ -525,18 +548,26 @@ const Meeting = () => {
 
       try {
         const pc = await createPeerConnection(userId);
-        if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach(track => {
-            console.log('Adding track for user:', userId, track);
-            pc.addTrack(track, localStreamRef.current);
-          });
-        } else {
-          console.warn('localStreamRef.current is null for user:', userId);
-          return;
+        const currentState = signalingStates.current.get(userId);
+        
+        // Only create offer if we're in the right state
+        if (currentState === 'new' || currentState === 'stable') {
+          if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => {
+              console.log('Adding track for user:', userId, track);
+              pc.addTrack(track, localStreamRef.current);
+            });
+          } else {
+            console.warn('localStreamRef.current is null for user:', userId);
+            return;
+          }
+          
+          signalingStates.current.set(userId, 'have-local-offer');
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          pendingOffers.current.set(userId, offer);
+          socket.emit('offer', { to: userId, offer, username: user.username });
         }
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', { to: userId, offer, username: user.username });
       } catch (err) {
         console.error('Error in user-joined handler:', err, { userId, username });
         toast.error(`Failed to connect to user ${username}.`);
@@ -551,13 +582,23 @@ const Meeting = () => {
 
       try {
         const pc = await createPeerConnection(from);
-        if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+        const currentState = signalingStates.current.get(from);
+        
+        // Only process offer if we're in the right state
+        if (currentState === 'new' || currentState === 'stable') {
+          if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+          }
+          
+          signalingStates.current.set(from, 'have-remote-offer');
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          signalingStates.current.set(from, 'stable');
+          socket.emit('answer', { to: from, answer });
+        } else {
+          console.warn('Ignoring offer from', from, 'due to invalid state:', currentState);
         }
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('answer', { to: from, answer });
       } catch (err) {
         console.error('Error in offer handler:', err, { from, username });
         toast.error(`Failed to process offer from ${username}.`);
@@ -566,10 +607,23 @@ const Meeting = () => {
 
     const handleAnswer = ({ from, answer }) => {
       const pc = peerConnections.current.get(from);
-      if (pc) {
-        pc.setRemoteDescription(new RTCSessionDescription(answer)).catch(err => {
-          console.error('Error setting remote description:', err);
-        });
+      const currentState = signalingStates.current.get(from);
+      
+      if (pc && currentState === 'have-local-offer') {
+        pc.setRemoteDescription(new RTCSessionDescription(answer))
+          .then(() => {
+            signalingStates.current.set(from, 'stable');
+            pendingOffers.current.delete(from);
+            console.log('Answer processed successfully for user:', from);
+          })
+          .catch(err => {
+            console.error('Error setting remote description:', err);
+            // Reset state on error
+            signalingStates.current.set(from, 'stable');
+            pendingOffers.current.delete(from);
+          });
+      } else {
+        console.warn('Ignoring answer from', from, 'due to invalid state:', currentState);
       }
     };
 
@@ -795,6 +849,11 @@ const Meeting = () => {
           // Cleanup connection timeouts
           connectionTimeouts.current.forEach(timeout => clearTimeout(timeout));
           connectionTimeouts.current.clear();
+          
+          // Cleanup signaling states
+          signalingStates.current.clear();
+          pendingOffers.current.clear();
+          pendingAnswers.current.clear();
           
           if (socketRef.current) {
             cleanupSocketListeners();

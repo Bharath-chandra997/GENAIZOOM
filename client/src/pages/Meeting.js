@@ -1231,6 +1231,9 @@ const Meeting = () => {
             onTouchMove={(e) => { touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
             onTouchEnd={() => { if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev) => { const dir = touchDeltaRef.current > 0 ? -1 : 1; const np = Math.max(0, Math.min(prev + dir, totalGridPages - 1)); return np; }); } }}
           >
+            {/***************************************************************/}
+            {/* START: MODIFIED LAYOUT LOGIC FOR LARGER VIDEO FRAMES */}
+            {/***************************************************************/}
             {(() => {
               const count = displayParticipants.length;
               const pageStart = gridPage * 4;
@@ -1240,8 +1243,8 @@ const Meeting = () => {
                 const p = displayParticipants[0];
                 return (
                   <div className="w-full h-full flex items-center justify-center">
-                    <div className="w-full max-w-3xl">
-                      {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
+                    <div className="w-full h-full">
+                      {renderVideoPlayer(p, p.isLocal, "w-full h-full object-cover")}
                     </div>
                   </div>
                 );
@@ -1250,10 +1253,10 @@ const Meeting = () => {
               if (count === 2) {
                 return (
                   <div className="flex h-full w-full">
-                    <div className="flex-1 h-full flex items-center justify-center p-1">
+                    <div className="flex-1 h-full flex items-center justify-center">
                       {renderVideoPlayer(displayParticipants[0], displayParticipants[0].isLocal, "w-full h-full object-cover")}
                     </div>
-                    <div className="flex-1 h-full flex items-center justify-center p-1">
+                    <div className="flex-1 h-full flex items-center justify-center">
                       {renderVideoPlayer(displayParticipants[1], displayParticipants[1].isLocal, "w-full h-full object-cover")}
                     </div>
                   </div>
@@ -1263,16 +1266,16 @@ const Meeting = () => {
               if (count === 3) {
                 const [a, b, c] = displayParticipants;
                 return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-1 p-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full">
                     <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(a, a.isLocal, "w-full h-auto")}
+                      {renderVideoPlayer(a, a.isLocal, "w-full h-full object-cover")}
                     </div>
                     <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(b, b.isLocal, "w-full h-auto")}
+                      {renderVideoPlayer(b, b.isLocal, "w-full h-full object-cover")}
                     </div>
                     <div className="md:col-span-2 h-full flex justify-center items-center">
-                      <div className="w-full md:w-1/2 min-w-[200px] max-w-sm">
-                        {renderVideoPlayer(c, c.isLocal, "w-full h-auto")}
+                      <div className="w-full md:w-2/3 h-full">
+                        {renderVideoPlayer(c, c.isLocal, "w-full h-full object-cover")}
                       </div>
                     </div>
                   </div>
@@ -1281,22 +1284,22 @@ const Meeting = () => {
 
               // 4 or more -> paginated 2x2
               return (
-                <div className="w-full h-full p-1">
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-1">
+                <div className="w-full h-full">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full">
                     {pageItems.map((p) => (
                       <div
                         key={p.userId}
                         className="w-full h-full flex items-center justify-center"
                       >
-                        {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
+                        {renderVideoPlayer(p, p.isLocal, "w-full h-full object-cover")}
                       </div>
                     ))}
                   </div>
                   {totalGridPages > 1 && (
-                    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2">
+                    <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-2">
                       <button
                         onClick={() => setGridPage((p) => Math.max(0, p - 1))}
-                        className="px-2 py-1 bg-gray-700 rounded"
+                        className="px-2 py-1 bg-gray-700 bg-opacity-70 rounded"
                       >
                         ‹
                       </button>
@@ -1309,7 +1312,7 @@ const Meeting = () => {
                       ))}
                       <button
                         onClick={() => setGridPage((p) => Math.min(totalGridPages - 1, p + 1))}
-                        className="px-2 py-1 bg-gray-700 rounded"
+                        className="px-2 py-1 bg-gray-700 bg-opacity-70 rounded"
                       >
                         ›
                       </button>
@@ -1318,6 +1321,9 @@ const Meeting = () => {
                 </div>
               );
             })()}
+            {/***************************************************************/}
+            {/* END: MODIFIED LAYOUT LOGIC */}
+            {/***************************************************************/}
 
             <canvas
               ref={annotationCanvasRef}

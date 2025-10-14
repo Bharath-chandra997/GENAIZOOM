@@ -173,7 +173,14 @@ const VideoPlayer = ({
   }
 
   // Regular Video Player
-  const borderColor = isSpeaking ? 'border-green-400 shadow-lg shadow-green-400/50' : 'border-gray-700';
+  let borderColor = isSpeaking ? 'border-green-400 shadow-lg shadow-green-400/50' : 'border-gray-700';
+
+  // --- CHANGE STARTS HERE ---
+  // Use the isPinned prop to apply a different border style
+  if (isPinned) {
+    borderColor = 'border-blue-400 shadow-lg shadow-blue-400/50';
+  }
+  // --- CHANGE ENDS HERE ---
 
   // ✅ Fixed Mirroring Logic
   let videoClass = 'video-element';

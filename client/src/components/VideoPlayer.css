@@ -35,8 +35,9 @@
   box-shadow: var(--shadow-md);
   transition: all var(--transition-base);
   aspect-ratio: 16 / 9;
-  max-height: 70vh; /* increased height for better visibility */
-  min-height: 250px; /* reduced minimum height for better responsiveness */
+  max-height: 50vh; /* reduced height for smaller frames */
+  min-height: 200px; /* reduced minimum height */
+  max-width: 400px; /* added max width constraint */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -80,8 +81,9 @@
 
 @media (max-width: 1024px) {
   .video-container {
-    max-height: 60vh;
-    min-height: 200px;
+    max-height: 45vh;
+    min-height: 180px;
+    max-width: 350px;
   }
 }
 
@@ -92,15 +94,17 @@
   }
   
   .video-container {
-    max-height: 45vh;
-    min-height: 180px;
+    max-height: 35vh;
+    min-height: 150px;
+    max-width: 300px;
   }
 }
 
 @media (max-width: 480px) {
   .video-container {
-    max-height: 40vh;
-    min-height: 150px;
+    max-height: 30vh;
+    min-height: 120px;
+    max-width: 250px;
   }
 }
 

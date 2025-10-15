@@ -52,3 +52,4 @@ numpy>=1.21.0
 requests>=2.25.0
 packaging>=21.0
 python-multipart>=0.0.20
+gradio_client

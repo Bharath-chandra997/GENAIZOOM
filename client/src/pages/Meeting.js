@@ -35,7 +35,6 @@ const Meeting = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
-  const [showAiMiniCard, setShowAiMiniCard] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
@@ -49,7 +48,7 @@ const Meeting = () => {
   const touchStartXRef = useRef(0);
   const touchDeltaRef = useRef(0);
 
-  // State for AI Zoom Bot (shared across users)
+  // Media/AI state (React state only)
   const [imageUrl, setImageUrl] = useState('');
   const [audioUrl, setAudioUrl] = useState('');
   const [output, setOutput] = useState('');
@@ -61,9 +60,6 @@ const Meeting = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
   const [isMediaDisplayed, setIsMediaDisplayed] = useState(false);
-
-  // Session persistence removed; keep simple reconnection flag false
-  const [isReconnecting] = useState(false);
 
   // Refs
   const socketRef = useRef(null);
@@ -91,60 +87,6 @@ const Meeting = () => {
   // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
-  // ✅ FIXED: AI Participant with proper socketId and stable functions
-  const handlePlayAudio = useCallback(() => {
-    setIsPlaying(true);
-    socketRef.current?.emit('ai-audio-play', { roomId });
-  }, [roomId]);
-
-  const handlePauseAudio = useCallback(() => {
-    setIsPlaying(false);
-    socketRef.current?.emit('ai-audio-pause', { roomId });
-  }, [roomId]);
-
-  const aiParticipant = useMemo(() => ({
-    userId: 'ai-bot',
-    username: 'AI Zoom Bot',
-    isAI: true,
-    isLocal: false,
-    isHost: false,
-    videoEnabled: true,
-    audioEnabled: true,
-    isScreenSharing: false,
-    imageUrl,
-    audioUrl,
-    output,
-    isProcessing,
-    isPlaying,
-    isBotLocked,
-    currentUploader,
-    uploaderUsername,
-    handlePlay: handlePlayAudio,
-    handlePause: handlePauseAudio,
-    socketId: socketRef.current?.id,
-  }), [
-    imageUrl,
-    audioUrl,
-    output,
-    isProcessing,
-    isPlaying,
-    isBotLocked,
-    currentUploader,
-    uploaderUsername,
-    handlePlayAudio,
-    handlePauseAudio,
-    socketRef.current?.id
-  ]);
-
-  // ✅ FIXED: Display participants with socketId
-  const displayParticipants = useMemo(() => {
-    const participantsWithSocketId = participants.map(p => ({
-      ...p,
-      socketId: p.userId
-    }));
-    return [aiParticipant, ...participantsWithSocketId];
-  }, [aiParticipant, participants]);
-
   // Derived State
   const defaultMainParticipant = useMemo(() => {
     const screenSharer = participants.find(p => p.isScreenSharing);
@@ -162,6 +104,7 @@ const Meeting = () => {
     participants.some(p => p.isScreenSharing),
     [participants]
   );
+  const displayParticipants = participants; // Remove AI agent frame entirely
   const totalGridPages = useMemo(() => Math.max(1, Math.ceil(displayParticipants.length / 4)), [displayParticipants.length]);
 
   const getUsernameById = useCallback((userId) => {
@@ -425,7 +368,7 @@ const Meeting = () => {
       socket.emit('join-room', {
         roomId,
         username: user.username,
-        isReconnect: isReconnecting
+        isReconnect: false
       }, (otherUsers, sessionData) => {
         const isHost = otherUsers.length === 0;
         const remoteParticipants = otherUsers.map(u => ({
@@ -1064,6 +1007,12 @@ const Meeting = () => {
         username: user.username, 
         roomId 
       });
+      setIsProcessing(true);
+      socketRef.current?.emit('ai-start-processing', { 
+        userId: socketRef.current?.id, 
+        username: user.username, 
+        roomId 
+      });
       
       // Build payload from selected files only
       const formData = new FormData();
@@ -1071,7 +1020,7 @@ const Meeting = () => {
       formData.append('audio', selectedAudio);
       
       const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict';
-      // Optional: also persist this analysis request to meeting session (best-effort only)
+      // Optional: persist request to meeting session (best-effort)
       try {
         await axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, formData, {
           headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` }
@@ -1079,10 +1028,8 @@ const Meeting = () => {
       } catch {}
 
       const response = await axios.post(AI_MODEL_API_URL, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-
       const modelOutput = response.data?.prediction ?? response.data?.result ?? response.data;
       let displayResponse = '';
-      
       if (typeof modelOutput === 'object') {
         displayResponse = modelOutput.answer || modelOutput.response || modelOutput.text || 
                         modelOutput.result || modelOutput.prediction || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || '';
@@ -1093,14 +1040,9 @@ const Meeting = () => {
       } else {
         displayResponse = String(modelOutput);
       }
-      
       setOutput(displayResponse);
-      socketRef.current?.emit('ai-finish-processing', { 
-        response: modelOutput, 
-        roomId 
-      });
+      socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId });
       socketRef.current?.emit('aiProcessed', { response: modelOutput, roomId });
-      
     } catch (error) {
       console.error('AI processing error:', error);
       const status = error?.response?.status;
@@ -1119,7 +1061,6 @@ const Meeting = () => {
     } catch (e) {
       console.warn('Error emitting leave-room:', e);
     }
-    // No localStorage cleanup needed
     setImageUrl('');
     setAudioUrl('');
     setOutput('');
@@ -1159,31 +1100,32 @@ const Meeting = () => {
             }
           }}
         >
-          {/* Left/main area: video grid (70% when media displayed) */}
-          <div className={`flex flex-col min-h-0 w-full`}
-            
-          >
-            {/* Upload controls and gated Display button */}
+          {/* Left/main area: video grid */}
+          <div className={`flex flex-col min-h-0 w-full`}>
+            {/* Upload controls */}
             <div className="bg-gray-800 border-b border-gray-700 p-3">
               <UploadControls
                 canUpload={!isMediaDisplayed}
                 selectedImage={selectedImage}
-                setSelectedImage={setSelectedImage}
+                setSelectedImage={(file) => { setSelectedImage(file || null); if (file) { try { const url = URL.createObjectURL(file); setImageUrl((prev) => { if (prev) try { URL.revokeObjectURL(prev); } catch {} ; return url; }); } catch {} } else { if (imageUrl) { try { URL.revokeObjectURL(imageUrl); } catch {} } setImageUrl(''); } }}
                 selectedAudio={selectedAudio}
-                setSelectedAudio={setSelectedAudio}
+                setSelectedAudio={(file) => { setSelectedAudio(file || null); if (file) { try { const url = URL.createObjectURL(file); setAudioUrl((prev) => { if (prev) try { URL.revokeObjectURL(prev); } catch {} ; return url; }); } catch {} } else { if (audioUrl) { try { URL.revokeObjectURL(audioUrl); } catch {} } setAudioUrl(''); } }}
                 hasImageUrl={!!imageUrl}
                 hasAudioUrl={!!audioUrl}
                 isMediaDisplayed={isMediaDisplayed}
                 onDisplay={async () => {
-                  if (!imageUrl && !audioUrl) { toast.error('Please upload image and/or audio first.'); return; }
+                  if (!selectedImage || !selectedAudio) { toast.error('Please upload both image and audio first.'); return; }
                   setIsMediaDisplayed(true);
                 }}
                 onRemove={() => {
                   setIsMediaDisplayed(false);
+                  if (imageUrl) { try { URL.revokeObjectURL(imageUrl); } catch {} }
+                  if (audioUrl) { try { URL.revokeObjectURL(audioUrl); } catch {} }
                   setSelectedImage(null);
                   setSelectedAudio(null);
                   setImageUrl('');
                   setAudioUrl('');
+                  setOutput('');
                 }}
                 onAnalyze={handleProcessWithAI}
                 isProcessing={isProcessing}
@@ -1245,7 +1187,7 @@ const Meeting = () => {
                     <div className="w-full h-full flex items-center justify-center">
                       {renderVideoPlayer(a, a.isLocal, "w-full h-auto")}
                     </div>
-                    <div className="w-full h-full flex items-center justify-center">
+                    <div className="W-full h-full flex items-center justify-center">
                       {renderVideoPlayer(b, b.isLocal, "w-full h-auto")}
                     </div>
                     <div className="md:col-span-2 h-full flex justify-center items-center">
@@ -1307,8 +1249,7 @@ const Meeting = () => {
               onMouseLeave={handleMouseUp}
             />
           </div>
-        </div>
-            {/* Right panel: 30% media display (sibling to left video column) */}
+            {/* Right panel: 30% media display */}
             {isMediaDisplayed && (
               <div className="h-full">
                 <MediaPanel
@@ -1319,10 +1260,13 @@ const Meeting = () => {
                   onProcess={handleProcessWithAI}
                   onRemove={() => {
                     setIsMediaDisplayed(false);
+                    if (imageUrl) { try { URL.revokeObjectURL(imageUrl); } catch {} }
+                    if (audioUrl) { try { URL.revokeObjectURL(audioUrl); } catch {} }
                     setSelectedImage(null);
                     setSelectedAudio(null);
                     setImageUrl('');
                     setAudioUrl('');
+                    setOutput('');
                   }}
                   output={output}
                 />
@@ -1346,29 +1290,7 @@ const Meeting = () => {
         <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>
         <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
         <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
-        <div className="relative">
-          <button onClick={() => setShowAiMiniCard(v => !v)} className="p-2 rounded text-white bg-purple-600 hover:bg-purple-500">AI Tools</button>
-          {showAiMiniCard && (
-            <div className="absolute bottom-12 right-0 w-80 bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl">
-              {isBotLocked && currentUploader !== socketRef.current?.id && (
-                <div className="mb-2 text-xs p-2 bg-yellow-700 rounded">{uploaderUsername || 'Another user'} is processing...</div>
-              )}
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-sm mb-1">Upload Image</label>
-                  <input type="file" accept="image/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; setSelectedImage(f || null); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1">Upload Audio</label>
-                  <input type="file" accept="audio/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; setSelectedAudio(f || null); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
-                </div>
-                <button onClick={async () => { const hasImg = !!(selectedImage || imageUrl); const hasAud = !!(selectedAudio || audioUrl); if (!hasImg || !hasAud) { toast.error('Please upload both image and audio to process.'); return; } if (isBotLocked && currentUploader !== socketRef.current?.id) { toast.error('Another user is currently processing. Please wait.'); return; } try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); let effImg = imageUrl; let effAud = audioUrl; if (selectedImage && !effImg) { const fd = new FormData(); fd.append('file', selectedImage); const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effImg = r.data?.url; setImageUrl(effImg); socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId }); }
-                  if (selectedAudio && !effAud) { const fd2 = new FormData(); fd2.append('file', selectedAudio); const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effAud = r2.data?.url; setAudioUrl(effAud); socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId }); }
-                  setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3 = new FormData(); if (selectedImage) { fd3.append('image', selectedImage); } if (selectedAudio) { fd3.append('audio', selectedAudio); } try { await axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, fd3, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); } catch {} const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.prediction ?? resp.data?.result ?? resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || modelOutput.prediction || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); socketRef.current?.emit('aiProcessed', { response: modelOutput, roomId }); } catch (e) { console.error(e); toast.error(`AI analyze failed${e?.response?.status ? ` (${e.response.status})` : ''}: ${e?.response?.data?.detail || e.message || 'Unknown error'}`); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
-              </div>
-            </div>
-          )}
-        </div>
+        <button onClick={handleExitRoom} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
       </div>
     </div>
   );

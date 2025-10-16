@@ -9,6 +9,8 @@ import Participants from '../components/Participants';
 import LoadingSpinner from '../components/LoadingSpinner';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
+import ImageAudioSection from '../components/ImageAudioSection';
+import AiResultDisplay from '../components/AiResultDisplay';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
@@ -1162,6 +1164,131 @@ const Meeting = () => {
     socketRef.current?.emit('clear-canvas');
   };
 
+  // Handle AI Processing - New function for the main screen
+  const handleProcessWithAI = async () => {
+    const hasImg = !!(selectedImage || imageUrl);
+    const hasAud = !!(selectedAudio || audioUrl);
+    
+    if (!hasImg || !hasAud) {
+      toast.error('Please upload both image and audio to process.');
+      return;
+    }
+    
+    if (isBotLocked && currentUploader !== socketRef.current?.id) {
+      toast.error('Another user is currently processing. Please wait.');
+      return;
+    }
+    
+    try {
+      setOutput('');
+      setIsBotLocked(true);
+      socketRef.current?.emit('ai-bot-locked', { 
+        userId: socketRef.current?.id, 
+        username: user.username, 
+        roomId 
+      });
+      
+      let effectiveImageUrl = imageUrl;
+      let effectiveAudioUrl = audioUrl;
+      
+      // Upload selected files if they exist
+      if (selectedImage && !effectiveImageUrl) {
+        const formData = new FormData();
+        formData.append('file', selectedImage);
+        const response = await axios.post(`${SERVER_URL}/upload/image`, formData, {
+          headers: { 
+            'Content-Type': 'multipart/form-data', 
+            Authorization: `Bearer ${user.token}` 
+          }
+        });
+        effectiveImageUrl = response.data?.url;
+        setImageUrl(effectiveImageUrl);
+        socketRef.current?.emit('ai-image-uploaded', { 
+          url: effectiveImageUrl, 
+          userId: socketRef.current?.id, 
+          username: user.username, 
+          roomId 
+        });
+      }
+      
+      if (selectedAudio && !effectiveAudioUrl) {
+        const formData = new FormData();
+        formData.append('file', selectedAudio);
+        const response = await axios.post(`${SERVER_URL}/upload/audio`, formData, {
+          headers: { 
+            'Content-Type': 'multipart/form-data', 
+            Authorization: `Bearer ${user.token}` 
+          }
+        });
+        effectiveAudioUrl = response.data?.url;
+        setAudioUrl(effectiveAudioUrl);
+        socketRef.current?.emit('ai-audio-uploaded', { 
+          url: effectiveAudioUrl, 
+          userId: socketRef.current?.id, 
+          username: user.username, 
+          roomId 
+        });
+      }
+      
+      setIsProcessing(true);
+      socketRef.current?.emit('ai-start-processing', { 
+        userId: socketRef.current?.id, 
+        username: user.username, 
+        roomId 
+      });
+      
+      // Process with AI
+      const formData = new FormData();
+      if (effectiveImageUrl) {
+        const imageResponse = await fetch(effectiveImageUrl);
+        const imageBlob = await imageResponse.blob();
+        formData.append('image', new File([imageBlob], 'image.jpg', { 
+          type: imageBlob.type || 'image/jpeg' 
+        }));
+      }
+      if (effectiveAudioUrl) {
+        const audioResponse = await fetch(effectiveAudioUrl);
+        const audioBlob = await audioResponse.blob();
+        formData.append('audio', new File([audioBlob], 'audio.mp3', { 
+          type: audioBlob.type || 'audio/mpeg' 
+        }));
+      }
+      
+      const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict';
+      const response = await axios.post(AI_MODEL_API_URL, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      const modelOutput = response.data?.result || response.data;
+      let displayResponse = '';
+      
+      if (typeof modelOutput === 'object') {
+        displayResponse = modelOutput.answer || modelOutput.response || modelOutput.text || 
+                        modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || '';
+        if (!displayResponse) {
+          const firstStringValue = Object.values(modelOutput).find(val => typeof val === 'string');
+          displayResponse = firstStringValue || JSON.stringify(modelOutput, null, 2);
+        }
+      } else {
+        displayResponse = String(modelOutput);
+      }
+      
+      setOutput(displayResponse);
+      socketRef.current?.emit('ai-finish-processing', { 
+        response: modelOutput, 
+        roomId 
+      });
+      
+    } catch (error) {
+      console.error('AI processing error:', error);
+      toast.error('Failed to process with AI.');
+    } finally {
+      setIsProcessing(false);
+      setIsBotLocked(false);
+      socketRef.current?.emit('ai-bot-unlocked', { roomId });
+    }
+  };
+
   const handleExitRoom = () => {
     try {
       socketRef.current?.emit('leave-room');
@@ -1212,6 +1339,31 @@ const Meeting = () => {
             }
           }}
         >
+          {/* Image and Audio Section - Display for all participants */}
+          {(imageUrl || audioUrl) && (
+            <div className="bg-gray-800 border-b border-gray-700 p-4">
+              <ImageAudioSection
+                imageUrl={imageUrl}
+                audioUrl={audioUrl}
+                uploaderUsername={uploaderUsername}
+                isProcessing={isProcessing}
+                onProcessWithAI={handleProcessWithAI}
+                isBotLocked={isBotLocked}
+                currentUploader={currentUploader}
+                socketId={socketRef.current?.id}
+              />
+            </div>
+          )}
+
+          {/* AI Result Display */}
+          <div className="bg-gray-800 border-b border-gray-700 p-4">
+            <AiResultDisplay
+              output={output}
+              isProcessing={isProcessing}
+              uploaderUsername={uploaderUsername}
+              isVisible={!!(imageUrl || audioUrl || output)}
+            />
+          </div>
           {isSomeoneScreenSharing && (
             <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
               <AnnotationToolbar

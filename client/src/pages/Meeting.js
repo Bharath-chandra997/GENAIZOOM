@@ -1351,226 +1351,226 @@ const Meeting = () => {
           <div className={`${isMediaDisplayed ? 'w-[70%]' : 'w-full'} flex flex-col min-h-0`}
             
           >
-          {/* Upload controls and gated Display button */}
-          <div className="bg-gray-800 border-b border-gray-700 p-3">
-            <UploadControls
-              canUpload={!isMediaDisplayed && (!imageUrl || !audioUrl || currentUploader === socketRef.current?.id)}
-              selectedImage={selectedImage}
-              setSelectedImage={setSelectedImage}
-              selectedAudio={selectedAudio}
-              setSelectedAudio={setSelectedAudio}
-              hasImageUrl={!!imageUrl}
-              hasAudioUrl={!!audioUrl}
-              isMediaDisplayed={isMediaDisplayed}
-              onDisplay={async () => {
-                // Ensure files exist; upload if needed
-                try {
-                  let effImg = imageUrl;
-                  let effAud = audioUrl;
-                  if (selectedImage && !effImg) {
-                    const fd = new FormData();
-                    fd.append('file', selectedImage);
-                    const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
-                    effImg = r.data?.url; setImageUrl(effImg);
-                    socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId });
-                  }
-                  if (selectedAudio && !effAud) {
-                    const fd2 = new FormData();
-                    fd2.append('file', selectedAudio);
-                    const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
-                    effAud = r2.data?.url; setAudioUrl(effAud);
-                    socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId });
-                  }
-                  if (!effImg || !effAud) { toast.error('Please upload both image and audio.'); return; }
-                  setIsMediaDisplayed(true);
-                  socketRef.current?.emit('media-display');
-                } catch (e) { console.error(e); toast.error('Failed to prepare media for display.'); }
-              }}
-            />
-          </div>
-
-          {/* Right panel: 30% media display */}
-          {isMediaDisplayed && (
-            <div className="w-[30%] min-w-[260px] max-w-[460px] h-full">
-              <MediaDisplayPanel
-                imageUrl={imageUrl}
-                audioUrl={audioUrl}
-                uploaderUsername={uploaderUsername}
-                isProcessing={isProcessing}
-                onProcess={handleProcessWithAI}
-                onRemove={() => {
-                  setIsMediaDisplayed(false);
-                  setSelectedImage(null);
-                  setSelectedAudio(null);
-                  // Keep uploaded URLs so users can redisplay unless explicitly cleared
-                  socketRef.current?.emit('media-remove');
+            {/* Upload controls and gated Display button */}
+            <div className="bg-gray-800 border-b border-gray-700 p-3">
+              <UploadControls
+                canUpload={!isMediaDisplayed && (!imageUrl || !audioUrl || currentUploader === socketRef.current?.id)}
+                selectedImage={selectedImage}
+                setSelectedImage={setSelectedImage}
+                selectedAudio={selectedAudio}
+                setSelectedAudio={setSelectedAudio}
+                hasImageUrl={!!imageUrl}
+                hasAudioUrl={!!audioUrl}
+                isMediaDisplayed={isMediaDisplayed}
+                onDisplay={async () => {
+                  // Ensure files exist; upload if needed
+                  try {
+                    let effImg = imageUrl;
+                    let effAud = audioUrl;
+                    if (selectedImage && !effImg) {
+                      const fd = new FormData();
+                      fd.append('file', selectedImage);
+                      const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
+                      effImg = r.data?.url; setImageUrl(effImg);
+                      socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId });
+                    }
+                    if (selectedAudio && !effAud) {
+                      const fd2 = new FormData();
+                      fd2.append('file', selectedAudio);
+                      const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
+                      effAud = r2.data?.url; setAudioUrl(effAud);
+                      socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId });
+                    }
+                    if (!effImg || !effAud) { toast.error('Please upload both image and audio.'); return; }
+                    setIsMediaDisplayed(true);
+                    socketRef.current?.emit('media-display');
+                  } catch (e) { console.error(e); toast.error('Failed to prepare media for display.'); }
                 }}
               />
-              <AiResponseContainer output={output} />
             </div>
-          )}
-          {isSomeoneScreenSharing && (
-            <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
-              <AnnotationToolbar
-                onMouseDown={handleToolbarMouseDown}
-                currentTool={currentTool}
-                setCurrentTool={setCurrentTool}
-                currentBrushSize={currentBrushSize}
-                setCurrentBrushSize={setCurrentBrushSize}
-                clearCanvas={clearAnnotations}
-              />
-            </div>
-          )}
-          <div
-            className="flex-1 min-h-0 relative overflow-hidden h-full"
-            ref={mainVideoContainerRef}
-            onTouchStart={(e) => { touchStartXRef.current = e.touches[0].clientX; touchDeltaRef.current = 0; }}
-            onTouchMove={(e) => { touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
-            onTouchEnd={() => { if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev) => { const dir = touchDeltaRef.current > 0 ? -1 : 1; const np = Math.max(0, Math.min(prev + dir, totalGridPages - 1)); return np; }); } }}
-          >
-            {(() => {
-              const count = displayParticipants.length;
-              const pageStart = gridPage * 4;
-              const pageItems = displayParticipants.slice(pageStart, pageStart + 4);
 
-              if (count === 1) {
-                const p = displayParticipants[0];
-                return (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="w-full max-w-3xl">
-                      {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
-                    </div>
-                  </div>
-                );
-              }
+            {isSomeoneScreenSharing && (
+              <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
+                <AnnotationToolbar
+                  onMouseDown={handleToolbarMouseDown}
+                  currentTool={currentTool}
+                  setCurrentTool={setCurrentTool}
+                  currentBrushSize={currentBrushSize}
+                  setCurrentBrushSize={setCurrentBrushSize}
+                  clearCanvas={clearAnnotations}
+                />
+              </div>
+            )}
+            <div
+              className="flex-1 min-h-0 relative overflow-hidden h-full"
+              ref={mainVideoContainerRef}
+              onTouchStart={(e) => { touchStartXRef.current = e.touches[0].clientX; touchDeltaRef.current = 0; }}
+              onTouchMove={(e) => { touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
+              onTouchEnd={() => { if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev) => { const dir = touchDeltaRef.current > 0 ? -1 : 1; const np = Math.max(0, Math.min(prev + dir, totalGridPages - 1)); return np; }); } }}
+            >
+              {(() => {
+                const count = displayParticipants.length;
+                const pageStart = gridPage * 4;
+                const pageItems = displayParticipants.slice(pageStart, pageStart + 4);
 
-              if (count === 2) {
-                return (
-                  <div className="flex h-full w-full">
-                    <div className="flex-1 h-full flex items-center justify-center p-1">
-                      {renderVideoPlayer(displayParticipants[0], displayParticipants[0].isLocal, "w-full h-full object-cover")}
-                    </div>
-                    <div className="flex-1 h-full flex items-center justify-center p-1">
-                      {renderVideoPlayer(displayParticipants[1], displayParticipants[1].isLocal, "w-full h-full object-cover")}
-                    </div>
-                  </div>
-                );
-              }
-
-              if (count === 3) {
-                const [a, b, c] = displayParticipants;
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-1 p-1">
+                if (count === 1) {
+                  const p = displayParticipants[0];
+                  return (
                     <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(a, a.isLocal, "w-full h-auto")}
-                    </div>
-                    <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(b, b.isLocal, "w-full h-auto")}
-                    </div>
-                    <div className="md:col-span-2 h-full flex justify-center items-center">
-                      <div className="w-full md:w-1/2 min-w-[200px] max-w-sm">
-                        {renderVideoPlayer(c, c.isLocal, "w-full h-auto")}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              // 4 or more -> paginated 2x2
-              return (
-                <div className="w-full h-full p-1">
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-1">
-                    {pageItems.map((p) => (
-                      <div
-                        key={p.userId}
-                        className="w-full h-full flex items-center justify-center"
-                      >
+                      <div className="w-full max-w-3xl">
                         {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
                       </div>
-                    ))}
-                  </div>
-                  {totalGridPages > 1 && (
-                    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => setGridPage((p) => Math.max(0, p - 1))}
-                        className="px-2 py-1 bg-gray-700 rounded"
-                      >
-                        ‹
-                      </button>
-                      {Array.from({ length: totalGridPages }, (_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setGridPage(i)}
-                          className={`w-2.5 h-2.5 rounded-full ${gridPage === i ? 'bg-white' : 'bg-gray-500'}`}
-                        />
-                      ))}
-                      <button
-                        onClick={() => setGridPage((p) => Math.min(totalGridPages - 1, p + 1))}
-                        className="px-2 py-1 bg-gray-700 rounded"
-                      >
-                        ›
-                      </button>
                     </div>
-                  )}
-                </div>
-              );
-            })()}
+                  );
+                }
 
-            <canvas
-              ref={annotationCanvasRef}
-              className="absolute top-0 left-0"
-              style={{ pointerEvents: isSomeoneScreenSharing ? 'auto' : 'none', zIndex: 10, touchAction: 'none' }}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            />
+                if (count === 2) {
+                  return (
+                    <div className="flex h-full w-full">
+                      <div className="flex-1 h-full flex items-center justify-center p-1">
+                        {renderVideoPlayer(displayParticipants[0], displayParticipants[0].isLocal, "w-full h-full object-cover")}
+                      </div>
+                      <div className="flex-1 h-full flex items-center justify-center p-1">
+                        {renderVideoPlayer(displayParticipants[1], displayParticipants[1].isLocal, "w-full h-full object-cover")}
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (count === 3) {
+                  const [a, b, c] = displayParticipants;
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-1 p-1">
+                      <div className="w-full h-full flex items-center justify-center">
+                        {renderVideoPlayer(a, a.isLocal, "w-full h-auto")}
+                      </div>
+                      <div className="w-full h-full flex items-center justify-center">
+                        {renderVideoPlayer(b, b.isLocal, "w-full h-auto")}
+                      </div>
+                      <div className="md:col-span-2 h-full flex justify-center items-center">
+                        <div className="w-full md:w-1/2 min-w-[200px] max-w-sm">
+                          {renderVideoPlayer(c, c.isLocal, "w-full h-auto")}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // 4 or more -> paginated 2x2
+                return (
+                  <div className="w-full h-full p-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-1">
+                      {pageItems.map((p) => (
+                        <div
+                          key={p.userId}
+                          className="w-full h-full flex items-center justify-center"
+                        >
+                          {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
+                        </div>
+                      ))}
+                    </div>
+                    {totalGridPages > 1 && (
+                      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setGridPage((p) => Math.max(0, p - 1))}
+                          className="px-2 py-1 bg-gray-700 rounded"
+                        >
+                          ‹
+                        </button>
+                        {Array.from({ length: totalGridPages }, (_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setGridPage(i)}
+                            className={`w-2.5 h-2.5 rounded-full ${gridPage === i ? 'bg-white' : 'bg-gray-500'}`}
+                          />
+                        ))}
+                        <button
+                          onClick={() => setGridPage((p) => Math.min(totalGridPages - 1, p + 1))}
+                          className="px-2 py-1 bg-gray-700 rounded"
+                        >
+                          ›
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <canvas
+                ref={annotationCanvasRef}
+                className="absolute top-0 left-0"
+                style={{ pointerEvents: isSomeoneScreenSharing ? 'auto' : 'none', zIndex: 10, touchAction: 'none' }}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              />
+            </div>
+            {/* Right panel: 30% media display (sibling to left video column) */}
+            {isMediaDisplayed && (
+              <div className="w-[30%] min-w-[260px] max-w-[460px] h-full">
+                <MediaDisplayPanel
+                  imageUrl={imageUrl}
+                  audioUrl={audioUrl}
+                  uploaderUsername={uploaderUsername}
+                  isProcessing={isProcessing}
+                  onProcess={handleProcessWithAI}
+                  onRemove={() => {
+                    setIsMediaDisplayed(false);
+                    setSelectedImage(null);
+                    setSelectedAudio(null);
+                    // Keep uploaded URLs so users can redisplay unless explicitly cleared
+                    socketRef.current?.emit('media-remove');
+                  }}
+                />
+                <AiResponseContainer output={output} />
+              </div>
+            )}
+          </div>
+          <div
+            className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}
+          >
+            {isChatOpen && <Chat messages={messages} onSendMessage={(message) => {
+              const payload = { message, username: user.username, timestamp: new Date().toISOString() };
+              socketRef.current?.emit('send-chat-message', payload);
+              setMessages((prev) => [...prev, payload]);
+            }} currentUser={user} onClose={() => setIsChatOpen(false)} />}
+            {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
           </div>
         </div>
-        <div
-          className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}
-        >
-          {isChatOpen && <Chat messages={messages} onSendMessage={(message) => {
-            const payload = { message, username: user.username, timestamp: new Date().toISOString() };
-            socketRef.current?.emit('send-chat-message', payload);
-            setMessages((prev) => [...prev, payload]);
-          }} currentUser={user} onClose={() => setIsChatOpen(false)} />}
-          {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
-        </div>
-      </div>
-      <div className="bg-gray-900 border-t border-gray-700 px-2 py-1 flex justify-center gap-1 z-20 relative">
-        <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</button>
-        <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</button>
-        <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>
-        <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
-        <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
-        <div className="relative">
-          <button onClick={() => setShowAiMiniCard(v => !v)} className="p-2 rounded text-white bg-purple-600 hover:bg-purple-500">AI Tools</button>
-          {showAiMiniCard && (
-            <div className="absolute bottom-12 right-0 w-80 bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl">
-              {isBotLocked && currentUploader !== socketRef.current?.id && (
-                <div className="mb-2 text-xs p-2 bg-yellow-700 rounded">{uploaderUsername || 'Another user'} is processing...</div>
-              )}
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-sm mb-1">Upload Image</label>
-                  <input type="file" accept="image/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; if (f) setSelectedImage(f); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
+        <div className="bg-gray-900 border-t border-gray-700 px-2 py-1 flex justify-center gap-1 z-20 relative">
+          <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</button>
+          <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</button>
+          <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>
+          <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
+          <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
+          <div className="relative">
+            <button onClick={() => setShowAiMiniCard(v => !v)} className="p-2 rounded text-white bg-purple-600 hover:bg-purple-500">AI Tools</button>
+            {showAiMiniCard && (
+              <div className="absolute bottom-12 right-0 w-80 bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl">
+                {isBotLocked && currentUploader !== socketRef.current?.id && (
+                  <div className="mb-2 text-xs p-2 bg-yellow-700 rounded">{uploaderUsername || 'Another user'} is processing...</div>
+                )}
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-sm mb-1">Upload Image</label>
+                    <input type="file" accept="image/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; if (f) setSelectedImage(f); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-sm mb-1">Upload Audio</label>
+                    <input type="file" accept="audio/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; if (f) setSelectedAudio(f); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
+                  </div>
+                  <button onClick={async () => { const hasImg = !!(selectedImage || imageUrl); const hasAud = !!(selectedAudio || audioUrl); if (!hasImg || !hasAud) { toast.error('Please upload both image and audio to process.'); return; } if (isBotLocked && currentUploader !== socketRef.current?.id) { toast.error('Another user is currently processing. Please wait.'); return; } try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); let effImg = imageUrl; let effAud = audioUrl; if (selectedImage && !effImg) { const fd = new FormData(); fd.append('file', selectedImage); const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effImg = r.data?.url; setImageUrl(effImg); socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId }); }
+                    if (selectedAudio && !effAud) { const fd2 = new FormData(); fd2.append('file', selectedAudio); const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effAud = r2.data?.url; setAudioUrl(effAud); socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId }); }
+                    setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3 = new FormData(); if (effImg) { const ir = await fetch(effImg); const ib = await ir.blob(); fd3.append('image', new File([ib], 'image.jpg', { type: ib.type || 'image/jpeg' })); } if (effAud) { const ar = await fetch(effAud); const ab = await ar.blob(); fd3.append('audio', new File([ab], 'audio.mp3', { type: ab.type || 'audio/mpeg' })); } const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.result || resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); } catch (e) { console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
                 </div>
-                <div>
-                  <label className="block text-sm mb-1">Upload Audio</label>
-                  <input type="file" accept="audio/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; if (f) setSelectedAudio(f); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
-                </div>
-                <button onClick={async () => { const hasImg = !!(selectedImage || imageUrl); const hasAud = !!(selectedAudio || audioUrl); if (!hasImg || !hasAud) { toast.error('Please upload both image and audio to process.'); return; } if (isBotLocked && currentUploader !== socketRef.current?.id) { toast.error('Another user is currently processing. Please wait.'); return; } try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); let effImg = imageUrl; let effAud = audioUrl; if (selectedImage && !effImg) { const fd = new FormData(); fd.append('file', selectedImage); const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effImg = r.data?.url; setImageUrl(effImg); socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId }); }
-                  if (selectedAudio && !effAud) { const fd2 = new FormData(); fd2.append('file', selectedAudio); const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effAud = r2.data?.url; setAudioUrl(effAud); socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId }); }
-                  setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3 = new FormData(); if (effImg) { const ir = await fetch(effImg); const ib = await ir.blob(); fd3.append('image', new File([ib], 'image.jpg', { type: ib.type || 'image/jpeg' })); } if (effAud) { const ar = await fetch(effAud); const ab = await ar.blob(); fd3.append('audio', new File([ab], 'audio.mp3', { type: ab.type || 'audio/mpeg' })); } const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.result || resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); } catch (e) { console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+          <button onClick={handleExitRoom} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
         </div>
-        <button onClick={handleExitRoom} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
       </div>
     </div>
   );
 };
-
 export default Meeting;

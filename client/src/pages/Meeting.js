@@ -323,6 +323,71 @@ const Meeting = () => {
     setUploaderUsername(username || getUsernameById(userId));
   }, [getUsernameById]);
 
+  // Real-time upload notification handler
+  const handleUploadNotification = useCallback(({ username }) => {
+    toast.info(`${username} is uploading image and audio files.`, {
+      position: "top-center",
+      autoClose: 3000,
+      hideProgressBar: true,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+    });
+  }, []);
+
+  // Shared media display handler
+  const handleSharedMediaDisplay = useCallback(({ imageUrl: img, audioUrl: aud, username }) => {
+    if (img) setImageUrl(img);
+    if (aud) setAudioUrl(aud);
+    setUploaderUsername(username);
+    setIsMediaDisplayed(true);
+  }, []);
+
+  // Shared media removal handler
+  const handleSharedMediaRemoval = useCallback(() => {
+    setIsMediaDisplayed(false);
+    setImageUrl('');
+    setAudioUrl('');
+    setOutput('');
+    setUploaderUsername('');
+  }, []);
+
+  // AI processing notification handler
+  const handleAiProcessingNotification = useCallback(({ username }) => {
+    toast.info(`${username} is analyzing the uploaded media with AI.`, {
+      position: "top-center",
+      autoClose: 3000,
+      hideProgressBar: true,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+    });
+  }, []);
+
+  // Shared AI result handler
+  const handleSharedAiResult = useCallback(({ response, username }) => {
+    let displayResponse = '';
+    if (typeof response === 'object') {
+      if (response.answer) {
+        displayResponse = response.answer;
+      } else if (response.response) {
+        displayResponse = response.response;
+      } else if (response.text) {
+        displayResponse = response.text;
+      } else if (response.result) {
+        displayResponse = response.result;
+      } else if (response.prediction) {
+        displayResponse = response.prediction;
+      } else {
+        displayResponse = JSON.stringify(response, null, 2);
+      }
+    } else {
+      displayResponse = String(response);
+    }
+    setOutput(displayResponse);
+    setUploaderUsername(username);
+  }, []);
+
   const handleAiAudioUploaded = useCallback(({ url, userId, username }) => {
     console.log(`Received ai-audio-uploaded: url=${url}, userId=${userId}, username=${username}`);
     setAudioUrl(url);
@@ -622,6 +687,13 @@ const Meeting = () => {
     socket.on('mediaDisplayed', () => setIsMediaDisplayed(true));
     socket.on('mediaRemoved', () => setIsMediaDisplayed(false));
     socket.on('aiProcessed', handleAiProcessed);
+    
+    // New real-time event handlers
+    socket.on('upload-notification', handleUploadNotification);
+    socket.on('shared-media-display', handleSharedMediaDisplay);
+    socket.on('shared-media-removal', handleSharedMediaRemoval);
+    socket.on('ai-processing-notification', handleAiProcessingNotification);
+    socket.on('shared-ai-result', handleSharedAiResult);
 
     socket.on('session-restored', (sessionData) => {
       console.log('Session restored from server:', sessionData);
@@ -657,6 +729,14 @@ const Meeting = () => {
       socket.off('mediaDisplayed');
       socket.off('mediaRemoved');
       socket.off('aiProcessed', handleAiProcessed);
+      
+      // Cleanup new real-time event handlers
+      socket.off('upload-notification', handleUploadNotification);
+      socket.off('shared-media-display', handleSharedMediaDisplay);
+      socket.off('shared-media-removal', handleSharedMediaRemoval);
+      socket.off('ai-processing-notification', handleAiProcessingNotification);
+      socket.off('shared-ai-result', handleSharedAiResult);
+      
       socket.off('session-restored');
     };
   }, [
@@ -674,6 +754,11 @@ const Meeting = () => {
     handleAiAudioPlay,
     handleAiAudioPause,
     handleAiProcessed,
+    handleUploadNotification,
+    handleSharedMediaDisplay,
+    handleSharedMediaRemoval,
+    handleAiProcessingNotification,
+    handleSharedAiResult,
     restoreSessionData
   ]);
 
@@ -1012,6 +1097,11 @@ const Meeting = () => {
         username: user.username, 
         roomId 
       });
+      // Emit AI processing notification to all participants
+      socketRef.current?.emit('ai-processing-notification', {
+        username: user.username,
+        roomId
+      });
       
       // Build payload from selected files only
       const formData = new FormData();
@@ -1050,6 +1140,12 @@ const Meeting = () => {
       setOutput(displayResponse);
       socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId });
       socketRef.current?.emit('aiProcessed', { response: modelOutput, roomId });
+      // Emit shared AI result to all participants
+      socketRef.current?.emit('shared-ai-result', {
+        response: modelOutput,
+        username: user.username,
+        roomId
+      });
     } catch (error) {
       console.error('AI processing error:', error);
       const status = error?.response?.status;
@@ -1115,15 +1211,68 @@ const Meeting = () => {
               <UploadControls
                 canUpload={!isMediaDisplayed}
                 selectedImage={selectedImage}
-                setSelectedImage={(file) => { setSelectedImage(file || null); if (file) { try { const url = URL.createObjectURL(file); setImageUrl((prev) => { if (prev) try { URL.revokeObjectURL(prev); } catch {} ; return url; }); } catch {} } else { if (imageUrl) { try { URL.revokeObjectURL(imageUrl); } catch {} } setImageUrl(''); } }}
+                setSelectedImage={(file) => { 
+                  setSelectedImage(file || null); 
+                  if (file) { 
+                    try { 
+                      const url = URL.createObjectURL(file); 
+                      setImageUrl((prev) => { 
+                        if (prev) try { URL.revokeObjectURL(prev); } catch {} ; 
+                        return url; 
+                      }); 
+                      // Emit upload notification when both files are selected
+                      if (selectedAudio) {
+                        socketRef.current?.emit('upload-notification', { 
+                          username: user.username, 
+                          roomId 
+                        });
+                      }
+                    } catch {} 
+                  } else { 
+                    if (imageUrl) { 
+                      try { URL.revokeObjectURL(imageUrl); } catch {} 
+                    } 
+                    setImageUrl(''); 
+                  } 
+                }}
                 selectedAudio={selectedAudio}
-                setSelectedAudio={(file) => { setSelectedAudio(file || null); if (file) { try { const url = URL.createObjectURL(file); setAudioUrl((prev) => { if (prev) try { URL.revokeObjectURL(prev); } catch {} ; return url; }); } catch {} } else { if (audioUrl) { try { URL.revokeObjectURL(audioUrl); } catch {} } setAudioUrl(''); } }}
+                setSelectedAudio={(file) => { 
+                  setSelectedAudio(file || null); 
+                  if (file) { 
+                    try { 
+                      const url = URL.createObjectURL(file); 
+                      setAudioUrl((prev) => { 
+                        if (prev) try { URL.revokeObjectURL(prev); } catch {} ; 
+                        return url; 
+                      }); 
+                      // Emit upload notification when both files are selected
+                      if (selectedImage) {
+                        socketRef.current?.emit('upload-notification', { 
+                          username: user.username, 
+                          roomId 
+                        });
+                      }
+                    } catch {} 
+                  } else { 
+                    if (audioUrl) { 
+                      try { URL.revokeObjectURL(audioUrl); } catch {} 
+                    } 
+                    setAudioUrl(''); 
+                  } 
+                }}
                 hasImageUrl={!!imageUrl}
                 hasAudioUrl={!!audioUrl}
                 isMediaDisplayed={isMediaDisplayed}
                 onDisplay={async () => {
                   if (!selectedImage || !selectedAudio) { toast.error('Please upload both image and audio first.'); return; }
                   setIsMediaDisplayed(true);
+                  // Emit shared media display event to all participants
+                  socketRef.current?.emit('shared-media-display', {
+                    imageUrl,
+                    audioUrl,
+                    username: user.username,
+                    roomId
+                  });
                 }}
                 onRemove={() => {
                   setIsMediaDisplayed(false);
@@ -1134,6 +1283,10 @@ const Meeting = () => {
                   setImageUrl('');
                   setAudioUrl('');
                   setOutput('');
+                  // Emit shared media removal event to all participants
+                  socketRef.current?.emit('shared-media-removal', {
+                    roomId
+                  });
                 }}
                 onAnalyze={handleProcessWithAI}
                 isProcessing={isProcessing}
@@ -1265,18 +1418,6 @@ const Meeting = () => {
                 imageUrl={imageUrl}
                 audioUrl={audioUrl}
                 uploaderUsername={uploaderUsername}
-                isProcessing={isProcessing}
-                onProcess={handleProcessWithAI}
-                onRemove={() => {
-                  setIsMediaDisplayed(false);
-                  if (imageUrl) { try { URL.revokeObjectURL(imageUrl); } catch {} }
-                  if (audioUrl) { try { URL.revokeObjectURL(audioUrl); } catch {} }
-                  setSelectedImage(null);
-                  setSelectedAudio(null);
-                  setImageUrl('');
-                  setAudioUrl('');
-                  setOutput('');
-                }}
                 output={output}
               />
             </div>

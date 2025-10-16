@@ -1043,8 +1043,8 @@ const Meeting = () => {
 
   // Handle AI Processing - New function for the main screen
   const handleProcessWithAI = async () => {
-    const hasImg = !!(selectedImage || imageUrl);
-    const hasAud = !!(selectedAudio || audioUrl);
+    const hasImg = !!selectedImage;
+    const hasAud = !!selectedAudio;
     
     if (!hasImg || !hasAud) {
       toast.error('Please upload both image and audio to process.');
@@ -1065,83 +1065,27 @@ const Meeting = () => {
         roomId 
       });
       
-      let effectiveImageUrl = imageUrl;
-      let effectiveAudioUrl = audioUrl;
-      
-      // Upload selected files if they exist
-      if (selectedImage && !effectiveImageUrl) {
-        const formData = new FormData();
-        formData.append('file', selectedImage);
-        const response = await axios.post(`${SERVER_URL}/upload/image`, formData, {
-          headers: { 
-            'Content-Type': 'multipart/form-data', 
-            Authorization: `Bearer ${user.token}` 
-          }
-        });
-        effectiveImageUrl = response.data?.url;
-        setImageUrl(effectiveImageUrl);
-        socketRef.current?.emit('ai-image-uploaded', { 
-          url: effectiveImageUrl, 
-          userId: socketRef.current?.id, 
-          username: user.username, 
-          roomId 
-        });
-      }
-      
-      if (selectedAudio && !effectiveAudioUrl) {
-        const formData = new FormData();
-        formData.append('file', selectedAudio);
-        const response = await axios.post(`${SERVER_URL}/upload/audio`, formData, {
-          headers: { 
-            'Content-Type': 'multipart/form-data', 
-            Authorization: `Bearer ${user.token}` 
-          }
-        });
-        effectiveAudioUrl = response.data?.url;
-        setAudioUrl(effectiveAudioUrl);
-        socketRef.current?.emit('ai-audio-uploaded', { 
-          url: effectiveAudioUrl, 
-          userId: socketRef.current?.id, 
-          username: user.username, 
-          roomId 
-        });
-      }
-      
-      setIsProcessing(true);
-      socketRef.current?.emit('ai-start-processing', { 
-        userId: socketRef.current?.id, 
-        username: user.username, 
-        roomId 
-      });
-      
-      // Process with AI
+      // Build payload from selected files only
       const formData = new FormData();
-      if (effectiveImageUrl) {
-        const imageResponse = await fetch(effectiveImageUrl);
-        const imageBlob = await imageResponse.blob();
-        formData.append('image', new File([imageBlob], 'image.jpg', { 
-          type: imageBlob.type || 'image/jpeg' 
-        }));
-      }
-      if (effectiveAudioUrl) {
-        const audioResponse = await fetch(effectiveAudioUrl);
-        const audioBlob = await audioResponse.blob();
-        formData.append('audio', new File([audioBlob], 'audio.mp3', { 
-          type: audioBlob.type || 'audio/mpeg' 
-        }));
-      }
+      formData.append('image', selectedImage);
+      formData.append('audio', selectedAudio);
       
       const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict';
-      const response = await axios.post(AI_MODEL_API_URL, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      const modelOutput = response.data?.result || response.data;
+      // Optional: also persist this analysis request to meeting session (best-effort only)
+      try {
+        await axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` }
+        });
+      } catch {}
+
+      const response = await axios.post(AI_MODEL_API_URL, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+
+      const modelOutput = response.data?.prediction ?? response.data?.result ?? response.data;
       let displayResponse = '';
       
       if (typeof modelOutput === 'object') {
         displayResponse = modelOutput.answer || modelOutput.response || modelOutput.text || 
-                        modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || '';
+                        modelOutput.result || modelOutput.prediction || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || '';
         if (!displayResponse) {
           const firstStringValue = Object.values(modelOutput).find(val => typeof val === 'string');
           displayResponse = firstStringValue || JSON.stringify(modelOutput, null, 2);
@@ -1159,7 +1103,9 @@ const Meeting = () => {
       
     } catch (error) {
       console.error('AI processing error:', error);
-      toast.error('Failed to process with AI.');
+      const status = error?.response?.status;
+      const detail = error?.response?.data?.detail || error?.message || 'Unknown error';
+      toast.error(`AI analyze failed${status ? ` (${status})` : ''}: ${detail}`);
     } finally {
       setIsProcessing(false);
       setIsBotLocked(false);
@@ -1416,7 +1362,9 @@ const Meeting = () => {
                   <label className="block text-sm mb-1">Upload Audio</label>
                   <input type="file" accept="audio/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; setSelectedAudio(f || null); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
                 </div>
-                <button onClick={async () => { const hasImg = !!(selectedImage); const hasAud = !!(selectedAudio); if (!hasImg || !hasAud) { toast.error('Please upload both image and audio to process.'); return; } if (isBotLocked && currentUploader !== socketRef.current?.id) { toast.error('Another user is currently processing. Please wait.'); return; } try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); setIsProcessing(true); const fd3 = new FormData(); if (selectedImage) { fd3.append('image', selectedImage); } if (selectedAudio) { fd3.append('audio', selectedAudio); } try { await axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, fd3, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); } catch (e) { console.warn('upload endpoint error', e?.message || e); } const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.result || resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); } catch (e) { console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage) || !(selectedAudio)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
+                <button onClick={async () => { const hasImg = !!(selectedImage || imageUrl); const hasAud = !!(selectedAudio || audioUrl); if (!hasImg || !hasAud) { toast.error('Please upload both image and audio to process.'); return; } if (isBotLocked && currentUploader !== socketRef.current?.id) { toast.error('Another user is currently processing. Please wait.'); return; } try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); let effImg = imageUrl; let effAud = audioUrl; if (selectedImage && !effImg) { const fd = new FormData(); fd.append('file', selectedImage); const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effImg = r.data?.url; setImageUrl(effImg); socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId }); }
+                  if (selectedAudio && !effAud) { const fd2 = new FormData(); fd2.append('file', selectedAudio); const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effAud = r2.data?.url; setAudioUrl(effAud); socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId }); }
+                  setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3 = new FormData(); if (selectedImage) { fd3.append('image', selectedImage); } if (selectedAudio) { fd3.append('audio', selectedAudio); } try { await axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, fd3, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); } catch {} const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.prediction ?? resp.data?.result ?? resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || modelOutput.prediction || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); socketRef.current?.emit('aiProcessed', { response: modelOutput, roomId }); } catch (e) { console.error(e); toast.error(`AI analyze failed${e?.response?.status ? ` (${e.response.status})` : ''}: ${e?.response?.data?.detail || e.message || 'Unknown error'}`); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
               </div>
             </div>
           )}

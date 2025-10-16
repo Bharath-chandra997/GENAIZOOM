@@ -42,7 +42,7 @@ app.add_middleware(
 
 # --- API ROUTES ---
 
-@app.post("/predict")
+@app.post("/upload")
 async def predict(image: UploadFile = File(...), audio: UploadFile = File(...)):
     """
     Proxy endpoint for the VQA model.

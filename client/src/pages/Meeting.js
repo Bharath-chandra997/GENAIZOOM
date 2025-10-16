@@ -11,6 +11,9 @@ import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
 import ImageAudioSection from '../components/ImageAudioSection';
 import AiResultDisplay from '../components/AiResultDisplay';
+import UploadControls from '../components/UploadControls';
+import MediaDisplayPanel from '../components/MediaDisplayPanel';
+import AiResponseContainer from '../components/AiResponseContainer';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
@@ -60,6 +63,7 @@ const Meeting = () => {
   const [uploaderUsername, setUploaderUsername] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedAudio, setSelectedAudio] = useState(null);
+  const [isMediaDisplayed, setIsMediaDisplayed] = useState(false);
 
   // Session persistence state
   const [sessionRestored, setSessionRestored] = useState(false);
@@ -775,6 +779,8 @@ const Meeting = () => {
     socket.on('ai-bot-unlocked', handleAiBotUnlocked);
     socket.on('ai-audio-play', handleAiAudioPlay);
     socket.on('ai-audio-pause', handleAiAudioPause);
+    socket.on('media-display', () => setIsMediaDisplayed(true));
+    socket.on('media-remove', () => setIsMediaDisplayed(false));
 
     socket.on('session-restored', (sessionData) => {
       console.log('Session restored from server:', sessionData);
@@ -804,6 +810,8 @@ const Meeting = () => {
       socket.off('ai-bot-unlocked', handleAiBotUnlocked);
       socket.off('ai-audio-play', handleAiAudioPlay);
       socket.off('ai-audio-pause', handleAiAudioPause);
+      socket.off('media-display');
+      socket.off('media-remove');
       socket.off('session-restored');
     };
   }, [
@@ -1331,7 +1339,7 @@ const Meeting = () => {
       </div>
       <div className="flex-1 flex relative overflow-hidden">
         <div
-          className="flex-1 flex flex-col relative overflow-hidden"
+          className={`flex-1 flex ${isMediaDisplayed ? 'flex-row' : 'flex-col'} relative overflow-hidden`}
           onWheel={(e) => {
             if (e.deltaX !== 0 && totalGridPages > 1) {
               e.preventDefault();
@@ -1339,31 +1347,68 @@ const Meeting = () => {
             }
           }}
         >
-          {/* Image and Audio Section - Display for all participants */}
-          {(imageUrl || audioUrl) && (
-            <div className="bg-gray-800 border-b border-gray-700 p-4">
-              <ImageAudioSection
+          {/* Left/main area: video grid (70% when media displayed) */}
+          <div className={`${isMediaDisplayed ? 'w-[70%]' : 'w-full'} flex flex-col min-h-0`}
+            
+          >
+          {/* Upload controls and gated Display button */}
+          <div className="bg-gray-800 border-b border-gray-700 p-3">
+            <UploadControls
+              canUpload={!isMediaDisplayed && (!imageUrl || !audioUrl || currentUploader === socketRef.current?.id)}
+              selectedImage={selectedImage}
+              setSelectedImage={setSelectedImage}
+              selectedAudio={selectedAudio}
+              setSelectedAudio={setSelectedAudio}
+              hasImageUrl={!!imageUrl}
+              hasAudioUrl={!!audioUrl}
+              isMediaDisplayed={isMediaDisplayed}
+              onDisplay={async () => {
+                // Ensure files exist; upload if needed
+                try {
+                  let effImg = imageUrl;
+                  let effAud = audioUrl;
+                  if (selectedImage && !effImg) {
+                    const fd = new FormData();
+                    fd.append('file', selectedImage);
+                    const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
+                    effImg = r.data?.url; setImageUrl(effImg);
+                    socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId });
+                  }
+                  if (selectedAudio && !effAud) {
+                    const fd2 = new FormData();
+                    fd2.append('file', selectedAudio);
+                    const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
+                    effAud = r2.data?.url; setAudioUrl(effAud);
+                    socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId });
+                  }
+                  if (!effImg || !effAud) { toast.error('Please upload both image and audio.'); return; }
+                  setIsMediaDisplayed(true);
+                  socketRef.current?.emit('media-display');
+                } catch (e) { console.error(e); toast.error('Failed to prepare media for display.'); }
+              }}
+            />
+          </div>
+
+          {/* Right panel: 30% media display */}
+          {isMediaDisplayed && (
+            <div className="w-[30%] min-w-[260px] max-w-[460px] h-full">
+              <MediaDisplayPanel
                 imageUrl={imageUrl}
                 audioUrl={audioUrl}
                 uploaderUsername={uploaderUsername}
                 isProcessing={isProcessing}
-                onProcessWithAI={handleProcessWithAI}
-                isBotLocked={isBotLocked}
-                currentUploader={currentUploader}
-                socketId={socketRef.current?.id}
+                onProcess={handleProcessWithAI}
+                onRemove={() => {
+                  setIsMediaDisplayed(false);
+                  setSelectedImage(null);
+                  setSelectedAudio(null);
+                  // Keep uploaded URLs so users can redisplay unless explicitly cleared
+                  socketRef.current?.emit('media-remove');
+                }}
               />
+              <AiResponseContainer output={output} />
             </div>
           )}
-
-          {/* AI Result Display */}
-          <div className="bg-gray-800 border-b border-gray-700 p-4">
-            <AiResultDisplay
-              output={output}
-              isProcessing={isProcessing}
-              uploaderUsername={uploaderUsername}
-              isVisible={!!(imageUrl || audioUrl || output)}
-            />
-          </div>
           {isSomeoneScreenSharing && (
             <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
               <AnnotationToolbar

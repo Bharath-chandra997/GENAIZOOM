@@ -746,6 +746,23 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Media display flow
+  socket.on('media-display', () => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting media-display from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('media-display', { userId: socket.id, username: socketIdToUsername[socket.id] });
+    }
+  });
+
+  socket.on('media-remove', () => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting media-remove from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('media-remove', { userId: socket.id, username: socketIdToUsername[socket.id] });
+    }
+  });
+
   const drawingEvents = ['drawing-start', 'drawing-move', 'drawing-end', 'clear-canvas', 'draw-shape'];
   drawingEvents.forEach((event) => {
     socket.on(event, (data) => {

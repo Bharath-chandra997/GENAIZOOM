@@ -1015,8 +1015,15 @@ const Meeting = () => {
       
       // Build payload from selected files only
       const formData = new FormData();
+      console.debug('[Analyze] Selected files:', {
+        imageName: selectedImage?.name,
+        imageType: selectedImage?.type,
+        audioName: selectedAudio?.name,
+        audioType: selectedAudio?.type,
+      });
       formData.append('image', selectedImage);
       formData.append('audio', selectedAudio);
+      console.debug('[Analyze] FormData appended keys: image, audio');
       
       const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict';
       // Optional: persist request to meeting session (best-effort)
@@ -1026,6 +1033,7 @@ const Meeting = () => {
         });
       } catch {}
 
+      console.debug('[Analyze] Posting to AI endpoint:', AI_MODEL_API_URL);
       const response = await axios.post(AI_MODEL_API_URL, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       const modelOutput = response.data?.prediction ?? response.data?.result ?? response.data;
       let displayResponse = '';
@@ -1046,7 +1054,8 @@ const Meeting = () => {
       console.error('AI processing error:', error);
       const status = error?.response?.status;
       const detail = error?.response?.data?.detail || error?.message || 'Unknown error';
-      toast.error(`AI analyze failed${status ? ` (${status})` : ''}: ${detail}`);
+      toast.error('AI analysis failed. Please try again.');
+      console.debug('[Analyze] Failure details:', { status, detail });
     } finally {
       setIsProcessing(false);
       setIsBotLocked(false);

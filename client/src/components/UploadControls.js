@@ -52,8 +52,8 @@ const UploadControls = ({
           <button
             type="button"
             onClick={onRemove}
-            disabled={!isMediaDisplayed}
-            className={`px-3 py-2 rounded ${isMediaDisplayed ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
+            disabled={!hasAny}
+            className={`px-3 py-2 rounded ${hasAny ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
           >
             Remove
           </button>

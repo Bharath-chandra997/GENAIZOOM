@@ -62,9 +62,8 @@ const Meeting = () => {
   const [selectedAudio, setSelectedAudio] = useState(null);
   const [isMediaDisplayed, setIsMediaDisplayed] = useState(false);
 
-  // Session persistence state
-  const [sessionRestored, setSessionRestored] = useState(false);
-  const [isReconnecting, setIsReconnecting] = useState(false);
+  // Session persistence removed; keep simple reconnection flag false
+  const [isReconnecting] = useState(false);
 
   // Refs
   const socketRef = useRef(null);
@@ -170,102 +169,8 @@ const Meeting = () => {
     return participant ? (participant.isLocal ? user.username : participant.username) : 'Another user';
   }, [participants, user.username]);
 
-  // Session persistence functions
-  const saveSessionToStorage = useCallback((data) => {
-    try {
-      localStorage.setItem(`meeting_session_${roomId}`, JSON.stringify({
-        ...data,
-        timestamp: Date.now()
-      }));
-    } catch (error) {
-      console.error('Error saving session to storage:', error);
-    }
-  }, [roomId]);
-
-  const loadSessionFromStorage = useCallback(() => {
-    try {
-      const stored = localStorage.getItem(`meeting_session_${roomId}`);
-      if (stored) {
-        const data = JSON.parse(stored);
-        if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
-          return data;
-        }
-      }
-    } catch (error) {
-      console.error('Error loading session from storage:', error);
-    }
-    return null;
-  }, [roomId]);
-
-  const restoreSessionData = useCallback((sessionData) => {
-    if (sessionData) {
-      console.log('Restoring session data:', sessionData);
-
-      if (sessionData.uploadedFiles && sessionData.uploadedFiles.length > 0) {
-        const imageFile = sessionData.uploadedFiles.find(f => f.type === 'image');
-        const audioFile = sessionData.uploadedFiles.find(f => f.type === 'audio');
-
-        if (imageFile) {
-          console.log('Restoring image:', imageFile);
-          setImageUrl(imageFile.url);
-          setCurrentUploader(imageFile.uploadedBy);
-          setUploaderUsername(imageFile.uploadedByUsername);
-        }
-
-        if (audioFile) {
-          console.log('Restoring audio:', audioFile);
-          setAudioUrl(audioFile.url);
-          setCurrentUploader(audioFile.uploadedBy);
-          setUploaderUsername(audioFile.uploadedByUsername);
-        }
-      }
-
-      if (sessionData.aiState) {
-        console.log('Restoring AI state:', sessionData.aiState);
-        if (sessionData.aiState.output) {
-          let output = sessionData.aiState.output;
-          if (typeof output === 'string') {
-            try {
-              const parsed = JSON.parse(output);
-              if (typeof parsed === 'object') {
-                if (parsed.answer) {
-                  output = parsed.answer;
-                } else if (parsed.response) {
-                  output = parsed.response;
-                } else if (parsed.text) {
-                  output = parsed.text;
-                } else if (parsed.result) {
-                  output = parsed.result;
-                } else if (parsed.data && parsed.data.answer) {
-                  output = parsed.data.answer;
-                } else if (parsed.data && parsed.data.response) {
-                  output = parsed.data.response;
-                } else {
-                  const firstStringValue = Object.values(parsed).find(val => typeof val === 'string');
-                  output = firstStringValue || output;
-                }
-              }
-            } catch (e) {
-              console.log('Could not parse AI output, using as string:', output);
-            }
-          }
-          setOutput(output);
-        }
-        if (sessionData.aiState.isProcessing) {
-          setIsProcessing(true);
-          setCurrentUploader(sessionData.aiState.currentUploader);
-          setUploaderUsername(sessionData.aiState.uploaderUsername);
-        }
-      }
-
-      if (sessionData.chatMessages) {
-        console.log('Restoring chat messages:', sessionData.chatMessages);
-        setMessages(sessionData.chatMessages);
-      }
-
-      setSessionRestored(true);
-    }
-  }, []);
+  // Removed session persistence/localStorage restores
+  const restoreSessionData = useCallback(() => {}, []);
 
   // Optimized ICE Servers with caching and timeout
   const getIceServers = useCallback(async () => {
@@ -389,39 +294,7 @@ const Meeting = () => {
     [getIceServers]
   );
 
-  // Save session data when it changes
-  const saveCurrentSession = useCallback(() => {
-    const sessionData = {
-      uploadedFiles: [],
-      aiState: {
-        isProcessing,
-        currentUploader,
-        uploaderUsername,
-        output
-      },
-      chatMessages: messages
-    };
-
-    if (imageUrl) {
-      sessionData.uploadedFiles.push({
-        type: 'image',
-        url: imageUrl,
-        uploadedBy: currentUploader,
-        uploadedByUsername: uploaderUsername
-      });
-    }
-
-    if (audioUrl) {
-      sessionData.uploadedFiles.push({
-        type: 'audio',
-        url: audioUrl,
-        uploadedBy: currentUploader,
-        uploadedByUsername: uploaderUsername
-      });
-    }
-
-    saveSessionToStorage(sessionData);
-  }, [imageUrl, audioUrl, isProcessing, currentUploader, uploaderUsername, output, messages, saveSessionToStorage]);
+  // Removed session persistence/save
 
   // AI Zoom Bot Socket Handlers
   const handleAiStartProcessing = useCallback(({ userId, username }) => {
@@ -579,16 +452,7 @@ const Meeting = () => {
         };
         setParticipants([localParticipant, ...remoteParticipants]);
 
-        if (sessionData) {
-          console.log('Restoring session data from server:', sessionData);
-          restoreSessionData(sessionData);
-        } else {
-          const storedSession = loadSessionFromStorage();
-          if (storedSession) {
-            console.log('Restoring session data from local storage:', storedSession);
-            restoreSessionData(storedSession);
-          }
-        }
+        if (sessionData) { /* ignore auto restore */ }
 
         setIsReconnecting(false);
         setIsLoading(false);
@@ -905,13 +769,7 @@ const Meeting = () => {
         localCameraTrackRef.current = stream.getVideoTracks()[0];
         console.log('Optimized local stream initialized:', stream);
 
-        const storedSession = loadSessionFromStorage();
-        const isReconnecting = !!storedSession;
-
-        if (isReconnecting) {
-          setIsReconnecting(true);
-          console.log('Attempting to reconnect to meeting...');
-        }
+        // No session restore or auto media loading
 
         socketRef.current = io(SERVER_URL, {
           auth: { token: user.token },
@@ -959,36 +817,7 @@ const Meeting = () => {
     initialize();
   }, [roomId, user, navigate, setupSocketListeners]);
 
-  // Save session data when relevant state changes
-  useEffect(() => {
-    if (sessionRestored) {
-      saveCurrentSession();
-      try {
-        const token = user?.token;
-        if (token) {
-          const aiStatePayload = {
-            isProcessing,
-            currentUploader,
-            uploaderUsername,
-            output,
-          };
-          axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/ai-state`, aiStatePayload, {
-            headers: { Authorization: `Bearer ${token}` },
-          }).catch(() => {});
-          if (imageUrl) {
-            axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, {
-              type: 'image', url: imageUrl, uploadedBy: currentUploader, uploadedByUsername: uploaderUsername
-            }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
-          }
-          if (audioUrl) {
-            axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, {
-              type: 'audio', url: audioUrl, uploadedBy: currentUploader, uploadedByUsername: uploaderUsername
-            }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
-          }
-        }
-      } catch {}
-    }
-  }, [imageUrl, audioUrl, isProcessing, currentUploader, uploaderUsername, output, messages, saveCurrentSession, sessionRestored]);
+  // Removed: no background saves or API calls
 
   // Clear output when AI processing starts
   useEffect(() => {
@@ -1345,11 +1174,7 @@ const Meeting = () => {
     } catch (e) {
       console.warn('Error emitting leave-room:', e);
     }
-    try {
-      localStorage.removeItem(`meeting_session_${roomId}`);
-    } catch (e) {
-      console.warn('Error clearing local session:', e);
-    }
+    // No localStorage cleanup needed
     setImageUrl('');
     setAudioUrl('');
     setOutput('');
@@ -1396,64 +1221,24 @@ const Meeting = () => {
             {/* Upload controls and gated Display button */}
             <div className="bg-gray-800 border-b border-gray-700 p-3">
               <UploadControls
-                canUpload={!isMediaDisplayed && (!imageUrl || !audioUrl || currentUploader === socketRef.current?.id)}
+                canUpload={!isMediaDisplayed}
                 selectedImage={selectedImage}
-                setSelectedImage={async (file) => {
-                  if (!file) { setSelectedImage(null); return; }
-                  setSelectedImage(file);
-                  try {
-                    const fd = new FormData();
-                    fd.append('file', file);
-                    const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
-                    const url = r.data?.url;
-                    if (url) {
-                      setImageUrl(url);
-                      setCurrentUploader(socketRef.current?.id);
-                      setUploaderUsername(user.username);
-                      socketRef.current?.emit('ai-image-uploaded', { url, userId: socketRef.current?.id, username: user.username, roomId });
-                      if (url && audioUrl) {
-                        socketRef.current?.emit('mediaUploaded', { imageUrl: url, audioUrl, userId: socketRef.current?.id, username: user.username, roomId });
-                      }
-                    }
-                  } catch (e) { console.error(e); toast.error('Image upload failed'); }
-                }}
+                setSelectedImage={setSelectedImage}
                 selectedAudio={selectedAudio}
-                setSelectedAudio={async (file) => {
-                  if (!file) { setSelectedAudio(null); return; }
-                  setSelectedAudio(file);
-                  try {
-                    const fd = new FormData();
-                    fd.append('file', file);
-                    const r = await axios.post(`${SERVER_URL}/upload/audio`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
-                    const url = r.data?.url;
-                    if (url) {
-                      setAudioUrl(url);
-                      setCurrentUploader(socketRef.current?.id);
-                      setUploaderUsername(user.username);
-                      socketRef.current?.emit('ai-audio-uploaded', { url, userId: socketRef.current?.id, username: user.username, roomId });
-                      if (url && imageUrl) {
-                        socketRef.current?.emit('mediaUploaded', { imageUrl, audioUrl: url, userId: socketRef.current?.id, username: user.username, roomId });
-                      }
-                    }
-                  } catch (e) { console.error(e); toast.error('Audio upload failed'); }
-                }}
+                setSelectedAudio={setSelectedAudio}
                 hasImageUrl={!!imageUrl}
                 hasAudioUrl={!!audioUrl}
                 isMediaDisplayed={isMediaDisplayed}
                 onDisplay={async () => {
-                  try {
-                    if (!imageUrl || !audioUrl) { toast.error('Please upload both image and audio first.'); return; }
-                    setIsMediaDisplayed(true);
-                    socketRef.current?.emit('media-display');
-                    socketRef.current?.emit('mediaDisplayed');
-                  } catch (e) { console.error(e); toast.error('Failed to display media.'); }
+                  if (!imageUrl && !audioUrl) { toast.error('Please upload image and/or audio first.'); return; }
+                  setIsMediaDisplayed(true);
                 }}
                 onRemove={() => {
                   setIsMediaDisplayed(false);
                   setSelectedImage(null);
                   setSelectedAudio(null);
-                  socketRef.current?.emit('media-remove');
-                  socketRef.current?.emit('mediaRemoved');
+                  setImageUrl('');
+                  setAudioUrl('');
                 }}
                 onAnalyze={handleProcessWithAI}
                 isProcessing={isProcessing}
@@ -1591,8 +1376,8 @@ const Meeting = () => {
                     setIsMediaDisplayed(false);
                     setSelectedImage(null);
                     setSelectedAudio(null);
-                    socketRef.current?.emit('media-remove');
-                    socketRef.current?.emit('mediaRemoved');
+                    setImageUrl('');
+                    setAudioUrl('');
                   }}
                   output={output}
                 />
@@ -1626,15 +1411,13 @@ const Meeting = () => {
               <div className="space-y-2">
                 <div>
                   <label className="block text-sm mb-1">Upload Image</label>
-                  <input type="file" accept="image/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; if (f) setSelectedImage(f); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
+                  <input type="file" accept="image/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; setSelectedImage(f || null); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm mb-1">Upload Audio</label>
-                  <input type="file" accept="audio/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; if (f) setSelectedAudio(f); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
+                  <input type="file" accept="audio/*" onChange={(e) => { if (!(isBotLocked && currentUploader !== socketRef.current?.id)) { const f = e.target.files?.[0]; setSelectedAudio(f || null); } }} disabled={isProcessing || (isBotLocked && currentUploader !== socketRef.current?.id)} className="w-full text-sm" />
                 </div>
-                <button onClick={async () => { const hasImg = !!(selectedImage || imageUrl); const hasAud = !!(selectedAudio || audioUrl); if (!hasImg || !hasAud) { toast.error('Please upload both image and audio to process.'); return; } if (isBotLocked && currentUploader !== socketRef.current?.id) { toast.error('Another user is currently processing. Please wait.'); return; } try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); let effImg = imageUrl; let effAud = audioUrl; if (selectedImage && !effImg) { const fd = new FormData(); fd.append('file', selectedImage); const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effImg = r.data?.url; setImageUrl(effImg); socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId }); }
-                  if (selectedAudio && !effAud) { const fd2 = new FormData(); fd2.append('file', selectedAudio); const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effAud = r2.data?.url; setAudioUrl(effAud); socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId }); }
-                  setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3 = new FormData(); if (effImg) { const ir = await fetch(effImg); const ib = await ir.blob(); fd3.append('image', new File([ib], 'image.jpg', { type: ib.type || 'image/jpeg' })); } if (effAud) { const ar = await fetch(effAud); const ab = await ar.blob(); fd3.append('audio', new File([ab], 'audio.mp3', { type: ab.type || 'audio/mpeg' })); } const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.result || resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); socketRef.current?.emit('aiProcessed', { response: modelOutput, roomId }); } catch (e) { console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
+                <button onClick={async () => { const hasImg = !!(selectedImage); const hasAud = !!(selectedAudio); if (!hasImg || !hasAud) { toast.error('Please upload both image and audio to process.'); return; } if (isBotLocked && currentUploader !== socketRef.current?.id) { toast.error('Another user is currently processing. Please wait.'); return; } try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); setIsProcessing(true); const fd3 = new FormData(); if (selectedImage) { fd3.append('image', selectedImage); } if (selectedAudio) { fd3.append('audio', selectedAudio); } try { await axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, fd3, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); } catch (e) { console.warn('upload endpoint error', e?.message || e); } const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.result || resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); } catch (e) { console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage) || !(selectedAudio)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
               </div>
             </div>
           )}

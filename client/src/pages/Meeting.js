@@ -1411,11 +1411,8 @@ const Meeting = () => {
                       setCurrentUploader(socketRef.current?.id);
                       setUploaderUsername(user.username);
                       socketRef.current?.emit('ai-image-uploaded', { url, userId: socketRef.current?.id, username: user.username, roomId });
-                      if (url && (audioUrl || selectedAudio)) {
-                        const effectiveAudio = audioUrl;
-                        if (effectiveAudio) {
-                          socketRef.current?.emit('mediaUploaded', { imageUrl: url, audioUrl: effectiveAudio, userId: socketRef.current?.id, username: user.username, roomId });
-                        }
+                      if (url && audioUrl) {
+                        socketRef.current?.emit('mediaUploaded', { imageUrl: url, audioUrl, userId: socketRef.current?.id, username: user.username, roomId });
                       }
                     }
                   } catch (e) { console.error(e); toast.error('Image upload failed'); }
@@ -1434,11 +1431,8 @@ const Meeting = () => {
                       setCurrentUploader(socketRef.current?.id);
                       setUploaderUsername(user.username);
                       socketRef.current?.emit('ai-audio-uploaded', { url, userId: socketRef.current?.id, username: user.username, roomId });
-                      if (url && (imageUrl || selectedImage)) {
-                        const effectiveImage = imageUrl;
-                        if (effectiveImage) {
-                          socketRef.current?.emit('mediaUploaded', { imageUrl: effectiveImage, audioUrl: url, userId: socketRef.current?.id, username: user.username, roomId });
-                        }
+                      if (url && imageUrl) {
+                        socketRef.current?.emit('mediaUploaded', { imageUrl, audioUrl: url, userId: socketRef.current?.id, username: user.username, roomId });
                       }
                     }
                   } catch (e) { console.error(e); toast.error('Audio upload failed'); }
@@ -1454,6 +1448,15 @@ const Meeting = () => {
                     socketRef.current?.emit('mediaDisplayed');
                   } catch (e) { console.error(e); toast.error('Failed to display media.'); }
                 }}
+                onRemove={() => {
+                  setIsMediaDisplayed(false);
+                  setSelectedImage(null);
+                  setSelectedAudio(null);
+                  socketRef.current?.emit('media-remove');
+                  socketRef.current?.emit('mediaRemoved');
+                }}
+                onAnalyze={handleProcessWithAI}
+                isProcessing={isProcessing}
               />
             </div>
 
@@ -1574,6 +1577,7 @@ const Meeting = () => {
               onMouseLeave={handleMouseUp}
             />
           </div>
+        </div>
             {/* Right panel: 30% media display (sibling to left video column) */}
             {isMediaDisplayed && (
               <div className="h-full">
@@ -1606,7 +1610,7 @@ const Meeting = () => {
           {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
         </div>
       </div>
-      <div className="bg-gray-900 border-t border-gray-700 px-2 py-1 flex justify-center gap-1 z-20 relative">
+      <div className="bg-gray-900 border-t border-gray-700 px-2 py-1 flex justify-center gap-1 z-20 sticky bottom-0">
         <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</button>
         <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</button>
         <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>
@@ -1630,12 +1634,10 @@ const Meeting = () => {
                 </div>
                 <button onClick={async () => { const hasImg = !!(selectedImage || imageUrl); const hasAud = !!(selectedAudio || audioUrl); if (!hasImg || !hasAud) { toast.error('Please upload both image and audio to process.'); return; } if (isBotLocked && currentUploader !== socketRef.current?.id) { toast.error('Another user is currently processing. Please wait.'); return; } try { setOutput(''); setIsBotLocked(true); socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId }); let effImg = imageUrl; let effAud = audioUrl; if (selectedImage && !effImg) { const fd = new FormData(); fd.append('file', selectedImage); const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effImg = r.data?.url; setImageUrl(effImg); socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId }); }
                   if (selectedAudio && !effAud) { const fd2 = new FormData(); fd2.append('file', selectedAudio); const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } }); effAud = r2.data?.url; setAudioUrl(effAud); socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId }); }
-                  setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3 = new FormData(); if (effImg) { const ir = await fetch(effImg); const ib = await ir.blob(); fd3.append('image', new File([ib], 'image.jpg', { type: ib.type || 'image/jpeg' })); } if (effAud) { const ar = await fetch(effAud); const ab = await ar.blob(); fd3.append('audio', new File([ab], 'audio.mp3', { type: ab.type || 'audio/mpeg' })); } const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.result || resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); } catch (e) { console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
+                  setIsProcessing(true); socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId }); const fd3 = new FormData(); if (effImg) { const ir = await fetch(effImg); const ib = await ir.blob(); fd3.append('image', new File([ib], 'image.jpg', { type: ib.type || 'image/jpeg' })); } if (effAud) { const ar = await fetch(effAud); const ab = await ar.blob(); fd3.append('audio', new File([ab], 'audio.mp3', { type: ab.type || 'audio/mpeg' })); } const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict'; const resp = await axios.post(AI_MODEL_API_URL, fd3, { headers: { 'Content-Type': 'multipart/form-data' } }); const modelOutput = resp.data?.result || resp.data; let disp = ''; if (typeof modelOutput === 'object') { disp = modelOutput.answer || modelOutput.response || modelOutput.text || modelOutput.result || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || ''; if (!disp) { const firstStr = Object.values(modelOutput).find(v => typeof v === 'string'); disp = firstStr || JSON.stringify(modelOutput, null, 2); } } else { disp = String(modelOutput); } setOutput(disp); socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId }); socketRef.current?.emit('aiProcessed', { response: modelOutput, roomId }); } catch (e) { console.error(e); toast.error('Failed to process with AI.'); } finally { setIsProcessing(false); setIsBotLocked(false); socketRef.current?.emit('ai-bot-unlocked', { roomId }); } }} disabled={isProcessing || isBotLocked || !(selectedImage || imageUrl) || !(selectedAudio || audioUrl)} className="w-full p-2 rounded bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700">{isProcessing ? 'Processing...' : 'Process with AI'}</button>
               </div>
             </div>
           )}
-        </div>
-        <button onClick={handleExitRoom} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
         </div>
       </div>
     </div>

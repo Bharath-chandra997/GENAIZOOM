@@ -1,7 +1,35 @@
-# # Flask and Web Server
-# Flask>=2.0.0
-# Flask-Cors>=3.0.0
-# werkzeug>=2.0.0
+# # # Flask and Web Server
+# # Flask>=2.0.0
+# # Flask-Cors>=3.0.0
+# # werkzeug>=2.0.0
+
+# # # PyTorch and Vision/Audio
+# # torch>=1.12.0
+# # torchvision>=0.13.0
+# # torchaudio>=0.12.0
+
+# # # Hugging Face
+# # transformers>=4.20.0
+# # huggingface-hub>=0.10.0
+
+# # # Image and Audio Processing
+# # Pillow>=9.0.0
+# # albumentations>=1.2.0
+# # librosa>=0.9.0
+# # soundfile>=0.10.0
+# # timm>=0.6.0  # <-- ADDED THIS LINE
+
+# # # Utilities
+# # numpy>=1.21.0
+# # requests>=2.25.0
+# # packaging>=21.0
+
+
+# # FastAPI and Web Server
+# fastapi>=0.105.0
+# uvicorn>=0.26.0
+# httpx>=0.24.0
+# aiofiles>=23.1.0
 
 # # PyTorch and Vision/Audio
 # torch>=1.12.0
@@ -17,39 +45,17 @@
 # albumentations>=1.2.0
 # librosa>=0.9.0
 # soundfile>=0.10.0
-# timm>=0.6.0  # <-- ADDED THIS LINE
+# timm>=0.6.0
 
 # # Utilities
 # numpy>=1.21.0
 # requests>=2.25.0
 # packaging>=21.0
+# python-multipart>=0.0.20
+# gradio_client
 
 
-# FastAPI and Web Server
-fastapi>=0.105.0
-uvicorn>=0.26.0
-httpx>=0.24.0
-aiofiles>=23.1.0
-
-# PyTorch and Vision/Audio
-torch>=1.12.0
-torchvision>=0.13.0
-torchaudio>=0.12.0
-
-# Hugging Face
-transformers>=4.20.0
-huggingface-hub>=0.10.0
-
-# Image and Audio Processing
-Pillow>=9.0.0
-albumentations>=1.2.0
-librosa>=0.9.0
-soundfile>=0.10.0
-timm>=0.6.0
-
-# Utilities
-numpy>=1.21.0
-requests>=2.25.0
-packaging>=21.0
-python-multipart>=0.0.20
+fastapi
+uvicorn[standard]
+python-multipart
 gradio_client

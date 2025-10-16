@@ -82,7 +82,7 @@ const MediaPanel = ({
 					</button>
 				</div>
 				<div className="mt-2">
-					<label className="text-xs text-gray-400">AI response</label>
+					<label className="text-xs text-gray-400">AI Output</label>
 					<div className="mt-1 bg-gray-950/60 rounded p-3 text-sm text-gray-100 whitespace-pre-wrap overflow-y-auto max-h-[250px]">
 						{output || 'AI response will appear here…'}
 					</div>

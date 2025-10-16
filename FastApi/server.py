@@ -74,8 +74,8 @@ async def predict(image: UploadFile = File(...), audio: UploadFile = File(...)):
         # Use the gradio_client to call the 'predict' API endpoint on your Space
         # The `file()` function handles the preparation of local files for the API call.
         result = client.predict(
-            image=file(image_path),
-            audio=file(audio_path),
+            image_input=file(image_path),
+            audio_input=file(audio_path),
             api_name="/predict" # This must match the API name on your Gradio app
         )
 

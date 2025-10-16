@@ -454,7 +454,6 @@ const Meeting = () => {
 
         if (sessionData) { /* ignore auto restore */ }
 
-        setIsReconnecting(false);
         setIsLoading(false);
       });
     };

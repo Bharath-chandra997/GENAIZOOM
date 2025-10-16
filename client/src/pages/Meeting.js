@@ -323,45 +323,74 @@ const Meeting = () => {
     setUploaderUsername(username || getUsernameById(userId));
   }, [getUsernameById]);
 
-  // Real-time upload notification handler
+  // Real-time upload notification handler - sends chat message
   const handleUploadNotification = useCallback(({ username }) => {
-    toast.info(`${username} is uploading image and audio files.`, {
-      position: "top-center",
-      autoClose: 3000,
-      hideProgressBar: true,
-      closeOnClick: true,
-      pauseOnHover: true,
-      draggable: true,
-    });
+    const uploadMessage = {
+      message: `📤 ${username} is uploading an image and audio file.`,
+      username: 'System',
+      timestamp: new Date().toISOString(),
+      isSystemMessage: true
+    };
+    setMessages(prev => [...prev, uploadMessage]);
   }, []);
 
   // Shared media display handler
   const handleSharedMediaDisplay = useCallback(({ imageUrl: img, audioUrl: aud, username }) => {
-    if (img) setImageUrl(img);
-    if (aud) setAudioUrl(aud);
+    // Handle base64 data URLs for cross-client sharing
+    if (img) {
+      // Revoke previous URL if it exists
+      if (imageUrl && imageUrl.startsWith('blob:')) {
+        try { URL.revokeObjectURL(imageUrl); } catch {}
+      }
+      setImageUrl(img);
+    }
+    if (aud) {
+      // Revoke previous URL if it exists
+      if (audioUrl && audioUrl.startsWith('blob:')) {
+        try { URL.revokeObjectURL(audioUrl); } catch {}
+      }
+      setAudioUrl(aud);
+    }
     setUploaderUsername(username);
     setIsMediaDisplayed(true);
-  }, []);
+    
+    // Add chat message for display action
+    const displayMessage = {
+      message: `📺 ${username} is now displaying the uploaded media.`,
+      username: 'System',
+      timestamp: new Date().toISOString(),
+      isSystemMessage: true
+    };
+    setMessages(prev => [...prev, displayMessage]);
+  }, [imageUrl, audioUrl]);
 
   // Shared media removal handler
-  const handleSharedMediaRemoval = useCallback(() => {
+  const handleSharedMediaRemoval = useCallback(({ username }) => {
     setIsMediaDisplayed(false);
     setImageUrl('');
     setAudioUrl('');
     setOutput('');
     setUploaderUsername('');
+    
+    // Add chat message for removal action
+    const removalMessage = {
+      message: `🗑️ ${username || 'Someone'} removed the displayed media.`,
+      username: 'System',
+      timestamp: new Date().toISOString(),
+      isSystemMessage: true
+    };
+    setMessages(prev => [...prev, removalMessage]);
   }, []);
 
-  // AI processing notification handler
+  // AI processing notification handler - sends chat message
   const handleAiProcessingNotification = useCallback(({ username }) => {
-    toast.info(`${username} is analyzing the uploaded media with AI.`, {
-      position: "top-center",
-      autoClose: 3000,
-      hideProgressBar: true,
-      closeOnClick: true,
-      pauseOnHover: true,
-      draggable: true,
-    });
+    const processingMessage = {
+      message: `🤖 ${username} is analyzing the uploaded media with AI.`,
+      username: 'System',
+      timestamp: new Date().toISOString(),
+      isSystemMessage: true
+    };
+    setMessages(prev => [...prev, processingMessage]);
   }, []);
 
   // Shared AI result handler
@@ -386,6 +415,15 @@ const Meeting = () => {
     }
     setOutput(displayResponse);
     setUploaderUsername(username);
+    
+    // Add chat message for AI completion
+    const completionMessage = {
+      message: `✅ ${username} completed AI analysis.`,
+      username: 'System',
+      timestamp: new Date().toISOString(),
+      isSystemMessage: true
+    };
+    setMessages(prev => [...prev, completionMessage]);
   }, []);
 
   const handleAiAudioUploaded = useCallback(({ url, userId, username }) => {
@@ -1266,13 +1304,34 @@ const Meeting = () => {
                 onDisplay={async () => {
                   if (!selectedImage || !selectedAudio) { toast.error('Please upload both image and audio first.'); return; }
                   setIsMediaDisplayed(true);
-                  // Emit shared media display event to all participants
-                  socketRef.current?.emit('shared-media-display', {
-                    imageUrl,
-                    audioUrl,
-                    username: user.username,
-                    roomId
-                  });
+                  
+                  // Convert files to base64 for sharing across clients
+                  const convertFileToBase64 = (file) => {
+                    return new Promise((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve(reader.result);
+                      reader.onerror = reject;
+                      reader.readAsDataURL(file);
+                    });
+                  };
+                  
+                  try {
+                    const [imageBase64, audioBase64] = await Promise.all([
+                      convertFileToBase64(selectedImage),
+                      convertFileToBase64(selectedAudio)
+                    ]);
+                    
+                    // Emit shared media display event to all participants
+                    socketRef.current?.emit('shared-media-display', {
+                      imageUrl: imageBase64,
+                      audioUrl: audioBase64,
+                      username: user.username,
+                      roomId
+                    });
+                  } catch (error) {
+                    console.error('Error converting files to base64:', error);
+                    toast.error('Failed to prepare media for sharing.');
+                  }
                 }}
                 onRemove={() => {
                   setIsMediaDisplayed(false);
@@ -1285,6 +1344,7 @@ const Meeting = () => {
                   setOutput('');
                   // Emit shared media removal event to all participants
                   socketRef.current?.emit('shared-media-removal', {
+                    username: user.username,
                     roomId
                   });
                 }}

@@ -54,22 +54,33 @@ const Chat = ({ messages, onSendMessage, currentUser, onClose }) => {
             <div
               key={message.id || `message-${index}`}
               className={`flex ${
-                message.userId === currentUser.userId ? 'justify-end' : 'justify-start'
+                message.isSystemMessage 
+                  ? 'justify-center' 
+                  : message.userId === currentUser.userId 
+                    ? 'justify-end' 
+                    : 'justify-start'
               }`}
             >
-              <div
-                className={`max-w-xs lg:max-w-sm px-4 py-2 rounded-lg ${
-                  message.userId === currentUser.userId
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-700 text-gray-100'
-                }`}
-              >
-                <div className="flex items-center space-x-2 mb-1">
-                  <span className="text-xs font-medium">{message.username}</span>
+              {message.isSystemMessage ? (
+                <div className="bg-blue-900/50 border border-blue-600/30 text-blue-200 px-3 py-2 rounded-lg text-center max-w-md">
+                  <p className="text-sm break-words">{message.message}</p>
                   <span className="text-xs opacity-75">{formatTime(message.timestamp)}</span>
                 </div>
-                <p className="text-sm break-words">{message.message}</p>
-              </div>
+              ) : (
+                <div
+                  className={`max-w-xs lg:max-w-sm px-4 py-2 rounded-lg ${
+                    message.userId === currentUser.userId
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-700 text-gray-100'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2 mb-1">
+                    <span className="text-xs font-medium">{message.username}</span>
+                    <span className="text-xs opacity-75">{formatTime(message.timestamp)}</span>
+                  </div>
+                  <p className="text-sm break-words">{message.message}</p>
+                </div>
+              )}
             </div>
           ))
         )}

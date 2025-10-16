@@ -1327,6 +1327,7 @@ const Meeting = () => {
         response: modelOutput, 
         roomId 
       });
+      socketRef.current?.emit('aiProcessed', { response: modelOutput, roomId });
       
     } catch (error) {
       console.error('AI processing error:', error);
@@ -1380,7 +1381,7 @@ const Meeting = () => {
       </div>
       <div className="flex-1 flex relative overflow-hidden">
         <div
-          className={`flex-1 flex ${isMediaDisplayed ? 'flex-row' : 'flex-col'} relative overflow-hidden`}
+          className={`flex-1 ${isMediaDisplayed ? 'grid grid-cols-[70%_30%]' : 'flex flex-col'} relative overflow-hidden`}
           onWheel={(e) => {
             if (e.deltaX !== 0 && totalGridPages > 1) {
               e.preventDefault();
@@ -1389,7 +1390,7 @@ const Meeting = () => {
           }}
         >
           {/* Left/main area: video grid (70% when media displayed) */}
-          <div className={`${isMediaDisplayed ? 'w-[70%]' : 'w-full'} flex flex-col min-h-0`}
+          <div className={`flex flex-col min-h-0 w-full`}
             
           >
             {/* Upload controls and gated Display button */}
@@ -1397,36 +1398,61 @@ const Meeting = () => {
               <UploadControls
                 canUpload={!isMediaDisplayed && (!imageUrl || !audioUrl || currentUploader === socketRef.current?.id)}
                 selectedImage={selectedImage}
-                setSelectedImage={setSelectedImage}
+                setSelectedImage={async (file) => {
+                  if (!file) { setSelectedImage(null); return; }
+                  setSelectedImage(file);
+                  try {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
+                    const url = r.data?.url;
+                    if (url) {
+                      setImageUrl(url);
+                      setCurrentUploader(socketRef.current?.id);
+                      setUploaderUsername(user.username);
+                      socketRef.current?.emit('ai-image-uploaded', { url, userId: socketRef.current?.id, username: user.username, roomId });
+                      if (url && (audioUrl || selectedAudio)) {
+                        const effectiveAudio = audioUrl;
+                        if (effectiveAudio) {
+                          socketRef.current?.emit('mediaUploaded', { imageUrl: url, audioUrl: effectiveAudio, userId: socketRef.current?.id, username: user.username, roomId });
+                        }
+                      }
+                    }
+                  } catch (e) { console.error(e); toast.error('Image upload failed'); }
+                }}
                 selectedAudio={selectedAudio}
-                setSelectedAudio={setSelectedAudio}
+                setSelectedAudio={async (file) => {
+                  if (!file) { setSelectedAudio(null); return; }
+                  setSelectedAudio(file);
+                  try {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    const r = await axios.post(`${SERVER_URL}/upload/audio`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
+                    const url = r.data?.url;
+                    if (url) {
+                      setAudioUrl(url);
+                      setCurrentUploader(socketRef.current?.id);
+                      setUploaderUsername(user.username);
+                      socketRef.current?.emit('ai-audio-uploaded', { url, userId: socketRef.current?.id, username: user.username, roomId });
+                      if (url && (imageUrl || selectedImage)) {
+                        const effectiveImage = imageUrl;
+                        if (effectiveImage) {
+                          socketRef.current?.emit('mediaUploaded', { imageUrl: effectiveImage, audioUrl: url, userId: socketRef.current?.id, username: user.username, roomId });
+                        }
+                      }
+                    }
+                  } catch (e) { console.error(e); toast.error('Audio upload failed'); }
+                }}
                 hasImageUrl={!!imageUrl}
                 hasAudioUrl={!!audioUrl}
                 isMediaDisplayed={isMediaDisplayed}
                 onDisplay={async () => {
-                  // Ensure files exist; upload if needed
                   try {
-                    let effImg = imageUrl;
-                    let effAud = audioUrl;
-                    if (selectedImage && !effImg) {
-                      const fd = new FormData();
-                      fd.append('file', selectedImage);
-                      const r = await axios.post(`${SERVER_URL}/upload/image`, fd, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
-                      effImg = r.data?.url; setImageUrl(effImg);
-                      socketRef.current?.emit('ai-image-uploaded', { url: effImg, userId: socketRef.current?.id, username: user.username, roomId });
-                    }
-                    if (selectedAudio && !effAud) {
-                      const fd2 = new FormData();
-                      fd2.append('file', selectedAudio);
-                      const r2 = await axios.post(`${SERVER_URL}/upload/audio`, fd2, { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` } });
-                      effAud = r2.data?.url; setAudioUrl(effAud);
-                      socketRef.current?.emit('ai-audio-uploaded', { url: effAud, userId: socketRef.current?.id, username: user.username, roomId });
-                    }
-                    if (!effImg || !effAud) { toast.error('Please upload both image and audio.'); return; }
+                    if (!imageUrl || !audioUrl) { toast.error('Please upload both image and audio first.'); return; }
                     setIsMediaDisplayed(true);
                     socketRef.current?.emit('media-display');
-                    socketRef.current?.emit('mediaDisplayed', { imageUrl: effImg, audioUrl: effAud, userId: socketRef.current?.id, username: user.username, roomId });
-                  } catch (e) { console.error(e); toast.error('Failed to prepare media for display.'); }
+                    socketRef.current?.emit('mediaDisplayed');
+                  } catch (e) { console.error(e); toast.error('Failed to display media.'); }
                 }}
               />
             </div>
@@ -1550,7 +1576,7 @@ const Meeting = () => {
           </div>
             {/* Right panel: 30% media display (sibling to left video column) */}
             {isMediaDisplayed && (
-              <div className="w-[30%] min-w-[260px] max-w-[460px] h-full">
+              <div className="h-full">
                 <MediaPanel
                   imageUrl={imageUrl}
                   audioUrl={audioUrl}

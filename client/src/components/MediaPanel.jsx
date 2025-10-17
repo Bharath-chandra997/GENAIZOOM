@@ -45,28 +45,28 @@ const MediaPanel = ({
 	return (
 		<div className="h-full flex flex-col bg-gray-900 border-l border-gray-700">
 			<div className="p-3 border-b border-gray-700 flex items-center justify-between">
-				<div className="text-sm text-gray-300">Uploaded by <span className="text-purple-300">{uploaderUsername || 'Someone'}</span></div>
-				<button onClick={onRemove} className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded">Remove</button>
+				<div className="text-sm text-gray-300">Shared by <span className="text-purple-300">{uploaderUsername || 'Someone'}</span></div>
+				<button onClick={onRemove} className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-xs">Remove</button>
 			</div>
 
-			<div className="p-3 space-y-3 overflow-auto">
+			<div className="flex-1 p-3 space-y-3 overflow-auto">
 				<div>
-					<label className="text-xs text-gray-400">Image</label>
+					<label className="text-xs text-gray-400">📷 Image</label>
 					{imageUrl ? (
-						<img src={imageUrl} alt="uploaded" className="w-full max-h-56 object-contain bg-black rounded" />
+						<img src={imageUrl} alt="shared content" className="w-full max-h-48 object-contain bg-black rounded" />
 					) : (
-						<div className="h-40 bg-black/60 rounded flex items-center justify-center text-gray-500">No Image</div>
+						<div className="h-32 bg-black/60 rounded flex items-center justify-center text-gray-500 text-sm">No Image</div>
 					)}
 				</div>
 				<div>
-					<label className="text-xs text-gray-400">Audio</label>
+					<label className="text-xs text-gray-400">🎵 Audio</label>
 					<div className="bg-black/60 rounded p-3 flex items-center justify-between">
 						<button
 							onClick={handlePlayPause}
 							disabled={!audioUrl || audioError}
-							className={`px-3 py-2 rounded ${audioUrl && !audioError ? (isPlaying ? 'bg-red-600 hover:bg-red-500' : 'bg-green-600 hover:bg-green-500') : 'bg-gray-600'} text-white`}
+							className={`px-3 py-2 rounded text-sm ${audioUrl && !audioError ? (isPlaying ? 'bg-red-600 hover:bg-red-500' : 'bg-green-600 hover:bg-green-500') : 'bg-gray-600'} text-white`}
 						>
-							{isPlaying ? 'Pause' : 'Play'}
+							{isPlaying ? '⏸️ Pause' : '▶️ Play'}
 						</button>
 						{audioError && <span className="text-xs text-red-400">Audio error</span>}
 					</div>
@@ -76,15 +76,15 @@ const MediaPanel = ({
 					<button
 						onClick={onProcess}
 						disabled={!imageUrl || !audioUrl || isProcessing}
-						className={`w-full p-2 rounded ${imageUrl && audioUrl && !isProcessing ? 'bg-purple-600 hover:bg-purple-500' : 'bg-gray-700 text-gray-300 cursor-not-allowed'} text-white`}
+						className={`w-full p-2 rounded text-sm ${imageUrl && audioUrl && !isProcessing ? 'bg-purple-600 hover:bg-purple-500' : 'bg-gray-700 text-gray-300 cursor-not-allowed'} text-white`}
 					>
-						{isProcessing ? 'Processing…' : 'Process with AI'}
+						{isProcessing ? '🤖 Processing…' : '🤖 Process with AI'}
 					</button>
 				</div>
 				<div className="mt-2">
-					<label className="text-xs text-gray-400">AI Output</label>
-					<div className="mt-1 bg-gray-950/60 rounded p-3 text-sm text-gray-100 whitespace-pre-wrap overflow-y-auto max-h-[250px]">
-						{output || 'AI response will appear here…'}
+					<label className="text-xs text-gray-400">🧠 AI Analysis</label>
+					<div className="mt-1 bg-gray-950/60 rounded p-3 text-sm text-gray-100 whitespace-pre-wrap overflow-y-auto max-h-[200px]">
+						{output || 'AI analysis will appear here…'}
 					</div>
 				</div>
 			</div>

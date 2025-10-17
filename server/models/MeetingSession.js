@@ -17,6 +17,16 @@ const aiProcessingStateSchema = new mongoose.Schema({
   startedAt: { type: Date },
   output: { type: String },
   completedAt: { type: Date },
+  resultUsername: { type: String },
+});
+
+const sharedMediaSchema = new mongoose.Schema({
+  imageUrl: { type: String },
+  audioUrl: { type: String },
+  uploaderUsername: { type: String },
+  isDisplayed: { type: Boolean, default: false },
+  displayedAt: { type: Date },
+  removedAt: { type: Date },
 });
 
 const meetingSessionSchema = new mongoose.Schema({
@@ -32,6 +42,7 @@ const meetingSessionSchema = new mongoose.Schema({
   }],
   uploadedFiles: [uploadedFileSchema],
   aiState: aiProcessingStateSchema,
+  sharedMedia: sharedMediaSchema,
   chatMessages: [{
     message: { type: String, required: true },
     username: { type: String, required: true },

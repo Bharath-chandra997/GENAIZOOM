@@ -17,6 +17,8 @@ const UploadControls = ({
 }) => {
   const hasAny = (!!selectedImage || hasImageUrl) || (!!selectedAudio || hasAudioUrl);
   const bothReady = (!!selectedImage || hasImageUrl) && (!!selectedAudio || hasAudioUrl);
+  const canDisplay = bothReady && canUpload && !isMediaDisplayed;
+  const canAnalyze = bothReady && !isProcessing;
   return (
     <div className="space-y-3">
       <div>
@@ -40,30 +42,30 @@ const UploadControls = ({
         />
       </div>
       {hasAny && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={onDisplay}
-            disabled={!bothReady || !canUpload || isMediaDisplayed}
-            className={`px-3 py-2 rounded ${bothReady && canUpload && !isMediaDisplayed ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
+            disabled={!canDisplay}
+            className={`px-3 py-2 rounded text-sm ${canDisplay ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
           >
-            Display
+            📺 Display
           </button>
           <button
             type="button"
             onClick={onRemove}
             disabled={!hasAny}
-            className={`px-3 py-2 rounded ${hasAny ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
+            className={`px-3 py-2 rounded text-sm ${hasAny ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
           >
-            Remove
+            🗑️ Remove
           </button>
           <button
             type="button"
             onClick={onAnalyze}
-            disabled={!bothReady || isProcessing}
-            className={`px-3 py-2 rounded ${bothReady && !isProcessing ? 'bg-purple-600 hover:bg-purple-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
+            disabled={!canAnalyze}
+            className={`px-3 py-2 rounded text-sm ${canAnalyze ? 'bg-purple-600 hover:bg-purple-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
           >
-            {isProcessing ? 'Analyzing…' : 'Analyze'}
+            {isProcessing ? '🤖 Analyzing…' : '🤖 Analyze'}
           </button>
         </div>
       )}

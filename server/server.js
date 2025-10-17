@@ -427,6 +427,7 @@ io.on('connection', (socket) => {
         sessionData = {
           uploadedFiles: session.uploadedFiles,
           aiState: session.aiState,
+          sharedMedia: session.sharedMedia,
           chatMessages: session.chatMessages.slice(-50), // Last 50 messages
         };
       }
@@ -743,6 +744,105 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting ai-audio-pause from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       socket.to(roomId).emit('ai-audio-pause');
+    }
+  });
+
+  // New synchronized media sharing events
+  socket.on('upload-notification', ({ username }) => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting upload-notification from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('upload-notification', { username });
+    }
+  });
+
+  socket.on('shared-media-display', ({ imageUrl, audioUrl, username }) => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting shared-media-display from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      
+      // Persist shared media state to meeting session
+      try {
+        MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $set: { 
+              'sharedMedia.imageUrl': imageUrl,
+              'sharedMedia.audioUrl': audioUrl,
+              'sharedMedia.uploaderUsername': username,
+              'sharedMedia.isDisplayed': true,
+              'sharedMedia.displayedAt': new Date()
+            }
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        logError('Error persisting shared media display to session:', err);
+      }
+      
+      socket.to(roomId).emit('shared-media-display', { imageUrl, audioUrl, username });
+    }
+  });
+
+  socket.on('shared-media-removal', ({ username }) => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting shared-media-removal from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      
+      // Clear shared media state from meeting session
+      try {
+        MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $set: { 
+              'sharedMedia.imageUrl': null,
+              'sharedMedia.audioUrl': null,
+              'sharedMedia.uploaderUsername': null,
+              'sharedMedia.isDisplayed': false,
+              'sharedMedia.removedAt': new Date()
+            }
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        logError('Error clearing shared media from session:', err);
+      }
+      
+      socket.to(roomId).emit('shared-media-removal', { username });
+    }
+  });
+
+  socket.on('ai-processing-notification', ({ username }) => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting ai-processing-notification from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      socket.to(roomId).emit('ai-processing-notification', { username });
+    }
+  });
+
+  socket.on('shared-ai-result', ({ response, username }) => {
+    const roomId = socketToRoom[socket.id];
+    if (roomId) {
+      info(`Broadcasting shared-ai-result from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      
+      // Persist AI result to meeting session
+      try {
+        MeetingSession.findOneAndUpdate(
+          { roomId },
+          { 
+            $set: { 
+              'aiState.output': typeof response === 'string' ? response : JSON.stringify(response),
+              'aiState.completedAt': new Date(),
+              'aiState.resultUsername': username
+            }
+          },
+          { upsert: true }
+        );
+      } catch (err) {
+        logError('Error persisting shared AI result to session:', err);
+      }
+      
+      socket.to(roomId).emit('shared-ai-result', { response, username });
     }
   });
 

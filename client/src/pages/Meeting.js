@@ -39,23 +39,19 @@ const Meeting = () => {
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
-  const [filmstripSize] = useState(6);
-  const [currentOffset, setCurrentOffset] = useState(0);
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
   const [toolbarPosition, setToolbarPosition] = useState({ x: 20, y: 20 });
-  const [currentTool, setCurrentTool] = useState('pen');
-  const [currentBrushSize, setCurrentBrushSize] = useState(5);
+  const [currentTool] = useState('pen');
+  const [currentBrushSize] = useState(5);
   const [gridPage, setGridPage] = useState(0);
   const [aiBotInUse, setAiBotInUse] = useState(false);
   const [currentAIUser, setCurrentAIUser] = useState(null);
   const [aiResponse, setAiResponse] = useState('');
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
-  const touchStartXRef = useRef(0);
-  const touchDeltaRef = useRef(0);
 
   // AI Participant state
-  const [aiParticipant, setAiParticipant] = useState({
+  const [aiParticipant] = useState({
     userId: 'ai-assistant',
     username: 'AI Assistant',
     isLocal: false,
@@ -77,7 +73,6 @@ const Meeting = () => {
   const peerConnections = useRef(new Map());
   const dragInfo = useRef({ isDragging: false });
   const annotationCanvasRef = useRef(null);
-  const mainVideoContainerRef = useRef(null);
   const remoteDrawingStates = useRef(new Map());
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
   const isInitialized = useRef(false);
@@ -113,9 +108,6 @@ const Meeting = () => {
     return allParticipants[0] || null;
   }, [allParticipants]);
 
-  const mainViewParticipant = useMemo(() => {
-    return allParticipants.find(p => p.userId === pinnedParticipantId) || defaultMainParticipant;
-  }, [pinnedParticipantId, defaultMainParticipant, allParticipants]);
 
   const isSomeoneScreenSharing = useMemo(() =>
     allParticipants.some(p => p.isScreenSharing),
@@ -306,7 +298,7 @@ const Meeting = () => {
     dragInfo.current.isDragging = false;
     window.removeEventListener('mousemove', handleToolbarMouseMove);
     window.removeEventListener('mouseup', handleToolbarMouseUp);
-  }, []);
+  }, [handleToolbarMouseMove]);
 
   const handleToolbarMouseMove = useCallback((e) => {
     if (dragInfo.current.isDragging) {
@@ -779,7 +771,7 @@ const handleUserLeft = ({ userId, username }) => {
       socket.off('ai-response', handleAIResponse);
       socket.off('ai-complete', handleAIComplete);
     };
-  }, [createPeerConnection, roomId, user, getUsernameById]);
+  }, [createPeerConnection, roomId, user, getUsernameById, handleIceCandidate, participants, pinnedParticipantId]);
 
   useEffect(() => {
     if (isInitialized.current) return;
@@ -962,18 +954,6 @@ const handleUserLeft = ({ userId, username }) => {
     window.addEventListener('mouseup', handleToolbarMouseUp);
   };
 
-  const clearAnnotations = () => {
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    socketRef.current?.emit('clear-canvas');
-  };
-
-  const handleParticipantClick = (userId) => {
-    setPinnedParticipantId(userId);
-    setCurrentOffset(0);
-  };
 
   const handleExitRoom = () => {
     try {

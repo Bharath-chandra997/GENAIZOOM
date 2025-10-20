@@ -74,9 +74,9 @@
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   border: 1px solid #2a2f3a;
-  max-width: 400px;
+  max-width: 450px;
   width: 90%;
-  max-height: 80vh;
+  max-height: 85vh;
   overflow: hidden;
   animation: popupSlideIn 0.3s ease-out;
 }
@@ -183,7 +183,7 @@
 /* Chat specific styles */
 .pro-chat-messages {
   padding: 16px;
-  max-height: 400px;
+  max-height: 450px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.6) transparent;
@@ -206,12 +206,53 @@
   padding: 16px;
   border-top: 1px solid #2a2f3a;
   background: #171a21;
+  flex-shrink: 0;
+}
+
+.pro-chat-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: #1a1d24;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-size: 14px;
+  resize: none;
+  min-height: 40px;
+  max-height: 120px;
+}
+
+.pro-chat-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.pro-chat-send-btn {
+  margin-top: 8px;
+  padding: 8px 16px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.pro-chat-send-btn:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.pro-chat-send-btn:disabled {
+  background: #6b7280;
+  cursor: not-allowed;
 }
 
 /* Participants list specific styles */
 .pro-participants-list {
   padding: 16px;
-  max-height: 400px;
+  max-height: 450px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.6) transparent;
@@ -238,10 +279,43 @@
   margin-bottom: 8px;
   background: #1a1d24;
   border: 1px solid #2a2f3a;
+  min-width: 0;
+  word-wrap: break-word;
 }
 
 .pro-participant-item:hover {
   background: #2a2f3a;
+}
+
+.pro-participant-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #e5e7eb;
+  margin-left: 12px;
+  word-break: break-word;
+}
+
+.pro-participant-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pro-participant-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 /* Centered Meeting Main Area */
@@ -652,6 +726,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .pro-ai-status-section {
@@ -697,6 +772,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
 }
 
 .pro-ai-upload-area {
@@ -760,6 +836,7 @@
   cursor: pointer;
   transition: background 0.2s;
   margin-top: auto;
+  flex-shrink: 0;
 }
 
 .pro-ai-submit-btn:hover:not(:disabled) {
@@ -1069,7 +1146,7 @@
 @media (max-width: 768px) {
   .pro-sidebar-popup {
     max-width: 95%;
-    max-height: 85vh;
+    max-height: 90vh;
     margin: 20px;
   }
   
@@ -1116,6 +1193,19 @@
   
   .pro-controls-center {
     gap: 4px;
+  }
+
+  .pro-chat-messages,
+  .pro-participants-list {
+    max-height: 350px;
+  }
+
+  .pro-ai-upload-section {
+    gap: 12px;
+  }
+
+  .pro-ai-popup-content {
+    padding: 16px;
   }
 }
 

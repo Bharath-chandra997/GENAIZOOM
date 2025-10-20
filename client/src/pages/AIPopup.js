@@ -127,7 +127,12 @@ const AIPopup = ({
                   </div>
                 )}
               </div>
+            </div>
+          )}
 
+          {/* Submit Button - Always visible when not in use */}
+          {!aiBotInUse && (
+            <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
               <button 
                 onClick={handleSubmit}
                 disabled={isProcessing || (!imageFile && !audioFile)}

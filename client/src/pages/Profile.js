@@ -24,7 +24,7 @@ const Profile = () => {
     } else {
       setFormData({ username: user.username || '' });
     }
-  }, [isLoading, user]);
+  }, [isLoading, user, navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;

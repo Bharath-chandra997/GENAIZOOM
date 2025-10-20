@@ -294,12 +294,6 @@ const Meeting = () => {
   }, []);
 
   // Add the missing functions that were causing errors
-  const handleToolbarMouseUp = useCallback(() => {
-    dragInfo.current.isDragging = false;
-    window.removeEventListener('mousemove', handleToolbarMouseMove);
-    window.removeEventListener('mouseup', handleToolbarMouseUp);
-  }, [handleToolbarMouseMove]);
-
   const handleToolbarMouseMove = useCallback((e) => {
     if (dragInfo.current.isDragging) {
       setToolbarPosition({
@@ -308,6 +302,12 @@ const Meeting = () => {
       });
     }
   }, []);
+
+  const handleToolbarMouseUp = useCallback(() => {
+    dragInfo.current.isDragging = false;
+    window.removeEventListener('mousemove', handleToolbarMouseMove);
+    window.removeEventListener('mouseup', handleToolbarMouseUp);
+  }, [handleToolbarMouseMove]);
 
   const handleMouseDown = useCallback((e) => {
     const canvas = annotationCanvasRef.current;

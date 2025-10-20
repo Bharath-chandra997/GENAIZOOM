@@ -1,4 +1,92 @@
-/* AI Popup Styles */
+/* AI Sidebar Container */
+.pro-sidebar-container {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 400px;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pro-sidebar {
+  width: 100%;
+  height: 100%;
+  background: #0f1115;
+  border-left: 1px solid #2a2f3a;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.pro-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border-bottom: 1px solid #334155;
+  flex-shrink: 0;
+}
+
+.pro-sidebar-title {
+  color: #f1f5f9;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pro-sidebar-title::before {
+  content: "🤖";
+  font-size: 18px;
+}
+
+.pro-sidebar-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+.pro-sidebar-close:hover {
+  background: #334155;
+  color: #f1f5f9;
+  transform: scale(1.1);
+}
+
+.pro-sidebar-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* AI Popup Content */
 .pro-ai-popup-content {
   padding: 20px;
   height: 100%;
@@ -9,15 +97,17 @@
 
 .pro-ai-status-section {
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .pro-ai-status-indicator {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px;
+  padding: 12px 16px;
   border-radius: 8px;
   background: #1a1d24;
+  border: 1px solid #374151;
 }
 
 .pro-ai-status-indicator.available {
@@ -89,10 +179,14 @@
 
 .pro-ai-upload-area {
   margin-bottom: 0;
+  background: #1a1d24;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  padding: 16px;
 }
 
 .pro-ai-upload-area h4 {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   color: #e5e7eb;
   font-size: 16px;
   font-weight: 600;
@@ -103,7 +197,7 @@
   padding: 12px;
   border: 2px dashed #4b5563;
   border-radius: 8px;
-  background: #1a1d24;
+  background: #0f1115;
   color: #e5e7eb;
   font-size: 14px;
   transition: all 0.3s ease;
@@ -112,7 +206,7 @@
 
 .pro-ai-file-input:hover {
   border-color: #3b82f6;
-  background: #1e293b;
+  background: #1a1d24;
 }
 
 .pro-ai-file-input:focus {
@@ -126,7 +220,7 @@
   padding: 16px;
   border: 1px solid #374151;
   border-radius: 8px;
-  background: #1a1d24;
+  background: #0f1115;
   max-height: 200px;
   overflow: hidden;
   position: relative;
@@ -138,7 +232,7 @@
   border-radius: 6px;
   object-fit: contain;
   display: block;
-  margin: 0 auto;
+  margin: 0 auto 12px auto;
 }
 
 .pro-ai-upload-preview audio {
@@ -160,6 +254,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  justify-content: center;
 }
 
 .pro-ai-remove-btn::before {
@@ -309,6 +405,8 @@
   border-radius: 6px;
   object-fit: contain;
   border: 1px solid #374151;
+  display: block;
+  margin: 0 auto;
 }
 
 .pro-ai-uploaded-media audio {
@@ -415,8 +513,16 @@
   scroll-behavior: smooth;
 }
 
-/* Responsive design for AI popup */
+/* Responsive design for AI sidebar */
 @media (max-width: 768px) {
+  .pro-sidebar-container {
+    width: 100%;
+  }
+  
+  .pro-sidebar {
+    width: 100%;
+  }
+  
   .pro-ai-popup-content {
     padding: 16px;
   }
@@ -495,5 +601,9 @@
   .pro-ai-remove-btn:hover,
   .pro-ai-complete-btn:hover {
     transform: none;
+  }
+  
+  .pro-sidebar {
+    animation: none;
   }
 }

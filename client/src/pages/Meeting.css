@@ -839,6 +839,15 @@
   flex-shrink: 0;
 }
 
+/* Sticky submit bar so the button is always visible */
+.pro-ai-submit-bar {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(15,17,21,0), #0f1115 40%);
+  padding-top: 12px;
+  padding-bottom: 8px;
+}
+
 .pro-ai-submit-btn:hover:not(:disabled) {
   background: #2563eb;
 }

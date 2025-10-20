@@ -43,6 +43,7 @@
   background: #0f1115;
 }
 
+/* Header */
 .pro-participants__header {
   display: flex;
   align-items: center;
@@ -69,12 +70,15 @@
 
 .pro-participants__close:hover {
   color: #ffffff;
-  background: rgba(148,163,184,0.15);
+  background: rgba(148, 163, 184, 0.15);
 }
 
+/* Scrollable list */
 .pro-participants__list {
   flex: 1;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #3b3f48 #111418;
 }
 
 .pro-participants__cards {
@@ -84,6 +88,7 @@
   padding: 16px;
 }
 
+/* Each participant card */
 .pro-participants-card {
   display: flex;
   align-items: center;
@@ -92,7 +97,8 @@
   border: 1px solid #1f2430;
   border-radius: 14px;
   padding: 14px 12px;
-  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.15s ease, background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .pro-participants-card:hover {
@@ -138,6 +144,26 @@
   font-size: 12px;
 }
 
+/* Status icons and pin button */
+.pro-participants-card__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pro-participants-card__pin {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: color 0.2s ease-in-out;
+}
+
+.pro-participants-card__pin:hover {
+  color: #ffffff;
+}
+
+/* Footer */
 .pro-participants__footer {
   padding: 16px;
   border-top: 1px solid #2a2f3a;

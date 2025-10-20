@@ -1,4 +1,4 @@
-:root {
+.pro-participants-root {
   /* Primary Colors */
   --primary-color: #007bff;
   --primary-dark: #0056b3;
@@ -36,111 +36,124 @@
   --transition-base: 0.3s ease-in-out;
 }
 
-.participants-container {
+.pro-participants {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--dark-gray);
+  background: #0f1115;
 }
 
-.participants-header {
+.pro-participants__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
+  padding: 16px;
+  border-bottom: 1px solid #2a2f3a;
 }
 
-.participants-title {
-  font-size: var(--font-size-lg);
+.pro-participants__title {
+  font-size: 18px;
   font-weight: 600;
-  color: var(--white);
+  color: #ffffff;
 }
 
-.participants-close {
-  color: var(--text-light);
-  padding: var(--spacing-xs);
-  transition: color var(--transition-fast);
+.pro-participants__close {
+  color: #94a3b8;
+  padding: 4px;
+  border-radius: 6px;
+  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
 }
 
-.participants-close:hover {
-  color: var(--white);
+.pro-participants__close:hover {
+  color: #ffffff;
+  background: rgba(148,163,184,0.15);
 }
 
-.participants-list {
+.pro-participants__list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-md);
 }
 
-.participant-item {
+.pro-participants__cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 16px;
+}
+
+.pro-participants-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-md);
-  background: var(--medium-gray);
-  border-radius: var(--radius-lg);
-  transition: background-color var(--transition-fast);
+  background: #111418;
+  border: 1px solid #1f2430;
+  border-radius: 14px;
+  padding: 14px 12px;
+  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.participant-item:hover {
-  background: var(--dark-gray);
+.pro-participants-card:hover {
+  transform: translateY(-1px);
+  background: #131821;
+  border-color: #2a2f3a;
 }
 
-.participant-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
+.pro-participants-card__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pro-participants-card__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--white);
-  font-size: var(--font-size-sm);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.pro-participants-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pro-participants-card__name {
+  color: #e5e7eb;
   font-weight: 600;
 }
 
-.participant-details {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
+.pro-participants-card__you {
+  background: #2563eb;
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 12px;
 }
 
-.participant-name {
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--white);
+.pro-participants__footer {
+  padding: 16px;
+  border-top: 1px solid #2a2f3a;
 }
 
-.participant-you {
-  background: var(--primary-color);
-  color: var(--white);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-}
-
-.invite-btn {
+.pro-participants__invite {
   width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--primary-color);
-  color: var(--white);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
+  background: #2563eb;
+  color: #ffffff;
+  border: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition: background-color 0.2s ease-in-out;
 }
 
-.invite-btn:hover {
-  background: var(--primary-dark);
-}
-
-@media (max-width: 768px) {
-  :root {
-    --spacing-xs: 2px;
-    --spacing-sm: 4px;
-    --spacing-md: 8px;
-    --spacing-lg: 16px;
-  }
+.pro-participants__invite:hover {
+  background: #1d4ed8;
 }

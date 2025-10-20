@@ -9,6 +9,7 @@ import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import LoadingSpinner from '../components/LoadingSpinner';
+import './Meeting.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
@@ -738,43 +739,47 @@ const Meeting = () => {
     navigate('/home');
   };
 
-  if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
+  if (isLoading) return <div className="pro-meeting-page flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
   return (
-    <div className="h-screen bg-black flex flex-col overflow-hidden text-white">
+    <div className="pro-meeting-page">
       <MeetingHeader roomId={roomId} participants={participants} />
-      <MeetingMainArea
-        participants={participants}
-        isSomeoneScreenSharing={isSomeoneScreenSharing}
-        toolbarPosition={toolbarPosition}
-        currentTool={currentTool}
-        currentBrushSize={currentBrushSize}
-        handleToolbarMouseDown={handleToolbarMouseDown}
-        handleMouseDown={handleMouseDown}
-        handleMouseMove={handleMouseMove}
-        handleMouseUp={handleMouseUp}
-        handleSwipe={handleSwipe}
-        gridPage={gridPage}
-        totalGridPages={totalGridPages}
-        pinnedParticipantId={pinnedParticipantId}
-        isMirroringBrowser={isMirroringBrowser}
-        socketRef={socketRef}
-        handleExitRoom={handleExitRoom}
-      />
-      <MeetingSidebar
-        isChatOpen={isChatOpen}
-        isParticipantsOpen={isParticipantsOpen}
-        messages={messages}
-        user={user}
-        onSendMessage={(payload) => {
-          socketRef.current?.emit('send-chat-message', payload);
-          setMessages((prev) => [...prev, payload]);
-        }}
-        onCloseChat={() => setIsChatOpen(false)}
-        participants={participants}
-        onCloseParticipants={() => setIsParticipantsOpen(false)}
-        roomId={roomId}
-      />
+      <div className="pro-meeting-body">
+        <div className="pro-mainarea-container">
+          <MeetingMainArea
+            participants={participants}
+            isSomeoneScreenSharing={isSomeoneScreenSharing}
+            toolbarPosition={toolbarPosition}
+            currentTool={currentTool}
+            currentBrushSize={currentBrushSize}
+            handleToolbarMouseDown={handleToolbarMouseDown}
+            handleMouseDown={handleMouseDown}
+            handleMouseMove={handleMouseMove}
+            handleMouseUp={handleMouseUp}
+            handleSwipe={handleSwipe}
+            gridPage={gridPage}
+            totalGridPages={totalGridPages}
+            pinnedParticipantId={pinnedParticipantId}
+            isMirroringBrowser={isMirroringBrowser}
+            socketRef={socketRef}
+            handleExitRoom={handleExitRoom}
+          />
+        </div>
+        <MeetingSidebar
+          isChatOpen={isChatOpen}
+          isParticipantsOpen={isParticipantsOpen}
+          messages={messages}
+          user={user}
+          onSendMessage={(payload) => {
+            socketRef.current?.emit('send-chat-message', payload);
+            setMessages((prev) => [...prev, payload]);
+          }}
+          onCloseChat={() => setIsChatOpen(false)}
+          participants={participants}
+          onCloseParticipants={() => setIsParticipantsOpen(false)}
+          roomId={roomId}
+        />
+      </div>
       <MeetingControls
         isAudioMuted={isAudioMuted}
         toggleAudio={toggleAudio}

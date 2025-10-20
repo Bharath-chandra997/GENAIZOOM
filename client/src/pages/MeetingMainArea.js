@@ -63,7 +63,7 @@ const MeetingMainArea = ({
   };
 
   return (
-    <div className="flex-1 flex relative overflow-hidden">
+    <div className="pro-mainarea">
       <div
         className="flex-1 flex flex-col relative overflow-hidden"
         onWheel={(e) => {
@@ -74,7 +74,7 @@ const MeetingMainArea = ({
         }}
       >
         <div className="flex flex-col min-h-0 w-full">
-          <div className="bg-gray-800 border-b border-gray-700 p-3">
+          <div className="pro-mainarea-toolbar-strip">
             {/* No upload or media controls */}
           </div>
           {isSomeoneScreenSharing && (
@@ -96,7 +96,7 @@ const MeetingMainArea = ({
             </div>
           )}
           <div
-            className="flex-1 min-h-0 relative overflow-hidden h-full"
+            className="pro-mainarea-grid"
             ref={mainVideoContainerRef}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -121,10 +121,10 @@ const MeetingMainArea = ({
               if (count === 2) {
                 return (
                   <div className="flex h-full w-full gap-2">
-                    <div className="flex-1 h-full flex items-center justify-center p-1">
+                    <div className="flex-1 h-full flex items-center justify-center p-2">
                       {renderVideoPlayer(participants[0], participants[0].isLocal, "w-full h-full object-cover")}
                     </div>
-                    <div className="flex-1 h-full flex items-center justify-center p-1">
+                    <div className="flex-1 h-full flex items-center justify-center p-2">
                       {renderVideoPlayer(participants[1], participants[1].isLocal, "w-full h-full object-cover")}
                     </div>
                   </div>
@@ -151,35 +151,25 @@ const MeetingMainArea = ({
               }
 
               return (
-                <div className="w-full h-full p-1">
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-2">
+                <div className="w-full h-full p-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-3">
                     {pageItems.map((p) => (
                       <div key={p.userId} className="w-full h-full flex items-center justify-center">
-                        {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
+                        {renderVideoPlayer(p, p.isLocal, "w-full h-full object-cover")}
                       </div>
                     ))}
                   </div>
                   {totalGridPages > 1 && (
-                    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => gridPage > 0 && setGridPage(gridPage - 1)}
-                        className="px-2 py-1 bg-gray-700 rounded"
-                      >
-                        ‹
-                      </button>
+                    <div className="pro-grid-pagination">
+                      <button onClick={() => gridPage > 0 && setGridPage(gridPage - 1)}>‹</button>
                       {Array.from({ length: totalGridPages }, (_, i) => (
-                        <button
+                        <span
                           key={i}
                           onClick={() => setGridPage(i)}
-                          className={`w-2.5 h-2.5 rounded-full ${gridPage === i ? 'bg-white' : 'bg-gray-500'}`}
+                          className={`pro-grid-dot ${gridPage === i ? 'pro-grid-dot--active' : ''}`}
                         />
                       ))}
-                      <button
-                        onClick={() => gridPage < totalGridPages - 1 && setGridPage(gridPage + 1)}
-                        className="px-2 py-1 bg-gray-700 rounded"
-                      >
-                        ›
-                      </button>
+                      <button onClick={() => gridPage < totalGridPages - 1 && setGridPage(gridPage + 1)}>›</button>
                     </div>
                   )}
                 </div>

@@ -95,18 +95,20 @@ const Chat = ({ messages, onSendMessage, currentUser, onClose }) => {
               maxLength={500}
               className="chat-input"
             />
-            <div className={`char-counter ${newMessage.length >= 450 ? 'warning' : ''} ${newMessage.length >= 500 ? 'error' : ''}`}>
-              {newMessage.length}/500
+            <div className="input-footer">
+              <div className={`char-counter ${newMessage.length >= 450 ? 'warning' : ''} ${newMessage.length >= 500 ? 'error' : ''}`}>
+                {newMessage.length}/500
+              </div>
+              <button
+                type="submit"
+                disabled={!newMessage.trim()}
+                className="chat-send"
+                title="Send message"
+              >
+                Send
+              </button>
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={!newMessage.trim()}
-            className="chat-send"
-            title="Send message"
-          >
-            Send
-          </button>
         </div>
       </form>
     </div>

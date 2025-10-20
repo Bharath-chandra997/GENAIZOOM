@@ -1,6 +1,17 @@
 // MeetingMainArea.jsx
 import React from 'react';
 
+// Define getColorForId function at the top level
+const getColorForId = (id) => {
+  if (!id) return '#FFFFFF';
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = hash % 360;
+  return `hsl(${hue}, 90%, 60%)`;
+};
+
 const MeetingMainArea = ({
   participants,
   isSomeoneScreenSharing,
@@ -18,7 +29,8 @@ const MeetingMainArea = ({
   isMirroringBrowser,
   socketRef,
   handleExitRoom,
-  aiCanvasRef
+  aiCanvasRef,
+  setGridPage // Add setGridPage to props
 }) => {
   const renderVideoFrame = (participant, index) => {
     const isAI = participant.isAI;
@@ -120,11 +132,19 @@ const MeetingMainArea = ({
           <span className="pro-participant-count">{participants.length} participants</span>
         </div>
         <div className="pro-toolbar-controls">
-          <button onClick={() => handleSwipe(-1)} disabled={gridPage === 0}>
-            Previous
+          <button 
+            onClick={() => handleSwipe(-1)} 
+            disabled={gridPage === 0}
+            className="pro-pagination-btn"
+          >
+            ‹
           </button>
-          <button onClick={() => handleSwipe(1)} disabled={gridPage >= totalGridPages - 1}>
-            Next
+          <button 
+            onClick={() => handleSwipe(1)} 
+            disabled={gridPage >= totalGridPages - 1}
+            className="pro-pagination-btn"
+          >
+            ›
           </button>
         </div>
       </div>
@@ -138,7 +158,11 @@ const MeetingMainArea = ({
 
         {totalGridPages > 1 && (
           <div className="pro-grid-pagination">
-            <button onClick={() => handleSwipe(-1)} disabled={gridPage === 0}>
+            <button 
+              onClick={() => handleSwipe(-1)} 
+              disabled={gridPage === 0}
+              className="pro-pagination-btn"
+            >
               ‹
             </button>
             <div className="pro-grid-dots">
@@ -150,7 +174,11 @@ const MeetingMainArea = ({
                 />
               ))}
             </div>
-            <button onClick={() => handleSwipe(1)} disabled={gridPage >= totalGridPages - 1}>
+            <button 
+              onClick={() => handleSwipe(1)} 
+              disabled={gridPage >= totalGridPages - 1}
+              className="pro-pagination-btn"
+            >
               ›
             </button>
           </div>

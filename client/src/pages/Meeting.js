@@ -891,24 +891,25 @@ const Meeting = () => {
       <div className="pro-meeting-body">
         <div className="pro-mainarea-container">
           <MeetingMainArea
-            participants={allParticipants}
-            isSomeoneScreenSharing={isSomeoneScreenSharing}
-            toolbarPosition={toolbarPosition}
-            currentTool={currentTool}
-            currentBrushSize={currentBrushSize}
-            handleToolbarMouseDown={handleToolbarMouseDown}
-            handleMouseDown={handleMouseDown}
-            handleMouseMove={handleMouseMove}
-            handleMouseUp={handleMouseUp}
-            handleSwipe={handleSwipe}
-            gridPage={gridPage}
-            totalGridPages={totalGridPages}
-            pinnedParticipantId={pinnedParticipantId}
-            isMirroringBrowser={isMirroringBrowser}
-            socketRef={socketRef}
-            handleExitRoom={handleExitRoom}
-            aiCanvasRef={aiCanvasRef}
-          />
+  participants={allParticipants}
+  isSomeoneScreenSharing={isSomeoneScreenSharing}
+  toolbarPosition={toolbarPosition}
+  currentTool={currentTool}
+  currentBrushSize={currentBrushSize}
+  handleToolbarMouseDown={handleToolbarMouseDown}
+  handleMouseDown={handleMouseDown}
+  handleMouseMove={handleMouseMove}
+  handleMouseUp={handleMouseUp}
+  handleSwipe={handleSwipe}
+  gridPage={gridPage}
+  totalGridPages={totalGridPages}
+  pinnedParticipantId={pinnedParticipantId}
+  isMirroringBrowser={isMirroringBrowser}
+  socketRef={socketRef}
+  handleExitRoom={handleExitRoom}
+  aiCanvasRef={aiCanvasRef}
+  setGridPage={setGridPage} // Add this line
+/>
         </div>
         <MeetingSidebar
           isChatOpen={isChatOpen}

@@ -33,7 +33,7 @@ const Meeting = () => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false); // Changed to false by default
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
@@ -891,41 +891,71 @@ const Meeting = () => {
       <div className="pro-meeting-body">
         <div className="pro-mainarea-container">
           <MeetingMainArea
-  participants={allParticipants}
-  isSomeoneScreenSharing={isSomeoneScreenSharing}
-  toolbarPosition={toolbarPosition}
-  currentTool={currentTool}
-  currentBrushSize={currentBrushSize}
-  handleToolbarMouseDown={handleToolbarMouseDown}
-  handleMouseDown={handleMouseDown}
-  handleMouseMove={handleMouseMove}
-  handleMouseUp={handleMouseUp}
-  handleSwipe={handleSwipe}
-  gridPage={gridPage}
-  totalGridPages={totalGridPages}
-  pinnedParticipantId={pinnedParticipantId}
-  isMirroringBrowser={isMirroringBrowser}
-  socketRef={socketRef}
-  handleExitRoom={handleExitRoom}
-  aiCanvasRef={aiCanvasRef}
-  setGridPage={setGridPage} // Add this line
-/>
+            participants={allParticipants}
+            isSomeoneScreenSharing={isSomeoneScreenSharing}
+            toolbarPosition={toolbarPosition}
+            currentTool={currentTool}
+            currentBrushSize={currentBrushSize}
+            handleToolbarMouseDown={handleToolbarMouseDown}
+            handleMouseDown={handleMouseDown}
+            handleMouseMove={handleMouseMove}
+            handleMouseUp={handleMouseUp}
+            handleSwipe={handleSwipe}
+            gridPage={gridPage}
+            totalGridPages={totalGridPages}
+            pinnedParticipantId={pinnedParticipantId}
+            isMirroringBrowser={isMirroringBrowser}
+            socketRef={socketRef}
+            handleExitRoom={handleExitRoom}
+            aiCanvasRef={aiCanvasRef}
+            setGridPage={setGridPage}
+          />
         </div>
-        <MeetingSidebar
-          isChatOpen={isChatOpen}
-          isParticipantsOpen={isParticipantsOpen}
-          messages={messages}
-          user={user}
-          onSendMessage={(payload) => {
-            socketRef.current?.emit('send-chat-message', payload);
-            setMessages((prev) => [...prev, payload]);
-          }}
-          onCloseChat={() => setIsChatOpen(false)}
-          participants={allParticipants}
-          onCloseParticipants={() => setIsParticipantsOpen(false)}
-          roomId={roomId}
-        />
+        
+        {/* Popup Sidebars */}
+        {(isChatOpen || isParticipantsOpen) && (
+          <div className="pro-sidebar-overlay">
+            {isChatOpen && (
+              <div className="pro-sidebar-popup">
+                <MeetingSidebar
+                  isChatOpen={isChatOpen}
+                  isParticipantsOpen={isParticipantsOpen}
+                  messages={messages}
+                  user={user}
+                  onSendMessage={(payload) => {
+                    socketRef.current?.emit('send-chat-message', payload);
+                    setMessages((prev) => [...prev, payload]);
+                  }}
+                  onCloseChat={() => setIsChatOpen(false)}
+                  participants={allParticipants}
+                  onCloseParticipants={() => setIsParticipantsOpen(false)}
+                  roomId={roomId}
+                />
+              </div>
+            )}
+            
+            {isParticipantsOpen && (
+              <div className="pro-sidebar-popup">
+                <MeetingSidebar
+                  isChatOpen={isChatOpen}
+                  isParticipantsOpen={isParticipantsOpen}
+                  messages={messages}
+                  user={user}
+                  onSendMessage={(payload) => {
+                    socketRef.current?.emit('send-chat-message', payload);
+                    setMessages((prev) => [...prev, payload]);
+                  }}
+                  onCloseChat={() => setIsChatOpen(false)}
+                  participants={allParticipants}
+                  onCloseParticipants={() => setIsParticipantsOpen(false)}
+                  roomId={roomId}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
+      
       <MeetingControls
         isAudioMuted={isAudioMuted}
         toggleAudio={toggleAudio}

@@ -384,7 +384,7 @@
   }
 }
 
-/* Responsive Design - FIXED: Remove full-width on mobile */
+/* Responsive Design */
 @media (max-width: 768px) {
   .chat-container {
     width: 280px; /* Keep as sidebar even on mobile */
@@ -409,12 +409,3 @@
     padding: var(--spacing-sm) var(--spacing-md);
   }
 }
-
-/* Remove the problematic mobile full-width rule */
-/* @media (max-width: 480px) {
-  .chat-container {
-    width: 100%;
-    right: 0;
-    left: 0;
-  }
-} */

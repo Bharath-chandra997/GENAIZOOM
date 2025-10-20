@@ -9,13 +9,8 @@ import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import LoadingSpinner from '../components/LoadingSpinner';
-import Chat from '../components/Chat';
-import Participants from '../components/Participants';
-import VideoPlayer from '../components/VideoPlayer';
-import AnnotationToolbar from '../components/AnnotationToolbar';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
-const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict';
 
 const getColorForId = (id) => {
   if (!id) return '#FFFFFF';
@@ -50,18 +45,6 @@ const Meeting = () => {
   const [gridPage, setGridPage] = useState(0);
   const touchStartXRef = useRef(0);
   const touchDeltaRef = useRef(0);
-
-  // Media/AI state
-  const [imageUrl, setImageUrl] = useState('');
-  const [audioUrl, setAudioUrl] = useState('');
-  const [output, setOutput] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [currentUploader, setCurrentUploader] = useState(null);
-  const [isBotLocked, setIsBotLocked] = useState(false);
-  const [uploaderUsername, setUploaderUsername] = useState('');
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [selectedAudio, setSelectedAudio] = useState(null);
-  const [isMediaDisplayed, setIsMediaDisplayed] = useState(false);
 
   // Refs
   const socketRef = useRef(null);
@@ -106,7 +89,7 @@ const Meeting = () => {
     participants.some(p => p.isScreenSharing),
     [participants]
   );
-  const displayParticipants = participants; // Remove AI agent frame entirely
+  const displayParticipants = participants; // No AI agent frame
   const totalGridPages = useMemo(() => Math.max(1, Math.ceil(displayParticipants.length / 4)), [displayParticipants.length]);
 
   const getUsernameById = useCallback((userId) => {
@@ -233,208 +216,6 @@ const Meeting = () => {
     },
     [getIceServers]
   );
-
-  const handleAiStartProcessing = useCallback(({ userId, username }) => {
-    console.log(`Received ai-start-processing: userId=${userId}, username=${username}`);
-    setIsProcessing(true);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-    setOutput('');
-  }, [getUsernameById]);
-
-  const handleAiFinishProcessing = useCallback(({ response }) => {
-    console.log(`Received ai-finish-processing: response=`, response);
-    setIsProcessing(false);
-    setCurrentUploader(null);
-    setUploaderUsername('');
-
-    let displayResponse = '';
-    if (typeof response === 'object') {
-      if (response.answer) {
-        displayResponse = response.answer;
-      } else if (response.response) {
-        displayResponse = response.response;
-      } else if (response.text) {
-        displayResponse = response.text;
-      } else if (response.result) {
-        displayResponse = response.result;
-      } else if (response.data && response.data.answer) {
-        displayResponse = response.data.answer;
-      } else if (response.data && response.data.response) {
-        displayResponse = response.data.response;
-      } else {
-        const firstStringValue = Object.values(response).find(val => typeof val === 'string');
-        displayResponse = firstStringValue || JSON.stringify(response, null, 2);
-      }
-    } else {
-      displayResponse = String(response);
-    }
-
-    console.log(`Setting output to:`, displayResponse);
-    setOutput(displayResponse);
-  }, []);
-
-  const handleAiProcessed = useCallback(({ response }) => {
-    let displayResponse = '';
-    if (typeof response === 'object') {
-      if (response.answer) {
-        displayResponse = response.answer;
-      } else if (response.response) {
-        displayResponse = response.response;
-      } else if (response.text) {
-        displayResponse = response.text;
-      } else if (response.result) {
-        displayResponse = response.result;
-      } else if (response.data && response.data.answer) {
-        displayResponse = response.data.answer;
-      } else if (response.data && response.data.response) {
-        displayResponse = response.data.response;
-      } else {
-        const firstStringValue = Object.values(response).find(val => typeof val === 'string');
-        displayResponse = firstStringValue || JSON.stringify(response, null, 2);
-      }
-    } else {
-      displayResponse = String(response);
-    }
-    setOutput(displayResponse);
-  }, []);
-
-  const handleAiImageUploaded = useCallback(({ url, userId, username }) => {
-    console.log(`Received ai-image-uploaded: url=${url}, userId=${userId}, username=${username}`);
-    setImageUrl(url);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-  }, [getUsernameById]);
-
-  const handleMediaUploaded = useCallback(({ imageUrl: img, audioUrl: aud, userId, username }) => {
-    if (img) setImageUrl(img);
-    if (aud) setAudioUrl(aud);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-  }, [getUsernameById]);
-
-  const handleUploadNotification = useCallback(({ username }) => {
-    const uploadMessage = {
-      message: `📤 ${username} is uploading an image and audio file.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
-    };
-    setMessages(prev => [...prev, uploadMessage]);
-  }, []);
-
-  const handleSharedMediaDisplay = useCallback(({ imageUrl: img, audioUrl: aud, username }) => {
-    if (img) {
-      if (imageUrl && imageUrl.startsWith('blob:')) try { URL.revokeObjectURL(imageUrl); } catch {}
-      setImageUrl(img);
-    }
-    if (aud) {
-      if (audioUrl && audioUrl.startsWith('blob:')) try { URL.revokeObjectURL(audioUrl); } catch {}
-      setAudioUrl(aud);
-    }
-    setUploaderUsername(username);
-    setIsMediaDisplayed(true);
-    const displayMessage = {
-      message: `📺 ${username} is now displaying the uploaded media.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
-    };
-    setMessages(prev => [...prev, displayMessage]);
-  }, [imageUrl, audioUrl]);
-
-  const handleSharedMediaRemoval = useCallback(({ username }) => {
-    setIsMediaDisplayed(false);
-    if (imageUrl) try { URL.revokeObjectURL(imageUrl); } catch {}
-    if (audioUrl) try { URL.revokeObjectURL(audioUrl); } catch {}
-    setImageUrl('');
-    setAudioUrl('');
-    setOutput('');
-    setUploaderUsername('');
-    const removalMessage = {
-      message: `🗑️ ${username || 'Someone'} removed the displayed media.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
-    };
-    setMessages(prev => [...prev, removalMessage]);
-  }, []);
-
-  const handleAiProcessingNotification = useCallback(({ username }) => {
-    const processingMessage = {
-      message: `🤖 ${username} is analyzing the uploaded media with AI.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
-    };
-    setMessages(prev => [...prev, processingMessage]);
-  }, []);
-
-  const handleSharedAiResult = useCallback(({ response, username }) => {
-    let displayResponse = '';
-    if (typeof response === 'object') {
-      if (response.answer) {
-        displayResponse = response.answer;
-      } else if (response.response) {
-        displayResponse = response.response;
-      } else if (response.text) {
-        displayResponse = response.text;
-      } else if (response.result) {
-        displayResponse = response.result;
-      } else if (response.prediction) {
-        displayResponse = response.prediction;
-      } else {
-        displayResponse = JSON.stringify(response, null, 2);
-      }
-    } else {
-      displayResponse = String(response);
-    }
-    setOutput(displayResponse);
-    setUploaderUsername(username);
-    const completionMessage = {
-      message: `✅ ${username} completed AI analysis.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
-    };
-    setMessages(prev => [...prev, completionMessage]);
-  }, []);
-
-  const handleAiAudioUploaded = useCallback(({ url, userId, username }) => {
-    console.log(`Received ai-audio-uploaded: url=${url}, userId=${userId}, username=${username}`);
-    setAudioUrl(url);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-    setIsPlaying(false);
-  }, [getUsernameById]);
-
-  const handleAiBotLocked = useCallback(({ userId, username }) => {
-    console.log(`Received ai-bot-locked: userId=${userId}, username=${username}`);
-    setIsBotLocked(true);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-    if (userId !== socketRef.current?.id) {
-      setOutput('');
-    }
-  }, [getUsernameById]);
-
-  const handleAiBotUnlocked = useCallback(() => {
-    console.log('Received ai-bot-unlocked');
-    setIsBotLocked(false);
-    setCurrentUploader(null);
-    setUploaderUsername('');
-    setIsProcessing(false);
-  }, []);
-
-  const handleAiAudioPlay = useCallback(() => {
-    console.log('Received ai-audio-play');
-    setIsPlaying(true);
-  }, []);
-
-  const handleAiAudioPause = useCallback(() => {
-    console.log('Received ai-audio-pause');
-    setIsPlaying(false);
-  }, []);
 
   const setupSocketListeners = useCallback((socket) => {
     const handleConnect = () => {
@@ -652,25 +433,6 @@ const Meeting = () => {
     socket.on('drawing-move', handleDrawingMove);
     socket.on('draw-shape', handleDrawShape);
     socket.on('clear-canvas', handleClearCanvas);
-    socket.on('ai-start-processing', handleAiStartProcessing);
-    socket.on('ai-finish-processing', handleAiFinishProcessing);
-    socket.on('ai-image-uploaded', handleAiImageUploaded);
-    socket.on('ai-audio-uploaded', handleAiAudioUploaded);
-    socket.on('mediaUploaded', handleMediaUploaded);
-    socket.on('ai-bot-locked', handleAiBotLocked);
-    socket.on('ai-bot-unlocked', handleAiBotUnlocked);
-    socket.on('ai-audio-play', handleAiAudioPlay);
-    socket.on('ai-audio-pause', handleAiAudioPause);
-    socket.on('media-display', () => setIsMediaDisplayed(true));
-    socket.on('media-remove', () => setIsMediaDisplayed(false));
-    socket.on('mediaDisplayed', () => setIsMediaDisplayed(true));
-    socket.on('mediaRemoved', () => setIsMediaDisplayed(false));
-    socket.on('aiProcessed', handleAiProcessed);
-    socket.on('upload-notification', handleUploadNotification);
-    socket.on('shared-media-display', handleSharedMediaDisplay);
-    socket.on('shared-media-removal', handleSharedMediaRemoval);
-    socket.on('ai-processing-notification', handleAiProcessingNotification);
-    socket.on('shared-ai-result', handleSharedAiResult);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -687,47 +449,8 @@ const Meeting = () => {
       socket.off('drawing-move', handleDrawingMove);
       socket.off('draw-shape', handleDrawShape);
       socket.off('clear-canvas', handleClearCanvas);
-      socket.off('ai-start-processing', handleAiStartProcessing);
-      socket.off('ai-finish-processing', handleAiFinishProcessing);
-      socket.off('ai-image-uploaded', handleAiImageUploaded);
-      socket.off('ai-audio-uploaded', handleAiAudioUploaded);
-      socket.off('mediaUploaded', handleMediaUploaded);
-      socket.off('ai-bot-locked', handleAiBotLocked);
-      socket.off('ai-bot-unlocked', handleAiBotUnlocked);
-      socket.off('ai-audio-play', handleAiAudioPlay);
-      socket.off('ai-audio-pause', handleAiAudioPause);
-      socket.off('media-display');
-      socket.off('media-remove');
-      socket.off('mediaDisplayed');
-      socket.off('mediaRemoved');
-      socket.off('aiProcessed', handleAiProcessed);
-      socket.off('upload-notification', handleUploadNotification);
-      socket.off('shared-media-display', handleSharedMediaDisplay);
-      socket.off('shared-media-removal', handleSharedMediaRemoval);
-      socket.off('ai-processing-notification', handleAiProcessingNotification);
-      socket.off('shared-ai-result', handleSharedAiResult);
     };
-  }, [
-    createPeerConnection,
-    roomId,
-    user,
-    getUsernameById,
-    handleAiStartProcessing,
-    handleAiFinishProcessing,
-    handleAiImageUploaded,
-    handleMediaUploaded,
-    handleAiAudioUploaded,
-    handleAiBotLocked,
-    handleAiBotUnlocked,
-    handleAiAudioPlay,
-    handleAiAudioPause,
-    handleAiProcessed,
-    handleUploadNotification,
-    handleSharedMediaDisplay,
-    handleSharedMediaRemoval,
-    handleAiProcessingNotification,
-    handleSharedAiResult,
-  ]);
+  }, [createPeerConnection, roomId, user, getUsernameById]);
 
   useEffect(() => {
     if (isInitialized.current) return;
@@ -807,10 +530,6 @@ const Meeting = () => {
     };
     initialize();
   }, [roomId, user, navigate, setupSocketListeners]);
-
-  useEffect(() => {
-    if (isProcessing) setOutput('');
-  }, [isProcessing]);
 
   const replaceTrack = useCallback(
     async (newTrack, isScreenShare = false) => {
@@ -1010,82 +729,12 @@ const Meeting = () => {
     socketRef.current?.emit('clear-canvas');
   };
 
-  const handleProcessWithAI = async () => {
-    const hasImg = !!selectedImage;
-    const hasAud = !!selectedAudio;
-    
-    if (!hasImg || !hasAud) {
-      toast.error('Please upload both image and audio to process.');
-      return;
-    }
-    
-    if (isBotLocked && currentUploader !== socketRef.current?.id) {
-      toast.error('Another user is currently processing. Please wait.');
-      return;
-    }
-    
-    try {
-      setOutput('');
-      setIsBotLocked(true);
-      socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId });
-      setIsProcessing(true);
-      socketRef.current?.emit('ai-start-processing', { userId: socketRef.current?.id, username: user.username, roomId });
-      socketRef.current?.emit('ai-processing-notification', { username: user.username, roomId });
-      
-      const formData = new FormData();
-      formData.append('image', selectedImage);
-      formData.append('audio', selectedAudio);
-      
-      try {
-        await axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` }
-        });
-      } catch {}
-
-      const response = await axios.post(AI_MODEL_API_URL, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      const modelOutput = response.data?.prediction ?? response.data?.result ?? response.data;
-      let displayResponse = '';
-      if (typeof modelOutput === 'object') {
-        displayResponse = modelOutput.answer || modelOutput.response || modelOutput.text || 
-                        modelOutput.result || modelOutput.prediction || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || '';
-        if (!displayResponse) {
-          const firstStringValue = Object.values(modelOutput).find(val => typeof val === 'string');
-          displayResponse = firstStringValue || JSON.stringify(modelOutput, null, 2);
-        }
-      } else {
-        displayResponse = String(modelOutput);
-      }
-      setOutput(displayResponse);
-      socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId });
-      socketRef.current?.emit('aiProcessed', { response: modelOutput, roomId });
-      socketRef.current?.emit('shared-ai-result', { response: modelOutput, username: user.username, roomId });
-    } catch (error) {
-      console.error('AI processing error:', error);
-      const status = error?.response?.status;
-      const detail = error?.response?.data?.detail || error?.message || 'Unknown error';
-      toast.error('AI analysis failed. Please try again.');
-      console.debug('[Analyze] Failure details:', { status, detail });
-    } finally {
-      setIsProcessing(false);
-      setIsBotLocked(false);
-      socketRef.current?.emit('ai-bot-unlocked', { roomId });
-    }
-  };
-
   const handleExitRoom = () => {
     try {
       socketRef.current?.emit('leave-room');
     } catch (e) {
       console.warn('Error emitting leave-room:', e);
     }
-    setImageUrl('');
-    setAudioUrl('');
-    setOutput('');
-    setIsProcessing(false);
-    setCurrentUploader(null);
-    setUploaderUsername('');
-    setIsBotLocked(false);
-    setIsPlaying(false);
     navigate('/home');
   };
 
@@ -1096,16 +745,6 @@ const Meeting = () => {
       <MeetingHeader roomId={roomId} participants={participants} />
       <MeetingMainArea
         participants={participants}
-        isMediaDisplayed={isMediaDisplayed}
-        imageUrl={imageUrl}
-        audioUrl={audioUrl}
-        output={output}
-        uploaderUsername={uploaderUsername}
-        isProcessing={isProcessing}
-        handleProcessWithAI={handleProcessWithAI}
-        isBotLocked={isBotLocked}
-        currentUploader={currentUploader}
-        socketId={socketRef.current?.id}
         isSomeoneScreenSharing={isSomeoneScreenSharing}
         toolbarPosition={toolbarPosition}
         currentTool={currentTool}
@@ -1120,12 +759,6 @@ const Meeting = () => {
         pinnedParticipantId={pinnedParticipantId}
         isMirroringBrowser={isMirroringBrowser}
         socketRef={socketRef}
-        user={user}
-        roomId={roomId}
-        selectedImage={selectedImage}
-        setSelectedImage={setSelectedImage}
-        selectedAudio={selectedAudio}
-        setSelectedAudio={setSelectedAudio}
         handleExitRoom={handleExitRoom}
       />
       <MeetingSidebar

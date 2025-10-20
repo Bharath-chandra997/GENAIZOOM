@@ -9,17 +9,21 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
+      /* ✅ Allow scrolling, remove overflow hidden */
       html, body, #root {
         height: 100%;
         margin: 0;
         padding: 0;
-        overflow: hidden;
+        overflow-x: hidden; /* only hide horizontal scroll */
+        overflow-y: auto;   /* allow vertical scrolling */
       }
     </style>
 
     <title>Meeting</title>
   </head>
-  <body class="bg-black font-sans">
+
+  <!-- ✅ Keep this clean — no &nbsp;, no spaces -->
+  <body class="bg-black font-sans text-white">
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
   </body>

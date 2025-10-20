@@ -5,7 +5,7 @@ import Participants from '../components/Participants';
 const MeetingSidebar = ({ isChatOpen, isParticipantsOpen, messages, user, onSendMessage, onCloseChat, participants, onCloseParticipants, roomId }) => {
   return (
     <div
-      className={`pro-sidebar ${isChatOpen || isParticipantsOpen ? 'w-[420px]' : 'w-0'}`}
+      className={`pro-sidebar ${isChatOpen || isParticipantsOpen ? 'w-[450px]' : 'w-0'}`}
     >
       {isChatOpen && (
         <Chat

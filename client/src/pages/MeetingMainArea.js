@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
 
@@ -6,14 +6,14 @@ const MeetingMainArea = ({
   participants,
   isSomeoneScreenSharing,
   toolbarPosition,
-  currentTool,
-  currentBrushSize,
+  currentTool: initialCurrentTool,
+  currentBrushSize: initialCurrentBrushSize,
   handleToolbarMouseDown,
   handleMouseDown,
   handleMouseMove,
   handleMouseUp,
   handleSwipe,
-  gridPage,
+  gridPage: initialGridPage,
   totalGridPages,
   pinnedParticipantId,
   isMirroringBrowser,
@@ -24,6 +24,11 @@ const MeetingMainArea = ({
   const annotationCanvasRef = useRef(null);
   const touchStartXRef = useRef(0);
   const touchDeltaRef = useRef(0);
+
+  // Define local state with initial values from props
+  const [currentTool, setCurrentTool] = useState(initialCurrentTool || 'pen');
+  const [currentBrushSize, setCurrentBrushSize] = useState(initialCurrentBrushSize || 5);
+  const [gridPage, setGridPage] = useState(initialGridPage || 0);
 
   const renderVideoPlayer = (participant, isLocal, className = "mx-auto") => (
     <VideoPlayer

@@ -81,6 +81,13 @@
   animation: popupSlideIn 0.3s ease-out;
 }
 
+/* Ensure embedded Chat fills the popup with no unintended gap */
+.pro-sidebar-popup .chat-container {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
 @keyframes popupSlideIn {
   from {
     opacity: 0;

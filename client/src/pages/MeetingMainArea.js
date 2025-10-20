@@ -1,7 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
-import UploadControls from '../components/UploadControls';
 import ImageAudioSection from '../components/ImageAudioSection';
 
 const MeetingMainArea = ({
@@ -12,7 +11,6 @@ const MeetingMainArea = ({
   output,
   uploaderUsername,
   isProcessing,
-  handleProcessWithAI,
   isBotLocked,
   currentUploader,
   socketId,
@@ -32,10 +30,6 @@ const MeetingMainArea = ({
   socketRef,
   user,
   roomId,
-  selectedImage,
-  setSelectedImage,
-  selectedAudio,
-  setSelectedAudio,
   handleExitRoom,
 }) => {
   const mainVideoContainerRef = useRef(null);
@@ -88,58 +82,7 @@ const MeetingMainArea = ({
       >
         <div className="flex flex-col min-h-0 w-full">
           <div className="bg-gray-800 border-b border-gray-700 p-3">
-            <UploadControls
-              canUpload={!isMediaDisplayed}
-              selectedImage={selectedImage}
-              setSelectedImage={setSelectedImage}
-              selectedAudio={selectedAudio}
-              setSelectedAudio={setSelectedAudio}
-              hasImageUrl={!!imageUrl}
-              hasAudioUrl={!!audioUrl}
-              isMediaDisplayed={isMediaDisplayed}
-              onDisplay={async () => {
-                if (!selectedImage || !selectedAudio) { toast.error('Please upload both image and audio first.'); return; }
-                setIsMediaDisplayed(true);
-                const convertFileToBase64 = (file) => new Promise((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onload = () => resolve(reader.result);
-                  reader.onerror = reject;
-                  reader.readAsDataURL(file);
-                });
-                try {
-                  const [imageBase64, audioBase64] = await Promise.all([
-                    convertFileToBase64(selectedImage),
-                    convertFileToBase64(selectedAudio),
-                  ]);
-                  socketRef.current?.emit('shared-media-display', {
-                    imageUrl: imageBase64,
-                    audioUrl: audioBase64,
-                    username: user.username,
-                    roomId,
-                  });
-                } catch (error) {
-                  console.error('Error converting files to base64:', error);
-                  toast.error('Failed to prepare media for sharing.');
-                }
-              }}
-              onRemove={() => {
-                setIsMediaDisplayed(false);
-                if (imageUrl) try { URL.revokeObjectURL(imageUrl); } catch {}
-                if (audioUrl) try { URL.revokeObjectURL(audioUrl); } catch {}
-                setSelectedImage(null);
-                setSelectedAudio(null);
-                setImageUrl('');
-                setAudioUrl('');
-                setOutput('');
-                setCurrentUploader(null);
-                setUploaderUsername('');
-                setIsProcessing(false);
-                setIsBotLocked(false);
-                socketRef.current?.emit('shared-media-removal', { username: user.username, roomId });
-              }}
-              onAnalyze={handleProcessWithAI}
-              isProcessing={isProcessing}
-            />
+            {/* UploadControls removed */}
           </div>
           {isSomeoneScreenSharing && (
             <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>

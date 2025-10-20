@@ -13,8 +13,8 @@ const Participants = ({
   roomId,
 }) => {
   return (
-    <div className="pro-participants-root">
-      <div className="pro-participants">
+    <div className="pro-participants-container">
+      <div className="pro-participants-sidebar">
         {/* Header */}
         <div className="pro-participants__header">
           <h3 className="pro-participants__title">
@@ -55,6 +55,7 @@ const Participants = ({
               <div
                 key={participant.userId || participant.peerId}
                 className="pro-participants-card"
+                data-user-id={participant.userId}
               >
                 <div className="pro-participants-card__left">
                   <div className="pro-participants-card__avatar">

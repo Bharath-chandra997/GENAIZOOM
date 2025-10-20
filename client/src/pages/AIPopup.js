@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { toast } from 'react-toastify';
+import './AIPopup.css';
 const AIPopup = ({ 
   onClose, 
   onAIRequest, 

@@ -437,6 +437,17 @@ const Meeting = () => {
     }
   }, []);
 
+  // Add the missing handleIceCandidate function
+  const handleIceCandidate = useCallback(({ from, candidate }) => {
+    const pc = peerConnections.current.get(from);
+    if (pc) {
+      pc.addIceCandidate(new RTCIceCandidate(candidate))
+        .catch(err => {
+          console.warn('Error adding ICE candidate:', err);
+        });
+    }
+  }, []);
+
   const createPeerConnection = useCallback(
     async (remoteSocketId) => {
       if (peerConnections.current.has(remoteSocketId)) {

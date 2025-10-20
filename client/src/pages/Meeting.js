@@ -301,6 +301,94 @@ const Meeting = () => {
     socketRef.current?.emit('ai-complete');
   }, []);
 
+  // Add the missing functions that were causing errors
+  const handleToolbarMouseUp = useCallback(() => {
+    dragInfo.current.isDragging = false;
+    window.removeEventListener('mousemove', handleToolbarMouseMove);
+    window.removeEventListener('mouseup', handleToolbarMouseUp);
+  }, []);
+
+  const handleToolbarMouseMove = useCallback((e) => {
+    if (dragInfo.current.isDragging) {
+      setToolbarPosition({
+        x: e.clientX - dragInfo.current.offsetX,
+        y: e.clientY - dragInfo.current.offsetY,
+      });
+    }
+  }, []);
+
+  const handleMouseDown = useCallback((e) => {
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
+
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+      const myColor = getColorForId(socketRef.current?.id);
+      const payload = { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize };
+      socketRef.current?.emit('drawing-start', payload);
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = myColor;
+      ctx.lineWidth = currentBrushSize;
+      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+  }, [currentTool, currentBrushSize]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!drawingStateRef.current.isDrawing || !e.buttons) return;
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      socketRef.current?.emit('drawing-move', { x: x / canvas.width, y: y / canvas.height });
+      const ctx = canvas.getContext('2d');
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+  }, [currentTool]);
+
+  const handleMouseUp = useCallback((e) => {
+    if (!drawingStateRef.current.isDrawing) return;
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    if (currentTool === 'rectangle' || currentTool === 'circle') {
+      const rect = canvas.getBoundingClientRect();
+      const { startX, startY } = drawingStateRef.current;
+      const endX = e.clientX - rect.left;
+      const endY = e.clientY - rect.top;
+      const myColor = getColorForId(socketRef.current?.id);
+      const payload = {
+        tool: currentTool,
+        startX: startX / canvas.width,
+        startY: startY / canvas.height,
+        endX: endX / canvas.width,
+        endY: endY / canvas.height,
+        color: myColor,
+        size: currentBrushSize,
+      };
+      socketRef.current?.emit('draw-shape', payload);
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = myColor;
+      ctx.lineWidth = currentBrushSize;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.beginPath();
+      if (currentTool === 'rectangle') ctx.rect(startX, startY, endX - startX, endY - startY);
+      else if (currentTool === 'circle') {
+        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+      }
+      ctx.stroke();
+    }
+    drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
+  }, [currentTool, currentBrushSize]);
+
   const getIceServers = useCallback(async () => {
     const now = Date.now();
     const cacheExpiry = 5 * 60 * 1000;
@@ -866,61 +954,17 @@ const Meeting = () => {
     window.addEventListener('mouseup', handleToolbarMouseUp);
   };
 
-  const handleToolbarMouseMove = (e) => {
-    if (dragInfo.current.isDragging) {
-      setToolbarPosition({
-        x: e.clientX - dragInfo.current.offsetX,
-        y: e.clientY - dragInfo.current.offsetY,
-      });
-    }
-  };
-
-   const handleMouseUp = (e) => {
-    if (!drawingStateRef.current.isDrawing) return;
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    if (currentTool === 'rectangle' || currentTool === 'circle') {
-      const rect = canvas.getBoundingClientRect();
-      const { startX, startY } = drawingStateRef.current;
-      const endX = e.clientX - rect.left;
-      const endY = e.clientY - rect.top;
-      const myColor = getColorForId(socketRef.current?.id);
-      const payload = {
-        tool: currentTool,
-        startX: startX / canvas.width,
-        startY: startY / canvas.height,
-        endX: endX / canvas.width,
-        endY: endY / canvas.height,
-        color: myColor,
-        size: currentBrushSize,
-      };
-      socketRef.current?.emit('draw-shape', payload);
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = myColor;
-      ctx.lineWidth = currentBrushSize;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.beginPath();
-      if (currentTool === 'rectangle') ctx.rect(startX, startY, endX - startX, endY - startY);
-      else if (currentTool === 'circle') {
-        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
-      }
-      ctx.stroke();
-    }
-    drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
-  };
-
-  const handleParticipantClick = (userId) => {
-    setPinnedParticipantId(userId);
-    setCurrentOffset(0);
-  };
-
   const clearAnnotations = () => {
     const canvas = annotationCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     socketRef.current?.emit('clear-canvas');
+  };
+
+  const handleParticipantClick = (userId) => {
+    setPinnedParticipantId(userId);
+    setCurrentOffset(0);
   };
 
   const handleExitRoom = () => {

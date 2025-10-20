@@ -13,7 +13,6 @@ import Chat from '../components/Chat';
 import Participants from '../components/Participants';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
-import UploadControls from '../components/UploadControls';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict';

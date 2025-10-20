@@ -1,19 +1,9 @@
 import React, { useRef, useEffect } from 'react';
 import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
-import ImageAudioSection from '../components/ImageAudioSection';
 
 const MeetingMainArea = ({
   participants,
-  isMediaDisplayed,
-  imageUrl,
-  audioUrl,
-  output,
-  uploaderUsername,
-  isProcessing,
-  isBotLocked,
-  currentUploader,
-  socketId,
   isSomeoneScreenSharing,
   toolbarPosition,
   currentTool,
@@ -28,8 +18,6 @@ const MeetingMainArea = ({
   pinnedParticipantId,
   isMirroringBrowser,
   socketRef,
-  user,
-  roomId,
   handleExitRoom,
 }) => {
   const mainVideoContainerRef = useRef(null);
@@ -72,7 +60,7 @@ const MeetingMainArea = ({
   return (
     <div className="flex-1 flex relative overflow-hidden">
       <div
-        className={`flex-1 ${isMediaDisplayed ? 'grid grid-cols-[60%_40%] xl:grid-cols-[65%_35%] 2xl:grid-cols-[70%_30%]' : 'flex flex-col'} relative overflow-hidden`}
+        className="flex-1 flex flex-col relative overflow-hidden"
         onWheel={(e) => {
           if (e.deltaX !== 0 && totalGridPages > 1) {
             e.preventDefault();
@@ -82,7 +70,7 @@ const MeetingMainArea = ({
       >
         <div className="flex flex-col min-h-0 w-full">
           <div className="bg-gray-800 border-b border-gray-700 p-3">
-            {/* UploadControls removed */}
+            {/* No upload or media controls */}
           </div>
           {isSomeoneScreenSharing && (
             <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
@@ -118,7 +106,7 @@ const MeetingMainArea = ({
                 const p = participants[0];
                 return (
                   <div className="w-full h-full flex items-center justify-center">
-                    <div className={`w-full ${isMediaDisplayed ? 'max-w-2xl' : 'max-w-3xl'}`}>
+                    <div className="w-full max-w-3xl">
                       {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
                     </div>
                   </div>
@@ -127,7 +115,7 @@ const MeetingMainArea = ({
 
               if (count === 2) {
                 return (
-                  <div className={`flex h-full w-full ${isMediaDisplayed ? 'gap-1' : 'gap-2'}`}>
+                  <div className="flex h-full w-full gap-2">
                     <div className="flex-1 h-full flex items-center justify-center p-1">
                       {renderVideoPlayer(participants[0], participants[0].isLocal, "w-full h-full object-cover")}
                     </div>
@@ -141,7 +129,7 @@ const MeetingMainArea = ({
               if (count === 3) {
                 const [a, b, c] = participants;
                 return (
-                  <div className={`grid grid-cols-1 md:grid-cols-2 w-full h-full ${isMediaDisplayed ? 'gap-1' : 'gap-2'} p-1`}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-2 p-1">
                     <div className="w-full h-full flex items-center justify-center">
                       {renderVideoPlayer(a, a.isLocal, "w-full h-auto")}
                     </div>
@@ -149,7 +137,7 @@ const MeetingMainArea = ({
                       {renderVideoPlayer(b, b.isLocal, "w-full h-auto")}
                     </div>
                     <div className="md:col-span-2 h-full flex justify-center items-center">
-                      <div className={`w-full md:w-1/2 min-w-[200px] ${isMediaDisplayed ? 'max-w-xs' : 'max-w-sm'}`}>
+                      <div className="w-full md:w-1/2 min-w-[200px] max-w-sm">
                         {renderVideoPlayer(c, c.isLocal, "w-full h-auto")}
                       </div>
                     </div>
@@ -159,7 +147,7 @@ const MeetingMainArea = ({
 
               return (
                 <div className="w-full h-full p-1">
-                  <div className={`grid grid-cols-1 md:grid-cols-2 w-full h-full ${isMediaDisplayed ? 'gap-1' : 'gap-2'}`}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-2">
                     {pageItems.map((p) => (
                       <div key={p.userId} className="w-full h-full flex items-center justify-center">
                         {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
@@ -203,21 +191,6 @@ const MeetingMainArea = ({
             />
           </div>
         </div>
-        {isMediaDisplayed && (
-          <div className="h-full min-w-0">
-            <ImageAudioSection
-              imageUrl={imageUrl}
-              audioUrl={audioUrl}
-              uploaderUsername={uploaderUsername}
-              isProcessing={isProcessing}
-              onProcessWithAI={handleProcessWithAI}
-              isBotLocked={isBotLocked}
-              currentUploader={currentUploader}
-              socketId={socketId}
-              output={output} // Pass output to display AI results
-            />
-          </div>
-        )}
       </div>
     </div>
   );

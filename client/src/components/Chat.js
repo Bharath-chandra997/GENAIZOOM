@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import './Chat.css'
+import './Chat.css';
+
 const Chat = ({ messages, onSendMessage, currentUser, onClose }) => {
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
@@ -31,82 +32,82 @@ const Chat = ({ messages, onSendMessage, currentUser, onClose }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-800">
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
-        <h3 className="text-lg font-semibold text-white">Meeting Chat</h3>
+    <div className="chat-container">
+      <div className="chat-header">
+        <h3 className="chat-title">Meeting Chat</h3>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-white transition-colors duration-200 p-1"
+          className="chat-close"
           title="Close chat"
         >
-          <span className="text-lg">✕</span>
+          ✕
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
+      
+      <div className="chat-messages">
         {messages.length === 0 ? (
-          <div className="text-center text-gray-400 py-8">
-            <span className="text-3xl mb-2 block">💬</span>
-            <p>No messages yet.</p>
-            <p className="text-sm">Start the conversation!</p>
+          <div className="chat-empty">
+            <div className="chat-empty-icon">💬</div>
+            <div className="chat-empty-title">No messages yet</div>
+            <div className="chat-empty-text">Start the conversation!</div>
           </div>
         ) : (
           messages.map((message, index) => (
             <div
               key={message.id || `message-${index}`}
-              className={`flex ${
+              className={`chat-message ${
                 message.isSystemMessage 
-                  ? 'justify-center' 
+                  ? 'system' 
                   : message.userId === currentUser.userId 
-                    ? 'justify-end' 
-                    : 'justify-start'
+                    ? 'own' 
+                    : 'other'
               }`}
             >
               {message.isSystemMessage ? (
-                <div className="bg-blue-900/50 border border-blue-600/30 text-blue-200 px-3 py-2 rounded-lg text-center max-w-md">
-                  <p className="text-sm break-words">{message.message}</p>
-                  <span className="text-xs opacity-75">{formatTime(message.timestamp)}</span>
-                </div>
+                <>
+                  <div className="message-content">{message.message}</div>
+                  <div className="message-time">{formatTime(message.timestamp)}</div>
+                </>
               ) : (
-                <div
-                  className={`max-w-xs lg:max-w-sm px-4 py-2 rounded-lg ${
-                    message.userId === currentUser.userId
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-700 text-gray-100'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2 mb-1">
-                    <span className="text-xs font-medium">{message.username}</span>
-                    <span className="text-xs opacity-75">{formatTime(message.timestamp)}</span>
+                <>
+                  <div className="message-header">
+                    <span className="message-author">{message.username}</span>
+                    <span className="message-time">{formatTime(message.timestamp)}</span>
                   </div>
-                  <p className="text-sm break-words">{message.message}</p>
-                </div>
+                  <div className="message-content">{message.message}</div>
+                </>
               )}
             </div>
           ))
         )}
         <div ref={messagesEndRef} />
       </div>
-      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-700">
-        <div className="flex space-x-2">
-          <input
-            ref={inputRef}
-            type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
-            maxLength={500}
-            className="flex-1 px-3 py-2 bg-gray-700 text-white placeholder-gray-400 rounded-lg border border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          />
+      
+      <form onSubmit={handleSubmit} className="chat-form">
+        <div className="chat-input-container">
+          <div className="chat-input-wrapper">
+            <input
+              ref={inputRef}
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Type a message..."
+              maxLength={500}
+              className="chat-input"
+            />
+            <div className={`char-counter ${newMessage.length >= 450 ? 'warning' : ''} ${newMessage.length >= 500 ? 'error' : ''}`}>
+              {newMessage.length}/500
+            </div>
+          </div>
           <button
             type="submit"
             disabled={!newMessage.trim()}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 btn-hover"
+            className="chat-send"
             title="Send message"
           >
-            <span className="text-lg">📤</span>
+            Send
           </button>
         </div>
-        <div className="text-xs text-gray-400 mt-1 text-right">{newMessage.length}/500</div>
       </form>
     </div>
   );

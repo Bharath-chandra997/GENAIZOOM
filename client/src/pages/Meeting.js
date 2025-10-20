@@ -4,13 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import io from 'socket.io-client';
 import axios from 'axios';
-import Chat from '../components/Chat';
-import Participants from '../components/Participants';
-import LoadingSpinner from '../components/LoadingSpinner';
-import VideoPlayer from '../components/VideoPlayer';
-import AnnotationToolbar from '../components/AnnotationToolbar';
-import UploadControls from '../components/UploadControls';
+import VideoGrid from '../components/VideoGrid';
+import AnnotationCanvas from '../components/AnnotationCanvas';
 import MediaPanel from '../components/MediaPanel';
+import UploadControls from '../components/UploadControls';
+import ChatComponent from '../components/ChatComponent';
+import ParticipantsPanel from '../components/ParticipantsPanel';
+import MeetingControls from '../components/MeetingControls';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
@@ -29,7 +30,6 @@ const Meeting = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // State for meeting
   const [participants, setParticipants] = useState([]);
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,17 +38,11 @@ const Meeting = () => {
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
-  const [filmstripSize] = useState(6);
-  const [currentOffset, setCurrentOffset] = useState(0);
+  const [gridPage, setGridPage] = useState(0);
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
   const [toolbarPosition, setToolbarPosition] = useState({ x: 20, y: 20 });
   const [currentTool, setCurrentTool] = useState('pen');
   const [currentBrushSize, setCurrentBrushSize] = useState(5);
-  const [gridPage, setGridPage] = useState(0);
-  const touchStartXRef = useRef(0);
-  const touchDeltaRef = useRef(0);
-
-  // Media/AI state (React state only)
   const [imageUrl, setImageUrl] = useState('');
   const [audioUrl, setAudioUrl] = useState('');
   const [output, setOutput] = useState('');
@@ -61,7 +55,6 @@ const Meeting = () => {
   const [selectedAudio, setSelectedAudio] = useState(null);
   const [isMediaDisplayed, setIsMediaDisplayed] = useState(false);
 
-  // Refs
   const socketRef = useRef(null);
   const localStreamRef = useRef(null);
   const localCameraTrackRef = useRef(null);
@@ -70,24 +63,9 @@ const Meeting = () => {
   const dragInfo = useRef({ isDragging: false });
   const annotationCanvasRef = useRef(null);
   const mainVideoContainerRef = useRef(null);
-  const remoteDrawingStates = useRef(new Map());
-  const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
   const isInitialized = useRef(false);
-
-  // Connection optimization refs
-  const connectionTimeouts = useRef(new Map());
-  const iceServersCache = useRef(null);
-  const lastIceFetch = useRef(0);
-
-  // Signaling state management
-  const signalingStates = useRef(new Map());
-  const pendingOffers = useRef(new Map());
-  const pendingAnswers = useRef(new Map());
-
-  // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
-  // Derived State
   const defaultMainParticipant = useMemo(() => {
     const screenSharer = participants.find(p => p.isScreenSharing);
     if (screenSharer) return screenSharer;
@@ -104,7 +82,7 @@ const Meeting = () => {
     participants.some(p => p.isScreenSharing),
     [participants]
   );
-  const displayParticipants = participants; // Remove AI agent frame entirely
+  const displayParticipants = participants;
   const totalGridPages = useMemo(() => Math.max(1, Math.ceil(displayParticipants.length / 4)), [displayParticipants.length]);
 
   const getUsernameById = useCallback((userId) => {
@@ -112,698 +90,94 @@ const Meeting = () => {
     return participant ? (participant.isLocal ? user.username : participant.username) : 'Another user';
   }, [participants, user.username]);
 
-  // Removed session persistence/localStorage restores
-  const restoreSessionData = useCallback(() => {}, []);
-
-  // Optimized ICE Servers with caching and timeout
   const getIceServers = useCallback(async () => {
     const now = Date.now();
     const cacheExpiry = 5 * 60 * 1000;
-
     if (iceServersCache.current && (now - lastIceFetch.current) < cacheExpiry) {
       return iceServersCache.current;
     }
-
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-
-      const { data } = await axios.get(`${SERVER_URL}/ice-servers`, {
-        signal: controller.signal,
-        timeout: 2000
-      });
-
-      clearTimeout(timeoutId);
-      console.log('ICE Servers fetched:', data.length, 'servers');
-
+      const { data } = await axios.get(`${SERVER_URL}/ice-servers`, { timeout: 2000 });
       iceServersCache.current = data;
       lastIceFetch.current = now;
-
       return data;
-    } catch (error) {
-      console.warn('ICE servers fetch failed, using fallback:', error.message);
-      const fallbackServers = [
+    } catch {
+      return [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        {
-          urls: 'turn:openrelay.metered.ca:80',
-          username: 'openrelayproject',
-          credential: 'openrelayprojectsecret',
-        },
-        {
-          urls: 'turns:openrelay.metered.ca:443',
-          username: 'openrelayproject',
-          credential: 'openrelayprojectsecret',
-        },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayprojectsecret' },
+        { urls: 'turns:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayprojectsecret' },
       ];
-
-      iceServersCache.current = fallbackServers;
-      lastIceFetch.current = now;
-
-      return fallbackServers;
     }
   }, []);
 
-  // Optimized Peer Connection with signaling state management
-  const createPeerConnection = useCallback(
-    async (remoteSocketId) => {
-      if (peerConnections.current.has(remoteSocketId)) {
-        console.log('Connection already exists for user:', remoteSocketId);
-        return peerConnections.current.get(remoteSocketId);
+  const createPeerConnection = useCallback(async (remoteSocketId) => {
+    if (peerConnections.current.has(remoteSocketId)) return peerConnections.current.get(remoteSocketId);
+    const iceServers = await getIceServers();
+    const pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10, bundlePolicy: 'max-bundle', rtcpMuxPolicy: 'require' });
+    pc.ontrack = (event) => setParticipants((prev) => prev.map(p => p.userId === remoteSocketId ? { ...p, stream: event.streams[0] } : p));
+    pc.onicecandidate = (event) => event.candidate && socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') {
+        pc.close();
+        peerConnections.current.delete(remoteSocketId);
+        setParticipants((prev) => prev.filter(p => p.userId !== remoteSocketId));
       }
-
-      const iceServers = await getIceServers();
-      const pc = new RTCPeerConnection({
-        iceServers,
-        iceCandidatePoolSize: 10,
-        bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require'
-      });
-
-      signalingStates.current.set(remoteSocketId, 'new');
-
-      const connectionTimeout = setTimeout(() => {
-        if (pc.connectionState === 'connecting') {
-          console.warn('Connection timeout for user:', remoteSocketId);
-          pc.close();
-          peerConnections.current.delete(remoteSocketId);
-          connectionTimeouts.current.delete(remoteSocketId);
-          signalingStates.current.delete(remoteSocketId);
-        }
-      }, 8000);
-
-      connectionTimeouts.current.set(remoteSocketId, connectionTimeout);
-
-      pc.ontrack = (event) => {
-        clearTimeout(connectionTimeout);
-        connectionTimeouts.current.delete(remoteSocketId);
-        setParticipants((prev) =>
-          prev.map((p) =>
-            p.userId === remoteSocketId ? { ...p, stream: event.streams[0] } : p
-          )
-        );
-      };
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        console.log('Peer connection state:', pc.connectionState, 'for user:', remoteSocketId);
-        if (pc.connectionState === 'connected') {
-          clearTimeout(connectionTimeout);
-          connectionTimeouts.current.delete(remoteSocketId);
-          console.log('Successfully connected to user:', remoteSocketId);
-        } else if (pc.connectionState === 'disconnected') {
-          console.log('Connection disconnected for user:', remoteSocketId);
-        } else if (pc.connectionState === 'failed') {
-          console.error('Connection failed for user:', remoteSocketId);
-          clearTimeout(connectionTimeout);
-          connectionTimeouts.current.delete(remoteSocketId);
-          signalingStates.current.delete(remoteSocketId);
-          pendingOffers.current.delete(remoteSocketId);
-          pendingAnswers.current.delete(remoteSocketId);
-          pc.close();
-          peerConnections.current.delete(remoteSocketId);
-          setParticipants((prev) => prev.filter((p) => p.userId !== remoteSocketId));
-        }
-      };
-
-      peerConnections.current.set(remoteSocketId, pc);
-      return pc;
-    },
-    [getIceServers]
-  );
-
-  // Removed session persistence/save
-
-  // AI Zoom Bot Socket Handlers
-  const handleAiStartProcessing = useCallback(({ userId, username }) => {
-    console.log(`Received ai-start-processing: userId=${userId}, username=${username}`);
-    setIsProcessing(true);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-    setIsPlaying(false);
-
-    setOutput('');
-  }, [getUsernameById]);
-
-  const handleAiFinishProcessing = useCallback(({ response }) => {
-    console.log(`Received ai-finish-processing: response=`, response);
-    setIsProcessing(false);
-    setCurrentUploader(null);
-    setUploaderUsername('');
-
-    let displayResponse = '';
-    if (typeof response === 'object') {
-      if (response.answer) {
-        displayResponse = response.answer;
-      } else if (response.response) {
-        displayResponse = response.response;
-      } else if (response.text) {
-        displayResponse = response.text;
-      } else if (response.result) {
-        displayResponse = response.result;
-      } else if (response.data && response.data.answer) {
-        displayResponse = response.data.answer;
-      } else if (response.data && response.data.response) {
-        displayResponse = response.data.response;
-      } else {
-        const firstStringValue = Object.values(response).find(val => typeof val === 'string');
-        displayResponse = firstStringValue || JSON.stringify(response, null, 2);
-      }
-    } else {
-      displayResponse = String(response);
-    }
-
-    console.log(`Setting output to:`, displayResponse);
-    setOutput(displayResponse);
-  }, []);
-
-  // New: mirror event name aiProcessed
-  const handleAiProcessed = useCallback(({ response }) => {
-    let displayResponse = '';
-    if (typeof response === 'object') {
-      if (response.answer) {
-        displayResponse = response.answer;
-      } else if (response.response) {
-        displayResponse = response.response;
-      } else if (response.text) {
-        displayResponse = response.text;
-      } else if (response.result) {
-        displayResponse = response.result;
-      } else if (response.data && response.data.answer) {
-        displayResponse = response.data.answer;
-      } else if (response.data && response.data.response) {
-        displayResponse = response.data.response;
-      } else {
-        const firstStringValue = Object.values(response).find(val => typeof val === 'string');
-        displayResponse = firstStringValue || JSON.stringify(response, null, 2);
-      }
-    } else {
-      displayResponse = String(response);
-    }
-    setOutput(displayResponse);
-  }, []);
-
-  const handleAiImageUploaded = useCallback(({ url, userId, username }) => {
-    console.log(`Received ai-image-uploaded: url=${url}, userId=${userId}, username=${username}`);
-    setImageUrl(url);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-  }, [getUsernameById]);
-
-  // New: handle unified mediaUploaded event (does not display yet)
-  const handleMediaUploaded = useCallback(({ imageUrl: img, audioUrl: aud, userId, username }) => {
-    if (img) setImageUrl(img);
-    if (aud) setAudioUrl(aud);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-  }, [getUsernameById]);
-
-  // Real-time upload notification handler - sends chat message
-  const handleUploadNotification = useCallback(({ username }) => {
-    const uploadMessage = {
-      message: `📤 ${username} is uploading an image and audio file.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
     };
-    setMessages(prev => [...prev, uploadMessage]);
-  }, []);
+    peerConnections.current.set(remoteSocketId, pc);
+    return pc;
+  }, [getIceServers]);
 
-  // Shared media display handler
-  const handleSharedMediaDisplay = useCallback(({ imageUrl: img, audioUrl: aud, username }) => {
-    // Handle base64 data URLs for cross-client sharing
-    if (img) {
-      // Revoke previous URL if it exists
-      if (imageUrl && imageUrl.startsWith('blob:')) {
-        try { URL.revokeObjectURL(imageUrl); } catch {}
-      }
-      setImageUrl(img);
-    }
-    if (aud) {
-      // Revoke previous URL if it exists
-      if (audioUrl && audioUrl.startsWith('blob:')) {
-        try { URL.revokeObjectURL(audioUrl); } catch {}
-      }
-      setAudioUrl(aud);
-    }
-    setUploaderUsername(username);
-    setIsMediaDisplayed(true);
-    
-    // Add chat message for display action
-    const displayMessage = {
-      message: `📺 ${username} is now displaying the uploaded media.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
-    };
-    setMessages(prev => [...prev, displayMessage]);
-  }, [imageUrl, audioUrl]);
-
-  // Shared media removal handler
-  const handleSharedMediaRemoval = useCallback(({ username }) => {
-    setIsMediaDisplayed(false);
-    setImageUrl('');
-    setAudioUrl('');
-    setOutput('');
-    setUploaderUsername('');
-    
-    // Add chat message for removal action
-    const removalMessage = {
-      message: `🗑️ ${username || 'Someone'} removed the displayed media.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
-    };
-    setMessages(prev => [...prev, removalMessage]);
-  }, []);
-
-  // AI processing notification handler - sends chat message
-  const handleAiProcessingNotification = useCallback(({ username }) => {
-    const processingMessage = {
-      message: `🤖 ${username} is analyzing the uploaded media with AI.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
-    };
-    setMessages(prev => [...prev, processingMessage]);
-  }, []);
-
-  // Shared AI result handler
-  const handleSharedAiResult = useCallback(({ response, username }) => {
-    let displayResponse = '';
-    if (typeof response === 'object') {
-      if (response.answer) {
-        displayResponse = response.answer;
-      } else if (response.response) {
-        displayResponse = response.response;
-      } else if (response.text) {
-        displayResponse = response.text;
-      } else if (response.result) {
-        displayResponse = response.result;
-      } else if (response.prediction) {
-        displayResponse = response.prediction;
-      } else {
-        displayResponse = JSON.stringify(response, null, 2);
-      }
-    } else {
-      displayResponse = String(response);
-    }
-    setOutput(displayResponse);
-    setUploaderUsername(username);
-    
-    // Add chat message for AI completion
-    const completionMessage = {
-      message: `✅ ${username} completed AI analysis.`,
-      username: 'System',
-      timestamp: new Date().toISOString(),
-      isSystemMessage: true
-    };
-    setMessages(prev => [...prev, completionMessage]);
-  }, []);
-
-  const handleAiAudioUploaded = useCallback(({ url, userId, username }) => {
-    console.log(`Received ai-audio-uploaded: url=${url}, userId=${userId}, username=${username}`);
-    setAudioUrl(url);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-    setIsPlaying(false);
-  }, [getUsernameById]);
-
-  const handleAiBotLocked = useCallback(({ userId, username }) => {
-    console.log(`Received ai-bot-locked: userId=${userId}, username=${username}`);
-    setIsBotLocked(true);
-    setCurrentUploader(userId);
-    setUploaderUsername(username || getUsernameById(userId));
-
-    if (userId !== socketRef.current?.id) {
-      setOutput('');
-    }
-  }, [getUsernameById]);
-
-  const handleAiBotUnlocked = useCallback(() => {
-    console.log('Received ai-bot-unlocked');
-    setIsBotLocked(false);
-    setCurrentUploader(null);
-    setUploaderUsername('');
-
-    setIsProcessing(false);
-  }, []);
-
-  const handleAiAudioPlay = useCallback(() => {
-    console.log('Received ai-audio-play');
-    setIsPlaying(true);
-  }, []);
-
-  const handleAiAudioPause = useCallback(() => {
-    console.log('Received ai-audio-pause');
-    setIsPlaying(false);
-  }, []);
-
-  // Setup Socket Listeners
   const setupSocketListeners = useCallback((socket) => {
-    const handleConnect = () => {
-      console.log('Socket connected:', socket.id);
-      socket.emit('join-room', {
-        roomId,
-        username: user.username,
-        isReconnect: false
-      }, (otherUsers, sessionData) => {
+    socket.on('connect', () => {
+      socket.emit('join-room', { roomId, username: user.username }, (otherUsers) => {
         const isHost = otherUsers.length === 0;
-        const remoteParticipants = otherUsers.map(u => ({
-          userId: u.userId,
-          username: u.username,
-          stream: null,
-          isLocal: false,
-          isHost: u.isHost || false,
-          videoEnabled: true,
-          audioEnabled: true,
-          isScreenSharing: false,
-          socketId: u.userId
-        }));
-        const localParticipant = {
-          userId: socket.id,
-          username: `${user.username} (You)`,
-          stream: localStreamRef.current,
-          isLocal: true,
-          isHost,
-          videoEnabled: true,
-          audioEnabled: true,
-          isScreenSharing: false,
-          socketId: socket.id
-        };
-        setParticipants([localParticipant, ...remoteParticipants]);
-
-        if (sessionData) { /* ignore auto restore */ }
-
+        setParticipants([{ userId: socket.id, username: `${user.username} (You)`, stream: localStreamRef.current, isLocal: true, isHost, videoEnabled: true, audioEnabled: true, isScreenSharing: false, socketId: socket.id }, ...otherUsers.map(u => ({ userId: u.userId, username: u.username, stream: null, isLocal: false, isHost: u.isHost || false, videoEnabled: true, audioEnabled: true, isScreenSharing: false, socketId: u.userId }))]);
         setIsLoading(false);
       });
-    };
-
-    const handleUserJoined = async ({ userId, username, isHost, isReconnect }) => {
-      if (isReconnect) {
-        console.log('Skipping user-joined for reconnection:', username);
-        return;
-      }
-
-      setParticipants((prev) => {
-        if (prev.some(p => p.userId === userId)) return prev;
-        return [...prev, {
-          userId,
-          username,
-          stream: null,
-          isLocal: false,
-          isHost,
-          videoEnabled: true,
-          audioEnabled: true,
-          isScreenSharing: false,
-          socketId: userId
-        }];
-      });
-
-      try {
-        const pc = await createPeerConnection(userId);
-        const currentState = signalingStates.current.get(userId);
-
-        if (currentState === 'new' || currentState === 'stable') {
-          if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => {
-              console.log('Adding track for user:', userId, track);
-              pc.addTrack(track, localStreamRef.current);
-            });
-          } else {
-            console.warn('localStreamRef.current is null for user:', userId);
-            return;
-          }
-
-          signalingStates.current.set(userId, 'have-local-offer');
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          pendingOffers.current.set(userId, offer);
-          socket.emit('offer', { to: userId, offer, username: user.username });
-        }
-      } catch (err) {
-        console.error('Error in user-joined handler:', err, { userId, username });
-        toast.error(`Failed to connect to user ${username}.`);
-      }
-    };
-
-    const handleOffer = async ({ from, offer, username }) => {
-      setParticipants((prev) => {
-        if (prev.some(p => p.userId === from)) return prev;
-        return [...prev, {
-          userId: from,
-          username,
-          stream: null,
-          isLocal: false,
-          isHost: false,
-          videoEnabled: true,
-          audioEnabled: true,
-          isScreenSharing: false,
-          socketId: from
-        }];
-      });
-
-      try {
-        const pc = await createPeerConnection(from);
-        const currentState = signalingStates.current.get(from);
-
-        if (currentState === 'new' || currentState === 'stable') {
-          if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
-          }
-
-          signalingStates.current.set(from, 'have-remote-offer');
-          await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          signalingStates.current.set(from, 'stable');
-          socket.emit('answer', { to: from, answer });
-        } else {
-          console.warn('Ignoring offer from', from, 'due to invalid state:', currentState);
-        }
-      } catch (err) {
-        console.error('Error in offer handler:', err, { from, username });
-        toast.error(`Failed to process offer from ${username}.`);
-      }
-    };
-
-    const handleAnswer = ({ from, answer }) => {
+    });
+    socket.on('user-joined', async ({ userId, username }) => {
+      setParticipants((prev) => [...prev, { userId, username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false, socketId: userId }]);
+      const pc = await createPeerConnection(userId);
+      if (localStreamRef.current) localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', { to: userId, offer, username: user.username });
+    });
+    socket.on('offer', async ({ from, offer, username }) => {
+      setParticipants((prev) => [...prev, { userId: from, username, stream: null, isLocal: false, isHost: false, videoEnabled: true, audioEnabled: true, isScreenSharing: false, socketId: from }]);
+      const pc = await createPeerConnection(from);
+      if (localStreamRef.current) localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('answer', { to: from, answer });
+    });
+    socket.on('answer', ({ from, answer }) => {
       const pc = peerConnections.current.get(from);
-      const currentState = signalingStates.current.get(from);
-
-      if (pc && currentState === 'have-local-offer') {
-        pc.setRemoteDescription(new RTCSessionDescription(answer))
-          .then(() => {
-            signalingStates.current.set(from, 'stable');
-            pendingOffers.current.delete(from);
-            console.log('Answer processed successfully for user:', from);
-          })
-          .catch(err => {
-            console.error('Error setting remote description:', err);
-            signalingStates.current.set(from, 'stable');
-            pendingOffers.current.delete(from);
-          });
-      } else {
-        console.warn('Ignoring answer from', from, 'due to invalid state:', currentState);
-      }
-    };
-
-    const handleIceCandidate = ({ from, candidate }) => {
+      if (pc) pc.setRemoteDescription(new RTCSessionDescription(answer));
+    });
+    socket.on('ice-candidate', ({ from, candidate }) => {
       const pc = peerConnections.current.get(from);
-      if (pc) {
-        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
-          console.error('ICE candidate error:', err);
-        });
-      }
-    };
-
-    const handleUserLeft = (userId) => {
-      const pc = peerConnections.current.get(userId);
-      if (pc) {
-        pc.getSenders().forEach(sender => sender.track && sender.track.stop());
-        pc.close();
-        peerConnections.current.delete(userId);
-      }
-      setParticipants((prev) => {
-        const updated = prev.filter((p) => p.userId !== userId);
-        if (pinnedParticipantId === userId) {
-          setPinnedParticipantId(null);
-        }
-        return updated;
-      });
-      toast.info('A user has left the meeting.');
-    };
-
-    const handleChatMessage = (payload) => setMessages(prev => [...prev, payload]);
-
-    const handleScreenShareStart = ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p));
-
-    const handleScreenShareStop = ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p));
-
-    const handleError = ({ message }) => toast.error(message);
-
-    const handleDrawingStart = ({ from, x, y, color, tool, size }) => {
-      remoteDrawingStates.current.set(from, { color, tool, size });
-      const canvas = annotationCanvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.beginPath();
-      ctx.moveTo(x * canvas.width, y * canvas.height);
-    };
-
-    const handleDrawingMove = ({ from, x, y }) => {
-      const state = remoteDrawingStates.current.get(from);
-      const canvas = annotationCanvasRef.current;
-      if (!canvas || !state) return;
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = state.color;
-      ctx.lineWidth = state.size;
-      ctx.globalCompositeOperation = state.tool === 'eraser' ? 'destination-out' : 'source-over';
-      ctx.lineCap = 'round';
-      ctx.lineTo(x * canvas.width, y * canvas.height);
-      ctx.stroke();
-    };
-
-    const handleDrawShape = ({ from, tool, startX, startY, endX, endY, color, size }) => {
-      const canvas = annotationCanvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = color;
-      ctx.lineWidth = size;
-      ctx.globalCompositeOperation = 'source-over';
-      const sX = startX * canvas.width;
-      const sY = startY * canvas.height;
-      const eX = endX * canvas.width;
-      const eY = endY * canvas.height;
-      ctx.beginPath();
-      if (tool === 'rectangle') {
-        ctx.rect(sX, sY, eX - sX, eY - sY);
-      } else if (tool === 'circle') {
-        const radius = Math.sqrt(Math.pow(eX - sX, 2) + Math.pow(eY - sY, 2));
-        ctx.arc(sX, sY, radius, 0, 2 * Math.PI);
-      }
-      ctx.stroke();
-    };
-
-    const handleClearCanvas = () => {
-      const canvas = annotationCanvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    };
-
-    socket.on('connect', handleConnect);
-    socket.on('user-joined', handleUserJoined);
-    socket.on('offer', handleOffer);
-    socket.on('answer', handleAnswer);
-    socket.on('ice-candidate', handleIceCandidate);
-    socket.on('user-left', handleUserLeft);
-    socket.on('chat-message', handleChatMessage);
-    socket.on('screen-share-start', handleScreenShareStart);
-    socket.on('screen-share-stop', handleScreenShareStop);
-    socket.on('error', handleError);
-    socket.on('drawing-start', handleDrawingStart);
-    socket.on('drawing-move', handleDrawingMove);
-    socket.on('draw-shape', handleDrawShape);
-    socket.on('clear-canvas', handleClearCanvas);
-    socket.on('ai-start-processing', handleAiStartProcessing);
-    socket.on('ai-finish-processing', handleAiFinishProcessing);
-    socket.on('ai-image-uploaded', handleAiImageUploaded);
-    socket.on('ai-audio-uploaded', handleAiAudioUploaded);
-    socket.on('mediaUploaded', handleMediaUploaded);
-    socket.on('ai-bot-locked', handleAiBotLocked);
-    socket.on('ai-bot-unlocked', handleAiBotUnlocked);
-    socket.on('ai-audio-play', handleAiAudioPlay);
-    socket.on('ai-audio-pause', handleAiAudioPause);
+      if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate));
+    });
+    socket.on('user-left', (userId) => {
+      peerConnections.current.get(userId)?.close();
+      peerConnections.current.delete(userId);
+      setParticipants((prev) => prev.filter(p => p.userId !== userId));
+    });
+    socket.on('chat-message', (payload) => setMessages(prev => [...prev, payload]));
+    socket.on('screen-share-start', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p)));
+    socket.on('screen-share-stop', ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p)));
+    socket.on('error', ({ message }) => toast.error(message));
     socket.on('media-display', () => setIsMediaDisplayed(true));
     socket.on('media-remove', () => setIsMediaDisplayed(false));
-    socket.on('mediaDisplayed', () => setIsMediaDisplayed(true));
-    socket.on('mediaRemoved', () => setIsMediaDisplayed(false));
-    socket.on('aiProcessed', handleAiProcessed);
-    
-    // New real-time event handlers
-    socket.on('upload-notification', handleUploadNotification);
-    socket.on('shared-media-display', handleSharedMediaDisplay);
-    socket.on('shared-media-removal', handleSharedMediaRemoval);
-    socket.on('ai-processing-notification', handleAiProcessingNotification);
-    socket.on('shared-ai-result', handleSharedAiResult);
-
-    socket.on('session-restored', (sessionData) => {
-      console.log('Session restored from server:', sessionData);
-      restoreSessionData(sessionData);
-    });
-
-    return () => {
-      socket.off('connect', handleConnect);
-      socket.off('user-joined', handleUserJoined);
-      socket.off('offer', handleOffer);
-      socket.off('answer', handleAnswer);
-      socket.off('ice-candidate', handleIceCandidate);
-      socket.off('user-left', handleUserLeft);
-      socket.off('chat-message', handleChatMessage);
-      socket.off('screen-share-start', handleScreenShareStart);
-      socket.off('screen-share-stop', handleScreenShareStop);
-      socket.off('error', handleError);
-      socket.off('drawing-start', handleDrawingStart);
-      socket.off('drawing-move', handleDrawingMove);
-      socket.off('draw-shape', handleDrawShape);
-      socket.off('clear-canvas', handleClearCanvas);
-      socket.off('ai-start-processing', handleAiStartProcessing);
-      socket.off('ai-finish-processing', handleAiFinishProcessing);
-      socket.off('ai-image-uploaded', handleAiImageUploaded);
-      socket.off('ai-audio-uploaded', handleAiAudioUploaded);
-      socket.off('mediaUploaded', handleMediaUploaded);
-      socket.off('ai-bot-locked', handleAiBotLocked);
-      socket.off('ai-bot-unlocked', handleAiBotUnlocked);
-      socket.off('ai-audio-play', handleAiAudioPlay);
-      socket.off('ai-audio-pause', handleAiAudioPause);
-      socket.off('media-display');
-      socket.off('media-remove');
-      socket.off('mediaDisplayed');
-      socket.off('mediaRemoved');
-      socket.off('aiProcessed', handleAiProcessed);
-      
-      // Cleanup new real-time event handlers
-      socket.off('upload-notification', handleUploadNotification);
-      socket.off('shared-media-display', handleSharedMediaDisplay);
-      socket.off('shared-media-removal', handleSharedMediaRemoval);
-      socket.off('ai-processing-notification', handleAiProcessingNotification);
-      socket.off('shared-ai-result', handleSharedAiResult);
-      
-      socket.off('session-restored');
-    };
-  }, [
-    createPeerConnection,
-    roomId,
-    user,
-    getUsernameById,
-    handleAiStartProcessing,
-    handleAiFinishProcessing,
-    handleAiImageUploaded,
-    handleMediaUploaded,
-    handleAiAudioUploaded,
-    handleAiBotLocked,
-    handleAiBotUnlocked,
-    handleAiAudioPlay,
-    handleAiAudioPause,
-    handleAiProcessed,
-    handleUploadNotification,
-    handleSharedMediaDisplay,
-    handleSharedMediaRemoval,
-    handleAiProcessingNotification,
-    handleSharedAiResult,
-    restoreSessionData
-  ]);
+    return () => socket.disconnect();
+  }, [createPeerConnection, roomId, user.username]);
 
   useEffect(() => {
     if (isInitialized.current) return;
     isInitialized.current = true;
-
     const initialize = async () => {
       if (!user) {
         toast.error('Please log in to join the meeting.');
@@ -812,117 +186,41 @@ const Meeting = () => {
       }
       try {
         setIsLoading(true);
-
-        const mediaConstraints = {
-          video: {
-            width: { ideal: 480, max: 640 },
-            height: { ideal: 360, max: 480 },
-            frameRate: { ideal: 15, max: 20 },
-            facingMode: 'user'
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 44100
-          }
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 480 }, height: { ideal: 360 }, frameRate: { ideal: 15 } }, audio: true });
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
-        console.log('Optimized local stream initialized:', stream);
-
-        // No session restore or auto media loading
-
-        socketRef.current = io(SERVER_URL, {
-          auth: { token: user.token },
-          transports: ['websocket'],
-          reconnection: true,
-          reconnectionAttempts: 3,
-          reconnectionDelay: 500,
-          reconnectionDelayMax: 2000,
-          timeout: 5000,
-          forceNew: true
-        });
-
-        const cleanupSocketListeners = setupSocketListeners(socketRef.current);
-        return () => {
-          console.log('Cleaning up Meeting component');
-          if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => track.stop());
-            localStreamRef.current = null;
-          }
-          peerConnections.current.forEach(pc => pc.close());
-          peerConnections.current.clear();
-
-          connectionTimeouts.current.forEach(timeout => clearTimeout(timeout));
-          connectionTimeouts.current.clear();
-
-          signalingStates.current.clear();
-          pendingOffers.current.clear();
-          pendingAnswers.current.clear();
-
-          if (socketRef.current) {
-            cleanupSocketListeners();
-            socketRef.current.disconnect();
-            socketRef.current = null;
-          }
-          isInitialized.current = false;
-        };
+        socketRef.current = io(SERVER_URL, { auth: { token: user.token }, transports: ['websocket'] });
+        setupSocketListeners(socketRef.current);
       } catch (error) {
         console.error('Initialization error:', error);
-        toast.error('Failed to access camera or microphone. Check permissions.');
+        toast.error('Failed to access camera or microphone.');
         navigate('/home');
       } finally {
         setIsLoading(false);
       }
     };
     initialize();
+    return () => {
+      if (localStreamRef.current) localStreamRef.current.getTracks().forEach(track => track.stop());
+      peerConnections.current.forEach(pc => pc.close());
+      socketRef.current?.disconnect();
+    };
   }, [roomId, user, navigate, setupSocketListeners]);
 
-  // Removed: no background saves or API calls
-
-  // Clear output when AI processing starts
-  useEffect(() => {
-    if (isProcessing) {
-      setOutput('');
-    }
-  }, [isProcessing]);
-
-  useEffect(() => {
-    const canvas = annotationCanvasRef.current;
-    const container = mainVideoContainerRef.current;
-    if (!container || !canvas) return;
-    const resizeCanvas = () => {
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
-    };
-    resizeCanvas();
-    const resizeObserver = new ResizeObserver(resizeCanvas);
-    resizeObserver.observe(container);
-    return () => resizeObserver.disconnect();
-  }, [mainViewParticipant]);
-
-  const replaceTrack = useCallback(
-    async (newTrack, isScreenShare = false) => {
-      const localStream = localStreamRef.current;
-      if (!localStream) return;
-
-      const oldTrack = localStream.getVideoTracks()[0];
-      if (oldTrack) oldTrack.stop();
-
-      localStream.removeTrack(oldTrack);
-      localStream.addTrack(newTrack);
-      peerConnections.current.forEach((pc) => {
-        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
-        if (sender) sender.replaceTrack(newTrack);
-      });
-      setParticipants((prev) => prev.map((p) => p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p));
-      socketRef.current?.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop', { userId: socketRef.current.id });
-    },
-    []
-  );
+  const replaceTrack = useCallback(async (newTrack, isScreenShare = false) => {
+    const localStream = localStreamRef.current;
+    if (!localStream) return;
+    const oldTrack = localStream.getVideoTracks()[0];
+    if (oldTrack) oldTrack.stop();
+    localStream.removeTrack(oldTrack);
+    localStream.addTrack(newTrack);
+    peerConnections.current.forEach((pc) => {
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender) sender.replaceTrack(newTrack);
+    });
+    setParticipants((prev) => prev.map(p => p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p));
+    socketRef.current?.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop', { userId: socketRef.current.id });
+  }, []);
 
   const toggleAudio = () => {
     const audioTrack = localStreamRef.current?.getAudioTracks()[0];
@@ -940,26 +238,13 @@ const Meeting = () => {
       videoTrack.enabled = false;
       setIsVideoEnabled(false);
       setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: false } : p));
-      socketRef.current?.emit('toggle-video', { enabled: false, roomId });
     } else {
-      try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 480, max: 640 },
-            height: { ideal: 360, max: 480 },
-            frameRate: { ideal: 15, max: 20 }
-          }
-        });
-        const newVideoTrack = newStream.getVideoTracks()[0];
-        await replaceTrack(newVideoTrack, false);
-        localCameraTrackRef.current = newVideoTrack;
-        setIsVideoEnabled(true);
-        setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: true } : p));
-        socketRef.current?.emit('toggle-video', { enabled: true, roomId });
-      } catch (err) {
-        console.error('Error enabling video:', err);
-        toast.error('Failed to start video.');
-      }
+      const newStream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 480 }, height: { ideal: 360 }, frameRate: { ideal: 15 } } });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      await replaceTrack(newVideoTrack, false);
+      localCameraTrackRef.current = newVideoTrack;
+      setIsVideoEnabled(true);
+      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: true } : p));
     }
   };
 
@@ -975,8 +260,8 @@ const Meeting = () => {
         const screenTrack = screenStream.getVideoTracks()[0];
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
-        screenTrack.onended = async () => {
-          await replaceTrack(localCameraTrackRef.current, false);
+        screenTrack.onended = () => {
+          replaceTrack(localCameraTrackRef.current, false);
           setIsSharingScreen(false);
         };
       } catch (err) {
@@ -986,31 +271,21 @@ const Meeting = () => {
     }
   };
 
-  const handleSwipe = (direction) => {
-    setGridPage((prev) => {
-      const next = prev + direction;
-      return Math.max(0, Math.min(next, totalGridPages - 1));
-    });
+  const handleSwipe = (direction, page = null) => {
+    setGridPage((prev) => page !== null ? page : Math.max(0, Math.min(prev + direction, totalGridPages - 1)));
   };
 
   const handleToolbarMouseDown = (e) => {
     const toolbar = e.currentTarget.parentElement;
     const rect = toolbar.getBoundingClientRect();
-    dragInfo.current = {
-      isDragging: true,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
-    };
+    dragInfo.current = { isDragging: true, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
     window.addEventListener('mousemove', handleToolbarMouseMove);
     window.addEventListener('mouseup', handleToolbarMouseUp);
   };
 
   const handleToolbarMouseMove = (e) => {
     if (dragInfo.current.isDragging) {
-      setToolbarPosition({
-        x: e.clientX - dragInfo.current.offsetX,
-        y: e.clientY - dragInfo.current.offsetY,
-      });
+      setToolbarPosition({ x: e.clientX - dragInfo.current.offsetX, y: e.clientY - dragInfo.current.offsetY });
     }
   };
 
@@ -1026,12 +301,9 @@ const Meeting = () => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
-
     if (currentTool === 'pen' || currentTool === 'eraser') {
-      const myColor = getColorForId(socketRef.current?.id);
-      const payload = { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize };
-      socketRef.current?.emit('drawing-start', payload);
+      const myColor = getColorForId(socketId);
+      socketRef.current?.emit('drawing-start', { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize });
       const ctx = canvas.getContext('2d');
       ctx.strokeStyle = myColor;
       ctx.lineWidth = currentBrushSize;
@@ -1043,9 +315,8 @@ const Meeting = () => {
   };
 
   const handleMouseMove = (e) => {
-    if (!drawingStateRef.current.isDrawing || !e.buttons) return;
     const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !e.buttons) return;
     if (currentTool === 'pen' || currentTool === 'eraser') {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -1058,44 +329,32 @@ const Meeting = () => {
   };
 
   const handleMouseUp = (e) => {
-    if (!drawingStateRef.current.isDrawing) return;
     const canvas = annotationCanvasRef.current;
     if (!canvas) return;
     if (currentTool === 'rectangle' || currentTool === 'circle') {
       const rect = canvas.getBoundingClientRect();
-      const { startX, startY } = drawingStateRef.current;
       const endX = e.clientX - rect.left;
       const endY = e.clientY - rect.top;
-      const myColor = getColorForId(socketRef.current?.id);
-      const payload = {
-        tool: currentTool,
-        startX: startX / canvas.width,
-        startY: startY / canvas.height,
-        endX: endX / canvas.width,
-        endY: endY / canvas.height,
-        color: myColor,
-        size: currentBrushSize,
-      };
-      socketRef.current?.emit('draw-shape', payload);
+      const myColor = getColorForId(socketId);
+      socketRef.current?.emit('draw-shape', { tool: currentTool, startX: 0, startY: 0, endX: endX / canvas.width, endY: endY / canvas.height, color: myColor, size: currentBrushSize });
       const ctx = canvas.getContext('2d');
       ctx.strokeStyle = myColor;
       ctx.lineWidth = currentBrushSize;
       ctx.globalCompositeOperation = 'source-over';
       ctx.beginPath();
       if (currentTool === 'rectangle') {
-        ctx.rect(startX, startY, endX - startX, endY - startY);
+        ctx.rect(0, 0, endX, endY);
       } else if (currentTool === 'circle') {
-        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+        const radius = Math.sqrt(Math.pow(endX, 2) + Math.pow(endY, 2));
+        ctx.arc(0, 0, radius, 0, 2 * Math.PI);
       }
       ctx.stroke();
     }
-    drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
   };
 
   const handleParticipantClick = (userId) => {
     setPinnedParticipantId(userId);
-    setCurrentOffset(0);
+    setGridPage(0);
   };
 
   const clearAnnotations = () => {
@@ -1106,90 +365,30 @@ const Meeting = () => {
     socketRef.current?.emit('clear-canvas');
   };
 
-  // Handle AI Processing - New function for the main screen
   const handleProcessWithAI = async () => {
-    const hasImg = !!selectedImage;
-    const hasAud = !!selectedAudio;
-    
-    if (!hasImg || !hasAud) {
+    if (!selectedImage || !selectedAudio) {
       toast.error('Please upload both image and audio to process.');
       return;
     }
-    
     if (isBotLocked && currentUploader !== socketRef.current?.id) {
       toast.error('Another user is currently processing. Please wait.');
       return;
     }
-    
     try {
       setOutput('');
       setIsBotLocked(true);
-      socketRef.current?.emit('ai-bot-locked', { 
-        userId: socketRef.current?.id, 
-        username: user.username, 
-        roomId 
-      });
+      socketRef.current?.emit('ai-bot-locked', { userId: socketRef.current?.id, username: user.username, roomId });
       setIsProcessing(true);
-      socketRef.current?.emit('ai-start-processing', { 
-          userId: socketRef.current?.id, 
-          username: user.username, 
-          roomId 
-        });
-      // Emit AI processing notification to all participants
-      socketRef.current?.emit('ai-processing-notification', {
-          username: user.username, 
-          roomId 
-        });
-      
-      // Build payload from selected files only
       const formData = new FormData();
-      console.debug('[Analyze] Selected files:', {
-        imageName: selectedImage?.name,
-        imageType: selectedImage?.type,
-        audioName: selectedAudio?.name,
-        audioType: selectedAudio?.type,
-      });
       formData.append('image', selectedImage);
       formData.append('audio', selectedAudio);
-      console.debug('[Analyze] FormData appended keys: image, audio');
-      
-      const AI_MODEL_API_URL = 'https://genaizoom-1.onrender.com/predict';
-      // Optional: persist request to meeting session (best-effort)
-      try {
-        await axios.post(`${SERVER_URL}/api/meeting-session/${roomId}/upload`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${user.token}` }
-        });
-      } catch {}
-
-      console.debug('[Analyze] Posting to AI endpoint:', AI_MODEL_API_URL);
-      const response = await axios.post(AI_MODEL_API_URL, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      const modelOutput = response.data?.prediction ?? response.data?.result ?? response.data;
-      let displayResponse = '';
-      if (typeof modelOutput === 'object') {
-        displayResponse = modelOutput.answer || modelOutput.response || modelOutput.text || 
-                        modelOutput.result || modelOutput.prediction || (modelOutput.data && (modelOutput.data.answer || modelOutput.data.response)) || '';
-        if (!displayResponse) {
-          const firstStringValue = Object.values(modelOutput).find(val => typeof val === 'string');
-          displayResponse = firstStringValue || JSON.stringify(modelOutput, null, 2);
-        }
-      } else {
-        displayResponse = String(modelOutput);
-      }
-      setOutput(displayResponse);
+      const response = await axios.post('https://genaizoom-1.onrender.com/predict', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const modelOutput = response.data?.prediction ?? response.data;
+      setOutput(modelOutput.answer || modelOutput.response || String(modelOutput));
       socketRef.current?.emit('ai-finish-processing', { response: modelOutput, roomId });
-      socketRef.current?.emit('aiProcessed', { response: modelOutput, roomId });
-      // Emit shared AI result to all participants
-      socketRef.current?.emit('shared-ai-result', {
-        response: modelOutput, 
-        username: user.username,
-        roomId 
-      });
     } catch (error) {
       console.error('AI processing error:', error);
-      const status = error?.response?.status;
-      const detail = error?.response?.data?.detail || error?.message || 'Unknown error';
-      toast.error('AI analysis failed. Please try again.');
-      console.debug('[Analyze] Failure details:', { status, detail });
+      toast.error('AI analysis failed.');
     } finally {
       setIsProcessing(false);
       setIsBotLocked(false);
@@ -1198,33 +397,11 @@ const Meeting = () => {
   };
 
   const handleExitRoom = () => {
-    try {
-      socketRef.current?.emit('leave-room');
-    } catch (e) {
-      console.warn('Error emitting leave-room:', e);
-    }
-    setImageUrl('');
-    setAudioUrl('');
-    setOutput('');
-    setIsProcessing(false);
-    setCurrentUploader(null);
-    setUploaderUsername('');
-    setIsBotLocked(false);
-    setIsPlaying(false);
+    socketRef.current?.emit('leave-room');
     navigate('/home');
   };
 
   if (isLoading) return <div className="h-screen bg-black flex items-center justify-center"><LoadingSpinner size="large" /></div>;
-
-  const renderVideoPlayer = (participant, isLocal, className = "mx-auto") => (
-    <VideoPlayer
-      participant={participant}
-      isLocal={isLocal}
-      isMirroringBrowser={isMirroringBrowser}
-      socketId={socketRef.current?.id}
-      className={className}
-    />
-  );
 
   return (
     <div className="h-screen bg-black flex flex-col overflow-hidden text-white">
@@ -1233,280 +410,91 @@ const Meeting = () => {
         <span>Participants: {participants.length}</span>
       </div>
       <div className="flex-1 flex relative overflow-hidden">
-        <div
-          className={`flex-1 ${isMediaDisplayed ? 'grid grid-cols-[60%_40%] xl:grid-cols-[65%_35%] 2xl:grid-cols-[70%_30%]' : 'flex flex-col'} relative overflow-hidden`}
-          onWheel={(e) => {
-            if (e.deltaX !== 0 && totalGridPages > 1) {
-              e.preventDefault();
-              handleSwipe(e.deltaX > 0 ? 1 : -1);
-            }
-          }}
+        <div className={`flex-1 ${isMediaDisplayed ? 'grid grid-cols-[60%_40%] xl:grid-cols-[65%_35%] 2xl:grid-cols-[70%_30%]' : 'flex flex-col'} relative overflow-hidden`}
+          onWheel={(e) => e.deltaX !== 0 && totalGridPages > 1 && handleSwipe(e.deltaX > 0 ? 1 : -1)}
+          ref={mainVideoContainerRef}
         >
-          {/* Left/main area: video grid */}
           <div className="flex flex-col min-h-0 w-full">
-            {/* Upload controls */}
             <div className="bg-gray-800 border-b border-gray-700 p-3">
               <UploadControls
                 canUpload={!isMediaDisplayed}
                 selectedImage={selectedImage}
-                setSelectedImage={(file) => { 
-                  setSelectedImage(file || null); 
-                  if (file) { 
-                    try { 
-                      const url = URL.createObjectURL(file); 
-                      setImageUrl((prev) => { 
-                        if (prev) try { URL.revokeObjectURL(prev); } catch {} ; 
-                        return url; 
-                      }); 
-                      // Emit upload notification when both files are selected
-                      if (selectedAudio) {
-                        socketRef.current?.emit('upload-notification', { 
-                          username: user.username, 
-                          roomId 
-                        });
-                      }
-                    } catch {} 
-                  } else { 
-                    if (imageUrl) { 
-                      try { URL.revokeObjectURL(imageUrl); } catch {} 
-                    } 
-                    setImageUrl(''); 
-                  } 
-                }}
+                setSelectedImage={setSelectedImage}
                 selectedAudio={selectedAudio}
-                setSelectedAudio={(file) => { 
-                  setSelectedAudio(file || null); 
-                  if (file) { 
-                    try { 
-                      const url = URL.createObjectURL(file); 
-                      setAudioUrl((prev) => { 
-                        if (prev) try { URL.revokeObjectURL(prev); } catch {} ; 
-                        return url; 
-                      }); 
-                      // Emit upload notification when both files are selected
-                      if (selectedImage) {
-                        socketRef.current?.emit('upload-notification', { 
-                          username: user.username, 
-                          roomId 
-                        });
-                      }
-                    } catch {} 
-                  } else { 
-                    if (audioUrl) { 
-                      try { URL.revokeObjectURL(audioUrl); } catch {} 
-                    } 
-                    setAudioUrl(''); 
-                  } 
-                }}
+                setSelectedAudio={setSelectedAudio}
                 hasImageUrl={!!imageUrl}
                 hasAudioUrl={!!audioUrl}
                 isMediaDisplayed={isMediaDisplayed}
-                onDisplay={async () => {
-                  if (!selectedImage || !selectedAudio) { toast.error('Please upload both image and audio first.'); return; }
-                  setIsMediaDisplayed(true);
-                  
-                  // Convert files to base64 for sharing across clients
-                  const convertFileToBase64 = (file) => {
-                    return new Promise((resolve, reject) => {
-                      const reader = new FileReader();
-                      reader.onload = () => resolve(reader.result);
-                      reader.onerror = reject;
-                      reader.readAsDataURL(file);
-                    });
-                  };
-                  
-                  try {
-                    const [imageBase64, audioBase64] = await Promise.all([
-                      convertFileToBase64(selectedImage),
-                      convertFileToBase64(selectedAudio)
-                    ]);
-                    
-                    // Emit shared media display event to all participants
-                    socketRef.current?.emit('shared-media-display', {
-                      imageUrl: imageBase64,
-                      audioUrl: audioBase64,
-                      username: user.username,
-                      roomId
-                    });
-                  } catch (error) {
-                    console.error('Error converting files to base64:', error);
-                    toast.error('Failed to prepare media for sharing.');
-                  }
-                }}
-                onRemove={() => {
-                  setIsMediaDisplayed(false);
-                  if (imageUrl) { try { URL.revokeObjectURL(imageUrl); } catch {} }
-                  if (audioUrl) { try { URL.revokeObjectURL(audioUrl); } catch {} }
-                  setSelectedImage(null);
-                  setSelectedAudio(null);
-                  setImageUrl('');
-                  setAudioUrl('');
-                  setOutput('');
-                  setCurrentUploader(null);
-                  setUploaderUsername('');
-                  setIsProcessing(false);
-                  setIsBotLocked(false);
-                  // Emit shared media removal event to all participants
-                  socketRef.current?.emit('shared-media-removal', {
-                    username: user.username,
-                    roomId
-                  });
-                }}
+                onDisplay={() => setIsMediaDisplayed(true)}
+                onRemove={() => setIsMediaDisplayed(false)}
                 onAnalyze={handleProcessWithAI}
                 isProcessing={isProcessing}
               />
             </div>
-
-          {isSomeoneScreenSharing && (
-            <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
-              <AnnotationToolbar
-                onMouseDown={handleToolbarMouseDown}
-                currentTool={currentTool}
-                setCurrentTool={setCurrentTool}
-                currentBrushSize={currentBrushSize}
-                setCurrentBrushSize={setCurrentBrushSize}
-                clearCanvas={clearAnnotations}
-              />
-            </div>
-          )}
-          <div
-            className="flex-1 min-h-0 relative overflow-hidden h-full"
-            ref={mainVideoContainerRef}
-            onTouchStart={(e) => { touchStartXRef.current = e.touches[0].clientX; touchDeltaRef.current = 0; }}
-            onTouchMove={(e) => { touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; }}
-            onTouchEnd={() => { if (Math.abs(touchDeltaRef.current) > 50) { setGridPage((prev) => { const dir = touchDeltaRef.current > 0 ? -1 : 1; const np = Math.max(0, Math.min(prev + dir, totalGridPages - 1)); return np; }); } }}
-          >
-            {(() => {
-              const count = displayParticipants.length;
-              const pageStart = gridPage * 4;
-              const pageItems = displayParticipants.slice(pageStart, pageStart + 4);
-
-              if (count === 1) {
-                const p = displayParticipants[0];
-                return (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className={`w-full ${isMediaDisplayed ? 'max-w-2xl' : 'max-w-3xl'}`}>
-                      {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
-                    </div>
-                  </div>
-                );
-              }
-
-              if (count === 2) {
-                return (
-                  <div className={`flex h-full w-full ${isMediaDisplayed ? 'gap-1' : 'gap-2'}`}>
-                    <div className="flex-1 h-full flex items-center justify-center p-1">
-                      {renderVideoPlayer(displayParticipants[0], displayParticipants[0].isLocal, "w-full h-full object-cover")}
-                    </div>
-                    <div className="flex-1 h-full flex items-center justify-center p-1">
-                      {renderVideoPlayer(displayParticipants[1], displayParticipants[1].isLocal, "w-full h-full object-cover")}
-                    </div>
-                  </div>
-                );
-              }
-
-              if (count === 3) {
-                const [a, b, c] = displayParticipants;
-                return (
-                  <div className={`grid grid-cols-1 md:grid-cols-2 w-full h-full ${isMediaDisplayed ? 'gap-1' : 'gap-2'} p-1`}>
-                    <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(a, a.isLocal, "w-full h-auto")}
-                    </div>
-                    <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(b, b.isLocal, "w-full h-auto")}
-                    </div>
-                    <div className="md:col-span-2 h-full flex justify-center items-center">
-                      <div className={`w-full md:w-1/2 min-w-[200px] ${isMediaDisplayed ? 'max-w-xs' : 'max-w-sm'}`}>
-                        {renderVideoPlayer(c, c.isLocal, "w-full h-auto")}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              // 4 or more -> paginated 2x2
-              return (
-                <div className="w-full h-full p-1">
-                  <div className={`grid grid-cols-1 md:grid-cols-2 w-full h-full ${isMediaDisplayed ? 'gap-1' : 'gap-2'}`}>
-                    {pageItems.map((p) => (
-                      <div
-                        key={p.userId}
-                        className="w-full h-full flex items-center justify-center"
-                      >
-                        {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
-                      </div>
-                    ))}
-                  </div>
-                  {totalGridPages > 1 && (
-                    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => setGridPage((p) => Math.max(0, p - 1))}
-                        className="px-2 py-1 bg-gray-700 rounded"
-                      >
-                        ‹
-                      </button>
-                      {Array.from({ length: totalGridPages }, (_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setGridPage(i)}
-                          className={`w-2.5 h-2.5 rounded-full ${gridPage === i ? 'bg-white' : 'bg-gray-500'}`}
-                        />
-                      ))}
-                      <button
-                        onClick={() => setGridPage((p) => Math.min(totalGridPages - 1, p + 1))}
-                        className="px-2 py-1 bg-gray-700 rounded"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            <canvas
-              ref={annotationCanvasRef}
-              className="absolute top-0 left-0"
-              style={{ pointerEvents: isSomeoneScreenSharing ? 'auto' : 'none', zIndex: 10, touchAction: 'none' }}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            />
-          </div>
-          </div>
-          {/* Right panel: responsive media display */}
-            {isMediaDisplayed && (
-            <div className="h-full min-w-0">
-              <MediaPanel
-                  imageUrl={imageUrl}
-                  audioUrl={audioUrl}
-                  uploaderUsername={uploaderUsername}
-                output={output}
-              />
+            {isSomeoneScreenSharing && (
+              <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
+                <AnnotationToolbar
+                  onMouseDown={handleToolbarMouseDown}
+                  currentTool={currentTool}
+                  setCurrentTool={setCurrentTool}
+                  currentBrushSize={currentBrushSize}
+                  setCurrentBrushSize={setCurrentBrushSize}
+                  clearCanvas={clearAnnotations}
+                />
               </div>
             )}
+            <div className="flex-1 min-h-0 relative overflow-hidden h-full">
+              <VideoGrid
+                participants={displayParticipants}
+                isMediaDisplayed={isMediaDisplayed}
+                gridPage={gridPage}
+                totalGridPages={totalGridPages}
+                handleSwipe={handleSwipe}
+                handleParticipantClick={handleParticipantClick}
+                isMirroringBrowser={isMirroringBrowser}
+                socketId={socketRef.current?.id}
+              />
+              <AnnotationCanvas
+                ref={annotationCanvasRef}
+                toolbarPosition={toolbarPosition}
+                isSomeoneScreenSharing={isSomeoneScreenSharing}
+                currentTool={currentTool}
+                currentBrushSize={currentBrushSize}
+                getColorForId={getColorForId}
+                socketId={socketRef.current?.id}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              />
+            </div>
+          </div>
+          {isMediaDisplayed && (
+            <MediaPanel imageUrl={imageUrl} audioUrl={audioUrl} uploaderUsername={uploaderUsername} output={output} />
+          )}
         </div>
-        <div
-          className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}
-        >
-          {isChatOpen && <Chat messages={messages} onSendMessage={(message) => {
-            const payload = { message, username: user.username, timestamp: new Date().toISOString() };
-            socketRef.current?.emit('send-chat-message', payload);
-            setMessages((prev) => [...prev, payload]);
-          }} currentUser={user} onClose={() => setIsChatOpen(false)} />}
-          {isParticipantsOpen && <Participants participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
+        <div className={`bg-gray-900 border-l border-gray-700 transition-all duration-300 ${isChatOpen || isParticipantsOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
+          {isChatOpen && <ChatComponent messages={messages} onSendMessage={(msg) => socketRef.current?.emit('send-chat-message', { message: msg, username: user.username, timestamp: new Date().toISOString() }) && setMessages(prev => [...prev, { message: msg, username: user.username, timestamp: new Date().toISOString() }])} currentUser={user} onClose={() => setIsChatOpen(false)} />}
+          {isParticipantsOpen && <ParticipantsPanel participants={participants} currentUser={user} onClose={() => setIsParticipantsOpen(false)} roomId={roomId} />}
         </div>
       </div>
       <div className="bg-gray-900 border-t border-gray-700 px-2 py-1 flex justify-center gap-1 z-20 sticky bottom-0">
-        <button onClick={toggleAudio} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isAudioMuted ? 'Unmute 🎤' : 'Mute 🔇'}</button>
-        <button onClick={toggleVideo} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isVideoEnabled ? 'Stop Video 📷' : 'Start Video 📹'}</button>
-        <button onClick={handleScreenShare} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">{isSharingScreen ? 'Stop Sharing' : 'Share Screen 🖥️'}</button>
-        <button onClick={() => { setIsChatOpen(o => !o); setIsParticipantsOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Chat 💬</button>
-        <button onClick={() => { setIsParticipantsOpen(o => !o); setIsChatOpen(false); }} className="p-2 rounded text-white bg-gray-700 hover:bg-gray-600">Participants 👥</button>
-        <button onClick={handleExitRoom} className="p-2 rounded text-white bg-red-600 hover:bg-red-500">Exit Room 📞</button>
+        <MeetingControls
+          isAudioMuted={isAudioMuted}
+          toggleAudio={toggleAudio}
+          isVideoEnabled={isVideoEnabled}
+          toggleVideo={toggleVideo}
+          isSharingScreen={isSharingScreen}
+          handleScreenShare={handleScreenShare}
+          isChatOpen={isChatOpen}
+          setIsChatOpen={setIsChatOpen}
+          isParticipantsOpen={isParticipantsOpen}
+          setIsParticipantsOpen={setIsParticipantsOpen}
+          handleExitRoom={handleExitRoom}
+        />
       </div>
     </div>
   );
 };
+
 export default Meeting;

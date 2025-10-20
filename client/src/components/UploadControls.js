@@ -1,78 +1,44 @@
 import React from 'react';
+import { toast } from 'react-toastify';
 
-// UploadControls: shows image/audio inputs and Display/Remove/Analyze buttons when ready
-const UploadControls = ({
-  canUpload,
-  selectedImage,
-  setSelectedImage,
-  selectedAudio,
-  setSelectedAudio,
-  hasImageUrl,
-  hasAudioUrl,
-  onDisplay,
-  onRemove,
-  onAnalyze,
-  isMediaDisplayed,
-  isProcessing,
-}) => {
-  const hasAny = (!!selectedImage || hasImageUrl) || (!!selectedAudio || hasAudioUrl);
-  const bothReady = (!!selectedImage || hasImageUrl) && (!!selectedAudio || hasAudioUrl);
-  const canDisplay = bothReady && canUpload && !isMediaDisplayed;
-  const canAnalyze = bothReady && !isProcessing;
+const UploadControls = ({ canUpload, selectedImage, setSelectedImage, selectedAudio, setSelectedAudio, hasImageUrl, hasAudioUrl, isMediaDisplayed, onDisplay, onRemove, onAnalyze, isProcessing }) => {
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    setSelectedImage(file || null);
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setSelectedImage((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return file;
+      });
+    } else {
+      setSelectedImage(null);
+    }
+  };
+
+  const handleAudioChange = (e) => {
+    const file = e.target.files[0];
+    setSelectedAudio(file || null);
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setSelectedAudio((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return file;
+      });
+    } else {
+      setSelectedAudio(null);
+    }
+  };
+
   return (
-    <div className="space-y-3">
-      <div>
-        <label className="block text-sm mb-1">Upload Image</label>
-        <input
-          type="file"
-          accept="image/*"
-          disabled={!canUpload || isMediaDisplayed}
-          onChange={(e)=> setSelectedImage(e.target.files?.[0] || null)}
-          className="w-full text-sm"
-        />
-      </div>
-      <div>
-        <label className="block text-sm mb-1">Upload Audio</label>
-        <input
-          type="file"
-          accept="audio/*"
-          disabled={!canUpload || isMediaDisplayed}
-          onChange={(e)=> setSelectedAudio(e.target.files?.[0] || null)}
-          className="w-full text-sm"
-        />
-      </div>
-      {hasAny && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={onDisplay}
-            disabled={!canDisplay}
-            className={`px-3 py-2 rounded text-sm ${canDisplay ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
-          >
-            📺 Display
-          </button>
-          <button
-            type="button"
-            onClick={onRemove}
-            disabled={!hasAny}
-            className={`px-3 py-2 rounded text-sm ${hasAny ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
-          >
-            🗑️ Remove
-          </button>
-          <button
-            type="button"
-            onClick={onAnalyze}
-            disabled={!canAnalyze}
-            className={`px-3 py-2 rounded text-sm ${canAnalyze ? 'bg-purple-600 hover:bg-purple-500 text-white' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
-          >
-            {isProcessing ? '🤖 Analyzing…' : '🤖 Analyze'}
-          </button>
-        </div>
-      )}
+    <div className="flex flex-col gap-2">
+      <input type="file" accept="image/*" onChange={handleImageChange} disabled={!canUpload} />
+      <input type="file" accept="audio/*" onChange={handleAudioChange} disabled={!canUpload} />
+      <button onClick={onDisplay} disabled={!hasImageUrl || !hasAudioUrl || isMediaDisplayed || !canUpload} className="p-2 bg-blue-600 rounded">Display</button>
+      <button onClick={onRemove} disabled={!isMediaDisplayed} className="p-2 bg-red-600 rounded">Remove</button>
+      <button onClick={onAnalyze} disabled={isProcessing || !hasImageUrl || !hasAudioUrl} className="p-2 bg-green-600 rounded">{isProcessing ? 'Processing...' : 'Analyze with AI'}</button>
     </div>
   );
 };
 
 export default UploadControls;
-
-

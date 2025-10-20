@@ -1,191 +1,160 @@
-import React, { useRef, useEffect, useState } from 'react';
-import VideoPlayer from '../components/VideoPlayer';
-import AnnotationToolbar from '../components/AnnotationToolbar';
+// MeetingMainArea.jsx
+import React from 'react';
 
 const MeetingMainArea = ({
   participants,
   isSomeoneScreenSharing,
   toolbarPosition,
-  currentTool: initialCurrentTool,
-  currentBrushSize: initialCurrentBrushSize,
+  currentTool,
+  currentBrushSize,
   handleToolbarMouseDown,
   handleMouseDown,
   handleMouseMove,
   handleMouseUp,
   handleSwipe,
-  gridPage: initialGridPage,
+  gridPage,
   totalGridPages,
   pinnedParticipantId,
   isMirroringBrowser,
   socketRef,
   handleExitRoom,
+  aiCanvasRef
 }) => {
-  const mainVideoContainerRef = useRef(null);
-  const annotationCanvasRef = useRef(null);
-  const touchStartXRef = useRef(0);
-  const touchDeltaRef = useRef(0);
+  const renderVideoFrame = (participant, index) => {
+    const isAI = participant.isAI;
+    const isPinned = participant.userId === pinnedParticipantId;
+    const isActive = participant.userId === participants[0]?.userId;
 
-  // Define local state with initial values from props
-  const [currentTool, setCurrentTool] = useState(initialCurrentTool || 'pen');
-  const [currentBrushSize, setCurrentBrushSize] = useState(initialCurrentBrushSize || 5);
-  const [gridPage, setGridPage] = useState(initialGridPage || 0);
+    return (
+      <div
+        key={participant.userId}
+        className={`pro-video-frame ${isPinned ? 'pro-video-frame--pinned' : ''} ${isActive ? 'pro-video-frame--active' : ''} ${isAI ? 'pro-video-frame--ai' : ''}`}
+      >
+        <div className="pro-video-container">
+          {isAI ? (
+            // AI Visualization
+            <div className="pro-ai-visualization">
+              <div className="pro-ai-animation">
+                {/* AI animation will be handled by the canvas in parent */}
+              </div>
+              <div className="pro-ai-status">
+                <div className="pro-ai-pulse"></div>
+                <span>AI Ready</span>
+              </div>
+            </div>
+          ) : participant.stream ? (
+            // Regular participant video
+            <video
+              className={`pro-video-element ${isMirroringBrowser && participant.isLocal ? 'pro-video-element--mirrored' : ''}`}
+              autoPlay
+              playsInline
+              muted={participant.isLocal}
+              ref={videoEl => {
+                if (videoEl && participant.stream) {
+                  videoEl.srcObject = participant.stream;
+                }
+              }}
+            />
+          ) : (
+            // No video available
+            <div className="pro-no-video">
+              <div 
+                className="pro-avatar"
+                style={{ backgroundColor: getColorForId(participant.userId) }}
+              >
+                {participant.username.charAt(0).toUpperCase()}
+              </div>
+            </div>
+          )}
+        </div>
 
-  const renderVideoPlayer = (participant, isLocal, className = "mx-auto") => (
-    <VideoPlayer
-      participant={participant}
-      isLocal={isLocal}
-      isMirroringBrowser={isMirroringBrowser}
-      socketId={socketRef.current?.id}
-      className={className}
-    />
-  );
+        <div className="pro-participant-info">
+          <span className="pro-participant-name">
+            {participant.username}
+            {participant.isLocal && ' (You)'}
+          </span>
+          <div className="pro-participant-badges">
+            {participant.isHost && <span className="pro-participant-badge pro-participant-badge--host">Host</span>}
+            {participant.isLocal && <span className="pro-participant-badge pro-participant-badge--you">You</span>}
+            {isAI && <span className="pro-participant-badge pro-participant-badge--ai">AI</span>}
+          </div>
+        </div>
 
-  useEffect(() => {
-    const canvas = annotationCanvasRef.current;
-    const container = mainVideoContainerRef.current;
-    if (!container || !canvas) return;
-    const resizeCanvas = () => {
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
-    };
-    resizeCanvas();
-    const resizeObserver = new ResizeObserver(resizeCanvas);
-    resizeObserver.observe(container);
-    return () => resizeObserver.disconnect();
-  }, []);
-
-  const handleTouchStart = (e) => { touchStartXRef.current = e.touches[0].clientX; touchDeltaRef.current = 0; };
-  const handleTouchMove = (e) => { touchDeltaRef.current = e.touches[0].clientX - touchStartXRef.current; };
-  const handleTouchEnd = () => {
-    if (Math.abs(touchDeltaRef.current) > 50) {
-      handleSwipe(touchDeltaRef.current > 0 ? -1 : 1);
-    }
+        <div className="pro-status-indicators">
+          {!participant.audioEnabled && (
+            <div className="pro-status-icon pro-status-icon--muted" title="Audio Muted">
+              🔊
+            </div>
+          )}
+          {!participant.videoEnabled && (
+            <div className="pro-status-icon pro-status-icon--video-off" title="Video Off">
+              📹
+            </div>
+          )}
+          {participant.isScreenSharing && (
+            <div className="pro-status-icon pro-status-icon--screen-share" title="Sharing Screen">
+              🖥️
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
+
+  const getGridClass = () => {
+    const count = participants.length;
+    if (count === 1) return 'pro-video-grid--1';
+    if (count === 2) return 'pro-video-grid--2';
+    if (count === 3) return 'pro-video-grid--3';
+    if (count === 4) return 'pro-video-grid--4';
+    return 'pro-video-grid--5-plus';
+  };
+
+  const visibleParticipants = participants.slice(gridPage * 4, (gridPage + 1) * 4);
 
   return (
     <div className="pro-mainarea">
-      <div
-        className="flex-1 flex flex-col relative overflow-hidden"
-        onWheel={(e) => {
-          if (e.deltaX !== 0 && totalGridPages > 1) {
-            e.preventDefault();
-            handleSwipe(e.deltaX > 0 ? 1 : -1);
-          }
-        }}
-      >
-        <div className="flex flex-col min-h-0 w-full">
-          <div className="pro-mainarea-toolbar-strip">
-            {/* No upload or media controls */}
-          </div>
-          {isSomeoneScreenSharing && (
-            <div style={{ position: 'absolute', top: toolbarPosition.y, left: toolbarPosition.x, zIndex: 50 }}>
-              <AnnotationToolbar
-                onMouseDown={handleToolbarMouseDown}
-                currentTool={currentTool}
-                setCurrentTool={setCurrentTool}
-                currentBrushSize={currentBrushSize}
-                setCurrentBrushSize={setCurrentBrushSize}
-                clearCanvas={() => {
-                  const canvas = annotationCanvasRef.current;
-                  if (!canvas) return;
-                  const ctx = canvas.getContext('2d');
-                  ctx.clearRect(0, 0, canvas.width, canvas.height);
-                  socketRef.current?.emit('clear-canvas');
-                }}
-              />
-            </div>
-          )}
-          <div
-            className="pro-mainarea-grid"
-            ref={mainVideoContainerRef}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-          >
-            {(() => {
-              const count = participants.length;
-              const pageStart = gridPage * 4;
-              const pageItems = participants.slice(pageStart, pageStart + 4);
-
-              if (count === 1) {
-                const p = participants[0];
-                return (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="w-full max-w-3xl">
-                      {renderVideoPlayer(p, p.isLocal, "w-full h-auto")}
-                    </div>
-                  </div>
-                );
-              }
-
-              if (count === 2) {
-                return (
-                  <div className="flex h-full w-full gap-2">
-                    <div className="flex-1 h-full flex items-center justify-center p-2">
-                      {renderVideoPlayer(participants[0], participants[0].isLocal, "w-full h-full object-cover")}
-                    </div>
-                    <div className="flex-1 h-full flex items-center justify-center p-2">
-                      {renderVideoPlayer(participants[1], participants[1].isLocal, "w-full h-full object-cover")}
-                    </div>
-                  </div>
-                );
-              }
-
-              if (count === 3) {
-                const [a, b, c] = participants;
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-2 p-1">
-                    <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(a, a.isLocal, "w-full h-auto")}
-                    </div>
-                    <div className="w-full h-full flex items-center justify-center">
-                      {renderVideoPlayer(b, b.isLocal, "w-full h-auto")}
-                    </div>
-                    <div className="md:col-span-2 h-full flex justify-center items-center">
-                      <div className="w-full md:w-1/2 min-w-[200px] max-w-sm">
-                        {renderVideoPlayer(c, c.isLocal, "w-full h-auto")}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              return (
-                <div className="w-full h-full p-2">
-                  <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full gap-3">
-                    {pageItems.map((p) => (
-                      <div key={p.userId} className="w-full h-full flex items-center justify-center">
-                        {renderVideoPlayer(p, p.isLocal, "w-full h-full object-cover")}
-                      </div>
-                    ))}
-                  </div>
-                  {totalGridPages > 1 && (
-                    <div className="pro-grid-pagination">
-                      <button onClick={() => gridPage > 0 && setGridPage(gridPage - 1)}>‹</button>
-                      {Array.from({ length: totalGridPages }, (_, i) => (
-                        <span
-                          key={i}
-                          onClick={() => setGridPage(i)}
-                          className={`pro-grid-dot ${gridPage === i ? 'pro-grid-dot--active' : ''}`}
-                        />
-                      ))}
-                      <button onClick={() => gridPage < totalGridPages - 1 && setGridPage(gridPage + 1)}>›</button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-            <canvas
-              ref={annotationCanvasRef}
-              className="absolute top-0 left-0"
-              style={{ pointerEvents: isSomeoneScreenSharing ? 'auto' : 'none', zIndex: 10, touchAction: 'none' }}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            />
-          </div>
+      <div className="pro-mainarea-toolbar-strip">
+        <div className="pro-meeting-info">
+          <span>Meeting in progress</span>
+          <span className="pro-participant-count">{participants.length} participants</span>
         </div>
+        <div className="pro-toolbar-controls">
+          <button onClick={() => handleSwipe(-1)} disabled={gridPage === 0}>
+            Previous
+          </button>
+          <button onClick={() => handleSwipe(1)} disabled={gridPage >= totalGridPages - 1}>
+            Next
+          </button>
+        </div>
+      </div>
+
+      <div className="pro-mainarea-grid">
+        <div className={`pro-video-grid ${getGridClass()}`}>
+          {visibleParticipants.map((participant, index) => 
+            renderVideoFrame(participant, index)
+          )}
+        </div>
+
+        {totalGridPages > 1 && (
+          <div className="pro-grid-pagination">
+            <button onClick={() => handleSwipe(-1)} disabled={gridPage === 0}>
+              ‹
+            </button>
+            <div className="pro-grid-dots">
+              {Array.from({ length: totalGridPages }, (_, i) => (
+                <div
+                  key={i}
+                  className={`pro-grid-dot ${i === gridPage ? 'pro-grid-dot--active' : ''}`}
+                  onClick={() => setGridPage(i)}
+                />
+              ))}
+            </div>
+            <button onClick={() => handleSwipe(1)} disabled={gridPage >= totalGridPages - 1}>
+              ›
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

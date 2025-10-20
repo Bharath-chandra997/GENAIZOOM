@@ -47,6 +47,21 @@ const Meeting = () => {
   const touchStartXRef = useRef(0);
   const touchDeltaRef = useRef(0);
 
+  // AI Participant state
+  const [aiParticipant, setAiParticipant] = useState({
+    userId: 'ai-assistant',
+    username: 'AI Assistant',
+    isLocal: false,
+    isHost: false,
+    videoEnabled: true,
+    audioEnabled: false,
+    isScreenSharing: false,
+    isAI: true,
+    stream: null,
+    socketId: 'ai-assistant',
+    color: '#3B82F6'
+  });
+
   // Refs
   const socketRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -59,6 +74,10 @@ const Meeting = () => {
   const remoteDrawingStates = useRef(new Map());
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
   const isInitialized = useRef(false);
+
+  // AI Refs
+  const aiCanvasRef = useRef(null);
+  const aiAnimationRef = useRef(null);
 
   // Connection optimization refs
   const connectionTimeouts = useRef(new Map());
@@ -73,30 +92,151 @@ const Meeting = () => {
   // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
+  // All participants including AI
+  const allParticipants = useMemo(() => {
+    return [aiParticipant, ...participants];
+  }, [aiParticipant, participants]);
+
   // Derived State
   const defaultMainParticipant = useMemo(() => {
-    const screenSharer = participants.find(p => p.isScreenSharing);
+    const screenSharer = allParticipants.find(p => p.isScreenSharing);
     if (screenSharer) return screenSharer;
-    const host = participants.find(p => p.isHost);
+    const host = allParticipants.find(p => p.isHost);
     if (host) return host;
-    return participants[0] || null;
-  }, [participants]);
+    return allParticipants[0] || null;
+  }, [allParticipants]);
 
   const mainViewParticipant = useMemo(() => {
-    return participants.find(p => p.userId === pinnedParticipantId) || defaultMainParticipant;
-  }, [pinnedParticipantId, defaultMainParticipant, participants]);
+    return allParticipants.find(p => p.userId === pinnedParticipantId) || defaultMainParticipant;
+  }, [pinnedParticipantId, defaultMainParticipant, allParticipants]);
 
   const isSomeoneScreenSharing = useMemo(() =>
-    participants.some(p => p.isScreenSharing),
-    [participants]
+    allParticipants.some(p => p.isScreenSharing),
+    [allParticipants]
   );
-  const displayParticipants = participants; // No AI agent frame
+
+  const displayParticipants = allParticipants;
   const totalGridPages = useMemo(() => Math.max(1, Math.ceil(displayParticipants.length / 4)), [displayParticipants.length]);
 
   const getUsernameById = useCallback((userId) => {
-    const participant = participants.find(p => p.userId === userId);
+    const participant = allParticipants.find(p => p.userId === userId);
     return participant ? (participant.isLocal ? user.username : participant.username) : 'Another user';
-  }, [participants, user.username]);
+  }, [allParticipants, user.username]);
+
+  // AI Animation
+  const initializeAiAnimation = useCallback(() => {
+    const canvas = aiCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let time = 0;
+
+    // Create particles for AI visualization
+    const createParticles = () => {
+      particles = [];
+      for (let i = 0; i < 30; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: Math.random() * 2 + 1,
+          speed: Math.random() * 1 + 0.5,
+          color: `hsl(${200 + Math.random() * 60}, 70%, 60%)`,
+          angle: Math.random() * Math.PI * 2
+        });
+      }
+    };
+
+    const animate = () => {
+      if (!canvas) return;
+      
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.1)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      time += 0.02;
+
+      particles.forEach((particle, index) => {
+        // Update particle position
+        particle.x += Math.cos(particle.angle + time) * particle.speed;
+        particle.y += Math.sin(particle.angle + time) * particle.speed;
+
+        // Wrap around edges
+        if (particle.x < 0) particle.x = canvas.width;
+        if (particle.x > canvas.width) particle.x = 0;
+        if (particle.y < 0) particle.y = canvas.height;
+        if (particle.y > canvas.height) particle.y = 0;
+
+        // Draw particle
+        ctx.beginPath();
+        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        ctx.fillStyle = particle.color;
+        ctx.fill();
+
+        // Draw connections
+        particles.slice(index + 1).forEach(otherParticle => {
+          const dx = particle.x - otherParticle.x;
+          const dy = particle.y - otherParticle.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < 80) {
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(100, 200, 255, ${0.2 * (1 - distance / 80)})`;
+            ctx.lineWidth = 0.3;
+            ctx.moveTo(particle.x, particle.y);
+            ctx.lineTo(otherParticle.x, otherParticle.y);
+            ctx.stroke();
+          }
+        });
+      });
+
+      // Draw AI text
+      ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.fillStyle = 'rgba(96, 165, 250, 0.9)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('AI Assistant', canvas.width / 2, canvas.height / 2 - 10);
+
+      // Draw status text
+      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.fillStyle = 'rgba(96, 165, 250, 0.7)';
+      ctx.fillText('Ready to help', canvas.width / 2, canvas.height / 2 + 15);
+
+      // Draw pulsing circle
+      ctx.beginPath();
+      ctx.arc(canvas.width / 2, canvas.height / 2, 25 + Math.sin(time * 2) * 3, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(96, 165, 250, ${0.5 + Math.sin(time) * 0.3})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      aiAnimationRef.current = requestAnimationFrame(animate);
+    };
+
+    const resizeCanvas = () => {
+      if (canvas) {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        createParticles();
+      }
+    };
+
+    // Initialize
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    animate();
+
+    return () => {
+      if (aiAnimationRef.current) {
+        cancelAnimationFrame(aiAnimationRef.current);
+      }
+      window.removeEventListener('resize', resizeCanvas);
+    };
+  }, []);
+
+  // Initialize AI when component mounts
+  useEffect(() => {
+    const cleanup = initializeAiAnimation();
+    return cleanup;
+  }, [initializeAiAnimation]);
 
   const getIceServers = useCallback(async () => {
     const now = Date.now();
@@ -514,6 +654,10 @@ const Meeting = () => {
           pendingOffers.current.clear();
           pendingAnswers.current.clear();
 
+          if (aiAnimationRef.current) {
+            cancelAnimationFrame(aiAnimationRef.current);
+          }
+
           if (socketRef.current) {
             cleanupSocketListeners();
             socketRef.current.disconnect();
@@ -743,11 +887,11 @@ const Meeting = () => {
 
   return (
     <div className="pro-meeting-page">
-      <MeetingHeader roomId={roomId} participants={participants} />
+      <MeetingHeader roomId={roomId} participants={allParticipants} />
       <div className="pro-meeting-body">
         <div className="pro-mainarea-container">
           <MeetingMainArea
-            participants={participants}
+            participants={allParticipants}
             isSomeoneScreenSharing={isSomeoneScreenSharing}
             toolbarPosition={toolbarPosition}
             currentTool={currentTool}
@@ -763,6 +907,7 @@ const Meeting = () => {
             isMirroringBrowser={isMirroringBrowser}
             socketRef={socketRef}
             handleExitRoom={handleExitRoom}
+            aiCanvasRef={aiCanvasRef}
           />
         </div>
         <MeetingSidebar
@@ -775,7 +920,7 @@ const Meeting = () => {
             setMessages((prev) => [...prev, payload]);
           }}
           onCloseChat={() => setIsChatOpen(false)}
-          participants={participants}
+          participants={allParticipants}
           onCloseParticipants={() => setIsParticipantsOpen(false)}
           roomId={roomId}
         />
@@ -792,6 +937,18 @@ const Meeting = () => {
         isParticipantsOpen={isParticipantsOpen}
         setIsParticipantsOpen={setIsParticipantsOpen}
         handleExitRoom={handleExitRoom}
+      />
+      
+      {/* Hidden canvas for AI animation */}
+      <canvas
+        ref={aiCanvasRef}
+        style={{
+          position: 'absolute',
+          top: -1000,
+          left: -1000,
+          width: 640,
+          height: 480
+        }}
       />
     </div>
   );

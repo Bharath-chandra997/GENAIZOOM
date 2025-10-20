@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import VideoPlayer from '../../components/VideoPlayer';
+import VideoPlayer from '../components/VideoPlayer';
 import AnnotationToolbar from '../components/AnnotationToolbar';
 import UploadControls from '../components/UploadControls';
 import ImageAudioSection from '../components/ImageAudioSection';

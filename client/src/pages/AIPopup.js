@@ -33,6 +33,9 @@ const AIPopup = ({
 
   const handleSubmit = async () => {
     if (aiBotInUse && currentAIUser !== user.username) {
+      toast.error('AI Bot is currently in use by another user', {
+        position: "bottom-center"
+      });
       return;
     }
 

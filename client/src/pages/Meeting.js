@@ -632,36 +632,33 @@ const Meeting = () => {
       }
     };
 
-    const handleIceCandidate = ({ from, candidate }) => {
-      const pc = peerConnections.current.get(from);
-      if (pc) {
-        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => console.error('ICE candidate error:', err));
-      }
-    };
-
-    const handleUserLeft = ({ userId, username }) => {
-      const pc = peerConnections.current.get(userId);
-      if (pc) {
-        pc.getSenders().forEach(sender => sender.track && sender.track.stop());
-        pc.close();
-        peerConnections.current.delete(userId);
-      }
-      setParticipants((prev) => {
-        const updated = prev.filter((p) => p.userId !== userId);
-        if (pinnedParticipantId === userId) setPinnedParticipantId(null);
-        return updated;
-      });
-      
-      // Show toast with username at bottom center
-      toast.error(`${username} has left the meeting`, {
-        position: "bottom-center",
-        autoClose: 3000,
-        style: {
-          background: '#ef4444',
-          color: 'white',
-        }
-      });
-    };
+  // In Meeting.jsx, update the handleUserLeft function in setupSocketListeners:
+const handleUserLeft = ({ userId, username }) => {
+  const pc = peerConnections.current.get(userId);
+  if (pc) {
+    pc.getSenders().forEach(sender => sender.track && sender.track.stop());
+    pc.close();
+    peerConnections.current.delete(userId);
+  }
+  setParticipants((prev) => {
+    const updated = prev.filter((p) => p.userId !== userId);
+    if (pinnedParticipantId === userId) setPinnedParticipantId(null);
+    return updated;
+  });
+  
+  // Show toast with username at bottom center - FIXED: Use proper username
+  const leftUser = participants.find(p => p.userId === userId);
+  const displayName = leftUser?.username || username || 'A user';
+  
+  toast.error(`${displayName} has left the meeting`, {
+    position: "bottom-center",
+    autoClose: 3000,
+    style: {
+      background: '#ef4444',
+      color: 'white',
+    }
+  });
+};
 
     const handleChatMessage = (payload) => setMessages(prev => [...prev, payload]);
 

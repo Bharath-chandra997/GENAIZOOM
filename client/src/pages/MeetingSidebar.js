@@ -1,6 +1,6 @@
 import React from 'react';
-import Chat from '../../components/Chat';
-import Participants from '../../components/Participants';
+import Chat from '../components/Chat';
+import Participants from '../components/Participants';
 
 const MeetingSidebar = ({ isChatOpen, isParticipantsOpen, messages, user, onSendMessage, onCloseChat, participants, onCloseParticipants, roomId }) => {
   return (

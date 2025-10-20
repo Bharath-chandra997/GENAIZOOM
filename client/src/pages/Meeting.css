@@ -784,3 +784,336 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+/* Add these new styles to your existing Meeting.css */
+
+/* Toastify bottom center positioning */
+.Toastify__toast-container--bottom-center {
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Video frames - wider aspect ratio */
+.pro-video-frame {
+  aspect-ratio: 16/9;
+  min-height: auto;
+}
+
+.pro-video-grid--1 {
+  max-width: 1000px;
+}
+
+.pro-video-grid--2,
+.pro-video-grid--3,
+.pro-video-grid--4 {
+  max-width: 1200px;
+}
+
+/* AI Popup Styles */
+.pro-ai-popup-content {
+  padding: 20px;
+}
+
+.pro-ai-status-section {
+  margin-bottom: 20px;
+}
+
+.pro-ai-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #1a1d24;
+}
+
+.pro-ai-status-indicator.available {
+  border-left: 4px solid #10b981;
+}
+
+.pro-ai-status-indicator.in-use {
+  border-left: 4px solid #ef4444;
+}
+
+.pro-ai-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.pro-ai-status-indicator.available .pro-ai-status-dot {
+  background: #10b981;
+  animation: pulse 2s infinite;
+}
+
+.pro-ai-status-indicator.in-use .pro-ai-status-dot {
+  background: #ef4444;
+}
+
+.pro-ai-upload-section {
+  space-y: 16px;
+}
+
+.pro-ai-upload-area {
+  margin-bottom: 16px;
+}
+
+.pro-ai-upload-area h4 {
+  margin-bottom: 8px;
+  color: #e5e7eb;
+}
+
+.pro-ai-file-input {
+  width: 100%;
+  padding: 8px;
+  border: 1px dashed #4b5563;
+  border-radius: 6px;
+  background: #1a1d24;
+  color: #e5e7eb;
+}
+
+.pro-ai-upload-preview {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  background: #1a1d24;
+}
+
+.pro-ai-upload-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 4px;
+}
+
+.pro-ai-upload-preview audio {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.pro-ai-remove-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pro-ai-submit-btn {
+  width: 100%;
+  padding: 12px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.pro-ai-submit-btn:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.pro-ai-submit-btn:disabled {
+  background: #6b7280;
+  cursor: not-allowed;
+}
+
+.pro-ai-response-section h4 {
+  margin-bottom: 12px;
+  color: #e5e7eb;
+}
+
+.pro-ai-response-content {
+  padding: 16px;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  background: #1a1d24;
+}
+
+.pro-ai-user-info {
+  margin-bottom: 12px;
+  padding: 8px;
+  background: #374151;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.pro-ai-uploaded-media {
+  margin-bottom: 12px;
+}
+
+.pro-ai-uploaded-media img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 4px;
+}
+
+.pro-ai-uploaded-media audio {
+  width: 100%;
+}
+
+.pro-ai-response-text {
+  padding: 12px;
+  background: #0f1115;
+  border-radius: 4px;
+  border-left: 4px solid #3b82f6;
+  margin-bottom: 12px;
+}
+
+.pro-ai-complete-btn {
+  width: 100%;
+  padding: 8px;
+  background: #10b981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.pro-ai-waiting-section {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.pro-ai-loading p {
+  margin-top: 12px;
+  color: #9ca3af;
+}
+
+.pro-ai-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #374151;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Meeting Controls Styles */
+.pro-meeting-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: #171a21;
+  border-top: 1px solid #2a2f3a;
+}
+
+.pro-controls-left,
+.pro-controls-center,
+.pro-controls-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pro-control-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: #374151;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.pro-control-btn:hover {
+  background: #4b5563;
+}
+
+.pro-control-btn--active {
+  background: #3b82f6;
+}
+
+.pro-control-btn--muted {
+  background: #ef4444;
+}
+
+.pro-control-btn--disabled {
+  background: #6b7280;
+}
+
+.pro-invite-btn {
+  background: #8b5cf6;
+}
+
+.pro-exit-btn {
+  background: #ef4444;
+}
+
+.pro-exit-btn:hover {
+  background: #dc2626;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .pro-meeting-controls {
+    padding: 8px 12px;
+  }
+  
+  .pro-control-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  
+  .pro-controls-center {
+    gap: 4px;
+  }
+}
+
+/* Enhanced AI frame for showing uploaded content */
+.pro-video-frame--ai .pro-ai-content-display {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.pro-ai-content-display img {
+  max-width: 100%;
+  max-height: 60%;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.pro-ai-content-display audio {
+  width: 80%;
+  margin-bottom: 10px;
+}
+
+.pro-ai-response-display {
+  background: rgba(59, 130, 246, 0.1);
+  padding: 10px;
+  border-radius: 6px;
+  border-left: 3px solid #3b82f6;
+  font-size: 12px;
+  max-height: 80px;
+  overflow-y: auto;
+}

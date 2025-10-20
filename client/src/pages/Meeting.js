@@ -8,6 +8,7 @@ import MeetingHeader from './MeetingHeader';
 import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
+import AIPopup from './AIPopup';
 import LoadingSpinner from '../components/LoadingSpinner';
 import './Meeting.css';
 
@@ -33,7 +34,8 @@ const Meeting = () => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false); // Changed to false by default
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
+  const [isAIPopupOpen, setIsAIPopupOpen] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
@@ -44,6 +46,11 @@ const Meeting = () => {
   const [currentTool, setCurrentTool] = useState('pen');
   const [currentBrushSize, setCurrentBrushSize] = useState(5);
   const [gridPage, setGridPage] = useState(0);
+  const [aiBotInUse, setAiBotInUse] = useState(false);
+  const [currentAIUser, setCurrentAIUser] = useState(null);
+  const [aiResponse, setAiResponse] = useState('');
+  const [aiUploadedImage, setAiUploadedImage] = useState(null);
+  const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const touchStartXRef = useRef(0);
   const touchDeltaRef = useRef(0);
 
@@ -123,6 +130,24 @@ const Meeting = () => {
     return participant ? (participant.isLocal ? user.username : participant.username) : 'Another user';
   }, [allParticipants, user.username]);
 
+  // Copy invite link to clipboard
+  const copyInviteLink = useCallback(() => {
+    const inviteLink = `${window.location.origin}/join/${roomId}`;
+    navigator.clipboard.writeText(inviteLink)
+      .then(() => {
+        toast.success('Invite link copied to clipboard!', {
+          position: "bottom-center",
+          autoClose: 3000,
+        });
+      })
+      .catch(() => {
+        toast.error('Failed to copy invite link', {
+          position: "bottom-center",
+          autoClose: 3000,
+        });
+      });
+  }, [roomId]);
+
   // AI Animation
   const initializeAiAnimation = useCallback(() => {
     const canvas = aiCanvasRef.current;
@@ -198,8 +223,8 @@ const Meeting = () => {
 
       // Draw status text
       ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.fillStyle = 'rgba(96, 165, 250, 0.7)';
-      ctx.fillText('Ready to help', canvas.width / 2, canvas.height / 2 + 15);
+      ctx.fillStyle = aiBotInUse ? 'rgba(239, 68, 68, 0.7)' : 'rgba(96, 165, 250, 0.7)';
+      ctx.fillText(aiBotInUse ? 'In use by ' + currentAIUser : 'Ready to help', canvas.width / 2, canvas.height / 2 + 15);
 
       // Draw pulsing circle
       ctx.beginPath();
@@ -230,13 +255,51 @@ const Meeting = () => {
       }
       window.removeEventListener('resize', resizeCanvas);
     };
-  }, []);
+  }, [aiBotInUse, currentAIUser]);
 
   // Initialize AI when component mounts
   useEffect(() => {
     const cleanup = initializeAiAnimation();
     return cleanup;
   }, [initializeAiAnimation]);
+
+  // AI Bot functions
+  const handleAIRequest = useCallback(async (imageFile, audioFile) => {
+    if (aiBotInUse) {
+      toast.error('AI Bot is currently in use by another user', {
+        position: "bottom-center"
+      });
+      return;
+    }
+
+    setAiBotInUse(true);
+    setCurrentAIUser(user.username);
+    setAiUploadedImage(imageFile);
+    setAiUploadedAudio(audioFile);
+
+    // Simulate AI processing
+    setTimeout(() => {
+      const response = `Hello ${user.username}! I've processed your ${imageFile ? 'image' : ''}${imageFile && audioFile ? ' and ' : ''}${audioFile ? 'audio' : ''}. This is a simulated AI response. In a real implementation, this would connect to an AI service.`;
+      setAiResponse(response);
+      
+      // Broadcast to all participants
+      socketRef.current?.emit('ai-response', {
+        user: user.username,
+        response: response,
+        image: imageFile ? URL.createObjectURL(imageFile) : null,
+        audio: audioFile ? URL.createObjectURL(audioFile) : null
+      });
+    }, 3000);
+  }, [aiBotInUse, user.username]);
+
+  const handleAIComplete = useCallback(() => {
+    setAiBotInUse(false);
+    setCurrentAIUser(null);
+    setAiResponse('');
+    setAiUploadedImage(null);
+    setAiUploadedAudio(null);
+    socketRef.current?.emit('ai-complete');
+  }, []);
 
   const getIceServers = useCallback(async () => {
     const now = Date.now();
@@ -488,7 +551,7 @@ const Meeting = () => {
       }
     };
 
-    const handleUserLeft = (userId) => {
+    const handleUserLeft = ({ userId, username }) => {
       const pc = peerConnections.current.get(userId);
       if (pc) {
         pc.getSenders().forEach(sender => sender.track && sender.track.stop());
@@ -500,7 +563,16 @@ const Meeting = () => {
         if (pinnedParticipantId === userId) setPinnedParticipantId(null);
         return updated;
       });
-      toast.info('A user has left the meeting.');
+      
+      // Show toast with username at bottom center
+      toast.error(`${username} has left the meeting`, {
+        position: "bottom-center",
+        autoClose: 3000,
+        style: {
+          background: '#ef4444',
+          color: 'white',
+        }
+      });
     };
 
     const handleChatMessage = (payload) => setMessages(prev => [...prev, payload]);
@@ -560,6 +632,22 @@ const Meeting = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     };
 
+    const handleAIResponse = ({ user: aiUser, response, image, audio }) => {
+      setAiBotInUse(true);
+      setCurrentAIUser(aiUser);
+      setAiResponse(response);
+      if (image) setAiUploadedImage(image);
+      if (audio) setAiUploadedAudio(audio);
+    };
+
+    const handleAIComplete = () => {
+      setAiBotInUse(false);
+      setCurrentAIUser(null);
+      setAiResponse('');
+      setAiUploadedImage(null);
+      setAiUploadedAudio(null);
+    };
+
     socket.on('connect', handleConnect);
     socket.on('user-joined', handleUserJoined);
     socket.on('offer', handleOffer);
@@ -574,6 +662,8 @@ const Meeting = () => {
     socket.on('drawing-move', handleDrawingMove);
     socket.on('draw-shape', handleDrawShape);
     socket.on('clear-canvas', handleClearCanvas);
+    socket.on('ai-response', handleAIResponse);
+    socket.on('ai-complete', handleAIComplete);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -590,6 +680,8 @@ const Meeting = () => {
       socket.off('drawing-move', handleDrawingMove);
       socket.off('draw-shape', handleDrawShape);
       socket.off('clear-canvas', handleClearCanvas);
+      socket.off('ai-response', handleAIResponse);
+      socket.off('ai-complete', handleAIComplete);
     };
   }, [createPeerConnection, roomId, user, getUsernameById]);
 
@@ -783,50 +875,7 @@ const Meeting = () => {
     }
   };
 
-  const handleToolbarMouseUp = () => {
-    dragInfo.current.isDragging = false;
-    window.removeEventListener('mousemove', handleToolbarMouseMove);
-    window.removeEventListener('mouseup', handleToolbarMouseUp);
-  };
-
-  const handleMouseDown = (e) => {
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
-
-    if (currentTool === 'pen' || currentTool === 'eraser') {
-      const myColor = getColorForId(socketRef.current?.id);
-      const payload = { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize };
-      socketRef.current?.emit('drawing-start', payload);
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = myColor;
-      ctx.lineWidth = currentBrushSize;
-      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-    }
-  };
-
-  const handleMouseMove = (e) => {
-    if (!drawingStateRef.current.isDrawing || !e.buttons) return;
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    if (currentTool === 'pen' || currentTool === 'eraser') {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      socketRef.current?.emit('drawing-move', { x: x / canvas.width, y: y / canvas.height });
-      const ctx = canvas.getContext('2d');
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
-  };
-
-  const handleMouseUp = (e) => {
+   const handleMouseUp = (e) => {
     if (!drawingStateRef.current.isDrawing) return;
     const canvas = annotationCanvasRef.current;
     if (!canvas) return;
@@ -876,7 +925,7 @@ const Meeting = () => {
 
   const handleExitRoom = () => {
     try {
-      socketRef.current?.emit('leave-room');
+      socketRef.current?.emit('leave-room', { userId: socketRef.current?.id, username: user.username });
     } catch (e) {
       console.warn('Error emitting leave-room:', e);
     }
@@ -887,7 +936,11 @@ const Meeting = () => {
 
   return (
     <div className="pro-meeting-page">
-      <MeetingHeader roomId={roomId} participants={allParticipants} />
+      <MeetingHeader 
+        roomId={roomId} 
+        participants={allParticipants} 
+        onCopyInvite={copyInviteLink}
+      />
       <div className="pro-meeting-body">
         <div className="pro-mainarea-container">
           <MeetingMainArea
@@ -909,14 +962,23 @@ const Meeting = () => {
             handleExitRoom={handleExitRoom}
             aiCanvasRef={aiCanvasRef}
             setGridPage={setGridPage}
+            aiBotInUse={aiBotInUse}
+            currentAIUser={currentAIUser}
+            aiResponse={aiResponse}
+            aiUploadedImage={aiUploadedImage}
+            aiUploadedAudio={aiUploadedAudio}
           />
         </div>
         
         {/* Popup Sidebars */}
-        {(isChatOpen || isParticipantsOpen) && (
-          <div className="pro-sidebar-overlay">
+        {(isChatOpen || isParticipantsOpen || isAIPopupOpen) && (
+          <div className="pro-sidebar-overlay" onClick={() => {
+            if (isChatOpen) setIsChatOpen(false);
+            if (isParticipantsOpen) setIsParticipantsOpen(false);
+            if (isAIPopupOpen) setIsAIPopupOpen(false);
+          }}>
             {isChatOpen && (
-              <div className="pro-sidebar-popup">
+              <div className="pro-sidebar-popup" onClick={(e) => e.stopPropagation()}>
                 <MeetingSidebar
                   isChatOpen={isChatOpen}
                   isParticipantsOpen={isParticipantsOpen}
@@ -935,7 +997,7 @@ const Meeting = () => {
             )}
             
             {isParticipantsOpen && (
-              <div className="pro-sidebar-popup">
+              <div className="pro-sidebar-popup" onClick={(e) => e.stopPropagation()}>
                 <MeetingSidebar
                   isChatOpen={isChatOpen}
                   isParticipantsOpen={isParticipantsOpen}
@@ -949,6 +1011,22 @@ const Meeting = () => {
                   participants={allParticipants}
                   onCloseParticipants={() => setIsParticipantsOpen(false)}
                   roomId={roomId}
+                />
+              </div>
+            )}
+
+            {isAIPopupOpen && (
+              <div className="pro-sidebar-popup" onClick={(e) => e.stopPropagation()}>
+                <AIPopup
+                  onClose={() => setIsAIPopupOpen(false)}
+                  onAIRequest={handleAIRequest}
+                  onAIComplete={handleAIComplete}
+                  aiBotInUse={aiBotInUse}
+                  currentAIUser={currentAIUser}
+                  aiResponse={aiResponse}
+                  aiUploadedImage={aiUploadedImage}
+                  aiUploadedAudio={aiUploadedAudio}
+                  user={user}
                 />
               </div>
             )}
@@ -967,7 +1045,10 @@ const Meeting = () => {
         setIsChatOpen={setIsChatOpen}
         isParticipantsOpen={isParticipantsOpen}
         setIsParticipantsOpen={setIsParticipantsOpen}
+        isAIPopupOpen={isAIPopupOpen}
+        setIsAIPopupOpen={setIsAIPopupOpen}
         handleExitRoom={handleExitRoom}
+        onCopyInvite={copyInviteLink}
       />
       
       {/* Hidden canvas for AI animation */}

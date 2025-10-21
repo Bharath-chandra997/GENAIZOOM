@@ -132,7 +132,7 @@ const Meeting = () => {
     stream: null,
     socketId: 'ai-assistant',
     color: '#3B82F6',
-    profilePicture: null // AI has no profile picture
+    profilePicture: null
   });
 
   // Refs
@@ -161,7 +161,7 @@ const Meeting = () => {
   const pendingOffers = useRef(new Map());
   const pendingAnswers = useRef(new Map());
 
-  // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
+  // Detect if browser mirrors front camera tracks
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
   // All participants including AI (but we'll separate them for display)
@@ -216,8 +216,7 @@ const Meeting = () => {
       });
   }, [roomId]);
 
-  // ... (rest of your existing functions remain the same until the return statement)
-    // AI Animation
+  // AI Animation
   const initializeAiAnimation = useCallback(() => {
     const canvas = aiCanvasRef.current;
     if (!canvas) return;
@@ -455,11 +454,11 @@ const Meeting = () => {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       const { data } = await axios.get(`${SERVER_URL}/ice-servers`, {
         signal: controller.signal,
-        timeout: 2000
+        timeout: 5000
       });
 
       clearTimeout(timeoutId);
@@ -495,7 +494,7 @@ const Meeting = () => {
 
   const handleIceCandidate = useCallback(({ from, candidate }) => {
     const pc = peerConnections.current.get(from);
-    if (pc) {
+    if (pc && pc.remoteDescription && candidate) {
       pc.addIceCandidate(new RTCIceCandidate(candidate))
         .catch(err => {
           console.warn('Error adding ICE candidate:', err);
@@ -528,23 +527,40 @@ const Meeting = () => {
           connectionTimeouts.current.delete(remoteSocketId);
           signalingStates.current.delete(remoteSocketId);
         }
-      }, 8000);
+      }, 15000);
 
       connectionTimeouts.current.set(remoteSocketId, connectionTimeout);
 
+      // Add local tracks to the connection
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          if (track.kind === 'audio' || track.kind === 'video') {
+            pc.addTrack(track, localStreamRef.current);
+          }
+        });
+      }
+
       pc.ontrack = (event) => {
+        console.log('Received remote track from:', remoteSocketId);
         clearTimeout(connectionTimeout);
         connectionTimeouts.current.delete(remoteSocketId);
-        setParticipants((prev) =>
-          prev.map((p) =>
-            p.userId === remoteSocketId ? { ...p, stream: event.streams[0] } : p
-          )
-        );
+        
+        const stream = event.streams[0];
+        if (stream) {
+          setParticipants(prev =>
+            prev.map(p =>
+              p.userId === remoteSocketId ? { ...p, stream: stream } : p
+            )
+          );
+        }
       };
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
+          socketRef.current?.emit('ice-candidate', { 
+            to: remoteSocketId, 
+            candidate: event.candidate 
+          });
         }
       };
 
@@ -554,8 +570,10 @@ const Meeting = () => {
           clearTimeout(connectionTimeout);
           connectionTimeouts.current.delete(remoteSocketId);
           console.log('Successfully connected to user:', remoteSocketId);
+          toast.success(`Connected to ${getUsernameById(remoteSocketId)}`);
         } else if (pc.connectionState === 'disconnected') {
           console.log('Connection disconnected for user:', remoteSocketId);
+          toast.warning(`Connection lost with ${getUsernameById(remoteSocketId)}`);
         } else if (pc.connectionState === 'failed') {
           console.error('Connection failed for user:', remoteSocketId);
           clearTimeout(connectionTimeout);
@@ -566,13 +584,14 @@ const Meeting = () => {
           pc.close();
           peerConnections.current.delete(remoteSocketId);
           setParticipants((prev) => prev.filter((p) => p.userId !== remoteSocketId));
+          toast.error(`Failed to connect to ${getUsernameById(remoteSocketId)}`);
         }
       };
 
       peerConnections.current.set(remoteSocketId, pc);
       return pc;
     },
-    [getIceServers]
+    [getIceServers, getUsernameById]
   );
 
   const setupSocketListeners = useCallback((socket) => {
@@ -583,6 +602,7 @@ const Meeting = () => {
         username: user.username,
         isReconnect: false
       }, (otherUsers, sessionData) => {
+        console.log('Room joined successfully. Other users:', otherUsers);
         const isHost = otherUsers.length === 0;
         const remoteParticipants = otherUsers.map(u => ({
           userId: u.userId,
@@ -608,11 +628,25 @@ const Meeting = () => {
         };
         setParticipants([localParticipant, ...remoteParticipants]);
         setIsLoading(false);
+        
+        // Create peer connections for existing users
+        otherUsers.forEach(async (user) => {
+          try {
+            const pc = await createPeerConnection(user.userId);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('offer', { to: user.userId, offer, username: user.username });
+          } catch (err) {
+            console.error('Error creating offer for existing user:', err);
+          }
+        });
       });
     };
 
     const handleUserJoined = async ({ userId, username, isHost, isReconnect }) => {
+      console.log('User joined:', userId, username);
       if (isReconnect) return;
+      
       setParticipants((prev) => {
         if (prev.some(p => p.userId === userId)) return prev;
         return [...prev, {
@@ -627,19 +661,14 @@ const Meeting = () => {
           socketId: userId
         }];
       });
+      
+      toast.info(`${username} joined the meeting`);
+      
       try {
         const pc = await createPeerConnection(userId);
-        const currentState = signalingStates.current.get(userId);
-        if (currentState === 'new' || currentState === 'stable') {
-          if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
-          }
-          signalingStates.current.set(userId, 'have-local-offer');
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          pendingOffers.current.set(userId, offer);
-          socket.emit('offer', { to: userId, offer, username: user.username });
-        }
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('offer', { to: userId, offer, username: user.username });
       } catch (err) {
         console.error('Error in user-joined handler:', err);
         toast.error(`Failed to connect to user ${username}.`);
@@ -647,6 +676,7 @@ const Meeting = () => {
     };
 
     const handleOffer = async ({ from, offer, username }) => {
+      console.log('Received offer from:', from);
       setParticipants((prev) => {
         if (prev.some(p => p.userId === from)) return prev;
         return [...prev, {
@@ -661,58 +691,48 @@ const Meeting = () => {
           socketId: from
         }];
       });
+      
       try {
         const pc = await createPeerConnection(from);
-        const currentState = signalingStates.current.get(from);
-        if (currentState === 'new' || currentState === 'stable') {
-          if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
-          }
-          signalingStates.current.set(from, 'have-remote-offer');
-          await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          signalingStates.current.set(from, 'stable');
-          socket.emit('answer', { to: from, answer });
-        }
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('answer', { to: from, answer });
       } catch (err) {
         console.error('Error in offer handler:', err);
         toast.error(`Failed to process offer from ${username}.`);
       }
     };
 
-    const handleAnswer = ({ from, answer }) => {
+    const handleAnswer = async ({ from, answer }) => {
+      console.log('Received answer from:', from);
       const pc = peerConnections.current.get(from);
-      const currentState = signalingStates.current.get(from);
-      if (pc && currentState === 'have-local-offer') {
-        pc.setRemoteDescription(new RTCSessionDescription(answer))
-          .then(() => {
-            signalingStates.current.set(from, 'stable');
-            pendingOffers.current.delete(from);
-          })
-          .catch(err => {
-            console.error('Error setting remote description:', err);
-            signalingStates.current.set(from, 'stable');
-            pendingOffers.current.delete(from);
-          });
+      if (pc) {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        } catch (err) {
+          console.error('Error setting remote description:', err);
+        }
       }
     };
 
     const handleUserLeft = ({ userId, username }) => {
+      console.log('User left:', userId);
       const pc = peerConnections.current.get(userId);
       if (pc) {
         pc.getSenders().forEach(sender => sender.track && sender.track.stop());
         pc.close();
         peerConnections.current.delete(userId);
       }
+      
+      const leftUser = participants.find(p => p.userId === userId);
+      const displayName = leftUser?.username || username || 'A user';
+      
       setParticipants((prev) => {
         const updated = prev.filter((p) => p.userId !== userId);
         if (pinnedParticipantId === userId) setPinnedParticipantId(null);
         return updated;
       });
-      
-      const leftUser = participants.find(p => p.userId === userId);
-      const displayName = leftUser?.username || username || 'A user';
       
       toast.error(`${displayName} has left the meeting`, {
         position: "bottom-center",
@@ -724,13 +744,23 @@ const Meeting = () => {
       });
     };
 
-    const handleChatMessage = (payload) => setMessages(prev => [...prev, payload]);
+    const handleChatMessage = (payload) => {
+      console.log('Chat message received:', payload);
+      setMessages(prev => [...prev, payload]);
+    };
 
-    const handleScreenShareStart = ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p));
+    const handleScreenShareStart = ({ userId }) => {
+      setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p));
+    };
 
-    const handleScreenShareStop = ({ userId }) => setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p));
+    const handleScreenShareStop = ({ userId }) => {
+      setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p));
+    };
 
-    const handleError = ({ message }) => toast.error(message);
+    const handleError = ({ message }) => {
+      console.error('Socket error:', message);
+      toast.error(message);
+    };
 
     const handleDrawingStart = ({ from, x, y, color, tool, size }) => {
       remoteDrawingStates.current.set(from, { color, tool, size });
@@ -871,11 +901,10 @@ const Meeting = () => {
           auth: { token: user.token },
           transports: ['websocket'],
           reconnection: true,
-          reconnectionAttempts: 3,
-          reconnectionDelay: 500,
-          reconnectionDelayMax: 2000,
-          timeout: 5000,
-          forceNew: true
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          timeout: 10000,
         });
 
         const cleanupSocketListeners = setupSocketListeners(socketRef.current);
@@ -884,6 +913,10 @@ const Meeting = () => {
           if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => track.stop());
             localStreamRef.current = null;
+          }
+          if (screenStreamRef.current) {
+            screenStreamRef.current.getTracks().forEach(track => track.stop());
+            screenStreamRef.current = null;
           }
           peerConnections.current.forEach(pc => pc.close());
           peerConnections.current.clear();
@@ -1030,15 +1063,15 @@ const Meeting = () => {
     <div className="pro-meeting-page">
       <MeetingHeader 
         roomId={roomId} 
-        participants={allParticipants} // Pass only real participants
-        realParticipantsCount={realParticipantsCount} // Pass the count
+        participants={allParticipants}
+        realParticipantsCount={realParticipantsCount}
         onCopyInvite={copyInviteLink}
       />
       <div className="pro-meeting-body">
         <div className={`pro-mainarea-container ${isChatOpen ? 'with-chat-sidebar' : ''}`}>
           <MeetingMainArea
-            participants={displayParticipants} // Pass participants with AI for display
-            realParticipants={allParticipants} // Pass real participants for counting
+            participants={displayParticipants}
+            realParticipants={allParticipants}
             isSomeoneScreenSharing={isSomeoneScreenSharing}
             toolbarPosition={toolbarPosition}
             currentTool={currentTool}
@@ -1112,8 +1145,8 @@ const Meeting = () => {
                     setMessages((prev) => [...prev, payload]);
                   }}
                   onCloseChat={() => setIsChatOpen(false)}
-                  participants={allParticipants} // Pass only real participants to sidebar
-                  aiParticipant={aiParticipant} // Pass AI separately
+                  participants={allParticipants}
+                  aiParticipant={aiParticipant}
                   onCloseParticipants={() => setIsParticipantsOpen(false)}
                   roomId={roomId}
                   getUserAvatar={getUserAvatar}

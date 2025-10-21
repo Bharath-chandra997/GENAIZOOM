@@ -101,20 +101,30 @@ passport.use(
     async (accessToken, refreshToken, profile, done) => {
       try {
         const email = profile.emails[0].value;
+        const profilePicture = profile.photos && profile.photos.length > 0 ? profile.photos[0].value : null;
         let user = await User.findOne({ googleId: profile.id });
         if (user) {
           user.lastLogin = new Date();
+          if (profilePicture && !user.profilePicture) {
+            user.profilePicture = profilePicture;
+          }
           await user.save();
         } else {
           user = new User({
             googleId: profile.id,
             email,
             username: profile.displayName,
+            profilePicture,
           });
           await user.save();
         }
         const token = jwt.sign(
-          { userId: user._id, username: user.username, email: user.email },
+          { 
+            userId: user._id, 
+            username: user.username, 
+            email: user.email,
+            profilePicture: user.profilePicture 
+          },
           process.env.JWT_SECRET,
           { expiresIn: '7d' }
         );
@@ -352,7 +362,12 @@ io.use((socket, next) => {
   }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.user = { userId: decoded.userId, username: decoded.username, email: decoded.email };
+    socket.user = { 
+      userId: decoded.userId, 
+      username: decoded.username, 
+      email: decoded.email,
+      profilePicture: decoded.profilePicture 
+    };
     info(`Socket authenticated: ${socket.id} for user ${decoded.username}`);
     next();
   } catch (error) {
@@ -366,7 +381,7 @@ const socketToRoom = {};
 const socketIdToUsername = {};
 const roomHosts = new Map();
 io.on('connection', (socket) => {
-  const { username, userId } = socket.user;
+  const { username, userId, profilePicture } = socket.user;
   info(`Socket connected: ${socket.id} for user ${username} (${userId})`);
 
   socket.on('join-room', async ({ roomId, username, isReconnect = false }, callback) => {
@@ -407,13 +422,16 @@ io.on('connection', (socket) => {
       roomHosts.set(roomId, socket.id);
     }
     
-    // Get other users from the room
+    // Get other users from the room with profilePicture
     const otherUsers = [];
     room.forEach((id) => {
       if (id !== socket.id) {
+        const remoteSocket = io.sockets.sockets.get(id);
+        const remoteUser = remoteSocket ? remoteSocket.user : { username: socketIdToUsername[id], profilePicture: null };
         otherUsers.push({
           userId: id,
-          username: socketIdToUsername[id],
+          username: remoteUser.username || socketIdToUsername[id],
+          profilePicture: remoteUser.profilePicture,
           isHost: roomHosts.get(roomId) === id,
         });
       }
@@ -444,7 +462,13 @@ io.on('connection', (socket) => {
     
     callback(otherUsers, sessionData);
     if (!isReconnect) {
-      socket.to(roomId).emit('user-joined', { userId: socket.id, username, isHost: isFirst, isReconnect: false });
+      socket.to(roomId).emit('user-joined', { 
+        userId: socket.id, 
+        username, 
+        profilePicture,
+        isHost: isFirst, 
+        isReconnect: false 
+      });
     }
     
     if (otherUsers.length > 0) {

@@ -25,14 +25,19 @@ const getColorForId = (id) => {
   return `hsl(${hue}, 90%, 60%)`;
 };
 
+// Function to get user avatar from Google Auth
 const getUserAvatar = (user, size = 40) => {
   if (user?.profilePicture) {
     return user.profilePicture;
   }
+  
+  // Fallback to initials with colored background
   const initials = user?.username?.charAt(0)?.toUpperCase() || 'U';
-  const color = getColorForId(user?.socketId || user?.username);
+  const color = getColorForId(user?.userId || user?.username);
+  
   return (
-    <div
+    <div 
+      className="user-avatar"
       style={{
         backgroundColor: color,
         width: size,
@@ -43,7 +48,7 @@ const getUserAvatar = (user, size = 40) => {
         justifyContent: 'center',
         color: 'white',
         fontWeight: 'bold',
-        fontSize: size * 0.4,
+        fontSize: size * 0.4
       }}
     >
       {initials}
@@ -51,44 +56,49 @@ const getUserAvatar = (user, size = 40) => {
   );
 };
 
-const AIAvatar = ({ size = 40 }) => (
-  <div
-    style={{
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      width: size,
-      height: size,
-      borderRadius: '50%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'white',
-      fontWeight: 'bold',
-      fontSize: size * 0.35,
-      border: '2px solid #10b981',
-      position: 'relative',
-    }}
-  >
-    AI
-    <div
+// AI Avatar component
+const AIAvatar = ({ size = 40 }) => {
+  return (
+    <div 
+      className="ai-avatar"
       style={{
-        position: 'absolute',
-        bottom: -2,
-        right: -2,
-        width: 12,
-        height: 12,
-        backgroundColor: '#10b981',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        width: size,
+        height: size,
         borderRadius: '50%',
-        border: '2px solid white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: size * 0.35,
+        border: '2px solid #10b981',
+        position: 'relative'
       }}
-    />
-  </div>
-);
+    >
+      🤖
+      <div 
+        style={{
+          position: 'absolute',
+          bottom: -2,
+          right: -2,
+          width: 12,
+          height: 12,
+          backgroundColor: '#10b981',
+          borderRadius: '50%',
+          border: '2px solid white'
+        }}
+      />
+    </div>
+  );
+};
 
 const Meeting = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // State for meeting
   const [participants, setParticipants] = useState([]);
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,8 +119,8 @@ const Meeting = () => {
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
 
+  // AI Participant state
   const [aiParticipant] = useState({
-    socketId: 'ai-assistant',
     userId: 'ai-assistant',
     username: 'AI Assistant',
     isLocal: false,
@@ -120,9 +130,12 @@ const Meeting = () => {
     isScreenSharing: false,
     isAI: true,
     stream: null,
-    profilePicture: null,
+    socketId: 'ai-assistant',
+    color: '#3B82F6',
+    profilePicture: null // AI has no profile picture
   });
 
+  // Refs
   const socketRef = useRef(null);
   const localStreamRef = useRef(null);
   const localCameraTrackRef = useRef(null);
@@ -133,102 +146,146 @@ const Meeting = () => {
   const remoteDrawingStates = useRef(new Map());
   const drawingStateRef = useRef({ isDrawing: false, startX: 0, startY: 0 });
   const isInitialized = useRef(false);
+
+  // AI Refs
   const aiCanvasRef = useRef(null);
   const aiAnimationRef = useRef(null);
+
+  // Connection optimization refs
   const connectionTimeouts = useRef(new Map());
   const iceServersCache = useRef(null);
   const lastIceFetch = useRef(0);
 
+  // Signaling state management
+  const signalingStates = useRef(new Map());
+  const pendingOffers = useRef(new Map());
+  const pendingAnswers = useRef(new Map());
+
+  // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
-  const allParticipants = useMemo(() => [...participants], [participants]);
-  const participantsWithAI = useMemo(() => [aiParticipant, ...participants], [participants]);
+  // All participants including AI (but we'll separate them for display)
+  const allParticipants = useMemo(() => {
+    return [...participants];
+  }, [participants]);
+
+  const participantsWithAI = useMemo(() => {
+    return [aiParticipant, ...participants];
+  }, [aiParticipant, participants]);
+
+  // Real participants count (excluding AI)
   const realParticipantsCount = useMemo(() => participants.length, [participants]);
 
-  const isSomeoneScreenSharing = useMemo(
-    () => allParticipants.some(p => p.isScreenSharing),
+  // Derived State
+  const defaultMainParticipant = useMemo(() => {
+    const screenSharer = allParticipants.find(p => p.isScreenSharing);
+    if (screenSharer) return screenSharer;
+    const host = allParticipants.find(p => p.isHost);
+    if (host) return host;
+    return allParticipants[0] || null;
+  }, [allParticipants]);
+
+  const isSomeoneScreenSharing = useMemo(() =>
+    allParticipants.some(p => p.isScreenSharing),
     [allParticipants]
   );
 
   const displayParticipants = participantsWithAI;
   const totalGridPages = useMemo(() => Math.max(1, Math.ceil(displayParticipants.length / 4)), [displayParticipants.length]);
 
-  const getUsernameById = useCallback(
-    (socketId) => {
-      const p = allParticipants.find(p => p.socketId === socketId);
-      return p ? (p.isLocal ? user.username : p.username) : 'Another user';
-    },
-    [allParticipants, user.username]
-  );
+  const getUsernameById = useCallback((userId) => {
+    const participant = allParticipants.find(p => p.userId === userId);
+    return participant ? (participant.isLocal ? user.username : participant.username) : 'Another user';
+  }, [allParticipants, user.username]);
 
+  // Copy invite link to clipboard
   const copyInviteLink = useCallback(() => {
-    const link = `${window.location.origin}/join/${roomId}`;
-    navigator.clipboard.writeText(link).then(
-      () => toast.success('Invite link copied!', { position: 'bottom-center', autoClose: 3000 }),
-      () => toast.error('Failed to copy')
-    );
+    const inviteLink = `${window.location.origin}/join/${roomId}`;
+    navigator.clipboard.writeText(inviteLink)
+      .then(() => {
+        toast.success('Invite link copied to clipboard!', {
+          position: "bottom-center",
+          autoClose: 3000,
+        });
+      })
+      .catch(() => {
+        toast.error('Failed to copy invite link', {
+          position: "bottom-center",
+          autoClose: 3000,
+        });
+      });
   }, [roomId]);
 
-  /* ------------------------------------------------------------------ */
-  /* AI animation – unchanged */
-  /* ------------------------------------------------------------------ */
+  // AI Animation
   const initializeAiAnimation = useCallback(() => {
     const canvas = aiCanvasRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext('2d');
     let particles = [];
     let time = 0;
 
-    const create = () => {
-      particles = Array.from({ length: 30 }, () => ({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        size: Math.random() * 2 + 1,
-        speed: Math.random() * 1 + 0.5,
-        color: `hsl(${200 + Math.random() * 60}, 70%, 60%)`,
-        angle: Math.random() * Math.PI * 2,
-      }));
+    const createParticles = () => {
+      particles = [];
+      for (let i = 0; i < 30; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: Math.random() * 2 + 1,
+          speed: Math.random() * 1 + 0.5,
+          color: `hsl(${200 + Math.random() * 60}, 70%, 60%)`,
+          angle: Math.random() * Math.PI * 2
+        });
+      }
     };
 
     const animate = () => {
+      if (!canvas) return;
+      
       ctx.fillStyle = 'rgba(15, 23, 42, 0.1)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+
       time += 0.02;
 
-      particles.forEach((p, i) => {
-        p.x += Math.cos(p.angle + time) * p.speed;
-        p.y += Math.sin(p.angle + time) * p.speed;
-        if (p.x < 0) p.x = canvas.width;
-        if (p.x > canvas.width) p.x = 0;
-        if (p.y < 0) p.y = canvas.height;
-        if (p.y > canvas.height) p.y = 0;
+      particles.forEach((particle, index) => {
+        particle.x += Math.cos(particle.angle + time) * particle.speed;
+        particle.y += Math.sin(particle.angle + time) * particle.speed;
+
+        if (particle.x < 0) particle.x = canvas.width;
+        if (particle.x > canvas.width) particle.x = 0;
+        if (particle.y < 0) particle.y = canvas.height;
+        if (particle.y > canvas.height) particle.y = 0;
 
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
+        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        ctx.fillStyle = particle.color;
         ctx.fill();
 
-        particles.slice(i + 1).forEach(o => {
-          const d = Math.hypot(p.x - o.x, p.y - o.y);
-          if (d < 80) {
+        particles.slice(index + 1).forEach(otherParticle => {
+          const dx = particle.x - otherParticle.x;
+          const dy = particle.y - otherParticle.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < 80) {
             ctx.beginPath();
-            ctx.strokeStyle = `rgba(100, 200, 255, ${0.2 * (1 - d / 80)})`;
+            ctx.strokeStyle = `rgba(100, 200, 255, ${0.2 * (1 - distance / 80)})`;
             ctx.lineWidth = 0.3;
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(o.x, o.y);
+            ctx.moveTo(particle.x, particle.y);
+            ctx.lineTo(otherParticle.x, otherParticle.y);
             ctx.stroke();
           }
         });
       });
 
-      ctx.font = 'bold 20px sans-serif';
+      ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.fillStyle = 'rgba(96, 165, 250, 0.9)';
       ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       ctx.fillText('AI Assistant', canvas.width / 2, canvas.height / 2 - 10);
 
-      ctx.font = '12px sans-serif';
+      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.fillStyle = aiBotInUse ? 'rgba(239, 68, 68, 0.7)' : 'rgba(96, 165, 250, 0.7)';
-      ctx.fillText(aiBotInUse ? `In use by ${currentAIUser}` : 'Ready to help', canvas.width / 2, canvas.height / 2 + 15);
+      ctx.fillText(aiBotInUse ? 'In use by ' + currentAIUser : 'Ready to help', canvas.width / 2, canvas.height / 2 + 15);
 
       ctx.beginPath();
       ctx.arc(canvas.width / 2, canvas.height / 2, 25 + Math.sin(time * 2) * 3, 0, Math.PI * 2);
@@ -239,50 +296,57 @@ const Meeting = () => {
       aiAnimationRef.current = requestAnimationFrame(animate);
     };
 
-    const resize = () => {
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      create();
+    const resizeCanvas = () => {
+      if (canvas) {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        createParticles();
+      }
     };
-    resize();
-    window.addEventListener('resize', resize);
+
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
     animate();
 
     return () => {
-      cancelAnimationFrame(aiAnimationRef.current);
-      window.removeEventListener('resize', resize);
+      if (aiAnimationRef.current) {
+        cancelAnimationFrame(aiAnimationRef.current);
+      }
+      window.removeEventListener('resize', resizeCanvas);
     };
   }, [aiBotInUse, currentAIUser]);
 
-  useEffect(() => initializeAiAnimation(), [initializeAiAnimation]);
+  useEffect(() => {
+    const cleanup = initializeAiAnimation();
+    return cleanup;
+  }, [initializeAiAnimation]);
 
-  /* ------------------------------------------------------------------ */
-  /* AI request handling – unchanged */
-  /* ------------------------------------------------------------------ */
-  const handleAIRequest = useCallback(
-    async (imageFile, audioFile) => {
-      if (aiBotInUse) {
-        toast.error('AI Bot is currently in use by another user');
-        return;
-      }
-      setAiBotInUse(true);
-      setCurrentAIUser(user.username);
-      setAiUploadedImage(imageFile);
-      setAiUploadedAudio(audioFile);
+  // AI Bot functions
+  const handleAIRequest = useCallback(async (imageFile, audioFile) => {
+    if (aiBotInUse) {
+      toast.error('AI Bot is currently in use by another user', {
+        position: "bottom-center"
+      });
+      return;
+    }
 
-      setTimeout(() => {
-        const resp = `Hello ${user.username}! I've processed your ${imageFile ? 'image' : ''}${imageFile && audioFile ? ' and ' : ''}${audioFile ? 'audio' : ''}.`;
-        setAiResponse(resp);
-        socketRef.current?.emit('ai-response', {
-          user: user.username,
-          response: resp,
-          image: imageFile ? URL.createObjectURL(imageFile) : null,
-          audio: audioFile ? URL.createObjectURL(audioFile) : null,
-        });
-      }, 3000);
-    },
-    [aiBotInUse, user.username]
-  );
+    setAiBotInUse(true);
+    setCurrentAIUser(user.username);
+    setAiUploadedImage(imageFile);
+    setAiUploadedAudio(audioFile);
+
+    setTimeout(() => {
+      const response = `Hello ${user.username}! I've processed your ${imageFile ? 'image' : ''}${imageFile && audioFile ? ' and ' : ''}${audioFile ? 'audio' : ''}. This is a simulated AI response. In a real implementation, this would connect to an AI service.`;
+      setAiResponse(response);
+      
+      socketRef.current?.emit('ai-response', {
+        user: user.username,
+        response: response,
+        image: imageFile ? URL.createObjectURL(imageFile) : null,
+        audio: audioFile ? URL.createObjectURL(audioFile) : null
+      });
+    }, 3000);
+  }, [aiBotInUse, user.username]);
 
   const handleAIComplete = useCallback(() => {
     setAiBotInUse(false);
@@ -293,385 +357,783 @@ const Meeting = () => {
     socketRef.current?.emit('ai-complete');
   }, []);
 
-  /* ------------------------------------------------------------------ */
-  /* ICE servers */
-  /* ------------------------------------------------------------------ */
-  const getIceServers = useCallback(async () => {
-    const now = Date.now();
-    if (iceServersCache.current && now - lastIceFetch.current < 5 * 60 * 1000) {
-      return iceServersCache.current;
-    }
-    try {
-      const { data } = await axios.get(`${SERVER_URL}/ice-servers`, { timeout: 5000 });
-      iceServersCache.current = data;
-      lastIceFetch.current = now;
-      return data;
-    } catch {
-      const fallback = [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ];
-      iceServersCache.current = fallback;
-      lastIceFetch.current = now;
-      return fallback;
+  const handleToolbarMouseMove = useCallback((e) => {
+    if (dragInfo.current.isDragging) {
+      setToolbarPosition({
+        x: e.clientX - dragInfo.current.offsetX,
+        y: e.clientY - dragInfo.current.offsetY,
+      });
     }
   }, []);
 
-  /* ------------------------------------------------------------------ */
-  /* Peer connection */
-  /* ------------------------------------------------------------------ */
+  const handleToolbarMouseUp = useCallback(() => {
+    dragInfo.current.isDragging = false;
+    window.removeEventListener('mousemove', handleToolbarMouseMove);
+    window.removeEventListener('mouseup', handleToolbarMouseUp);
+  }, [handleToolbarMouseMove]);
+
+  const handleMouseDown = useCallback((e) => {
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
+
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+      const myColor = getColorForId(socketRef.current?.id);
+      const payload = { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize };
+      socketRef.current?.emit('drawing-start', payload);
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = myColor;
+      ctx.lineWidth = currentBrushSize;
+      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+  }, [currentTool, currentBrushSize]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!drawingStateRef.current.isDrawing || !e.buttons) return;
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      socketRef.current?.emit('drawing-move', { x: x / canvas.width, y: y / canvas.height });
+      const ctx = canvas.getContext('2d');
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+  }, [currentTool]);
+
+  const handleMouseUp = useCallback((e) => {
+    if (!drawingStateRef.current.isDrawing) return;
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    if (currentTool === 'rectangle' || currentTool === 'circle') {
+      const rect = canvas.getBoundingClientRect();
+      const { startX, startY } = drawingStateRef.current;
+      const endX = e.clientX - rect.left;
+      const endY = e.clientY - rect.top;
+      const myColor = getColorForId(socketRef.current?.id);
+      const payload = {
+        tool: currentTool,
+        startX: startX / canvas.width,
+        startY: startY / canvas.height,
+        endX: endX / canvas.width,
+        endY: endY / canvas.height,
+        color: myColor,
+        size: currentBrushSize,
+      };
+      socketRef.current?.emit('draw-shape', payload);
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = myColor;
+      ctx.lineWidth = currentBrushSize;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.beginPath();
+      if (currentTool === 'rectangle') ctx.rect(startX, startY, endX - startX, endY - startY);
+      else if (currentTool === 'circle') {
+        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+      }
+      ctx.stroke();
+    }
+    drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
+  }, [currentTool, currentBrushSize]);
+
+  const getIceServers = useCallback(async () => {
+    const now = Date.now();
+    const cacheExpiry = 5 * 60 * 1000;
+
+    if (iceServersCache.current && (now - lastIceFetch.current) < cacheExpiry) {
+      return iceServersCache.current;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const { data } = await axios.get(`${SERVER_URL}/ice-servers`, {
+        signal: controller.signal,
+        timeout: 2000
+      });
+
+      clearTimeout(timeoutId);
+      console.log('ICE Servers fetched:', data.length, 'servers');
+
+      iceServersCache.current = data;
+      lastIceFetch.current = now;
+
+      return data;
+    } catch (error) {
+      console.warn('ICE servers fetch failed, using fallback:', error.message);
+      const fallbackServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        {
+          urls: 'turn:openrelay.metered.ca:80',
+          username: 'openrelayproject',
+          credential: 'openrelayprojectsecret',
+        },
+        {
+          urls: 'turns:openrelay.metered.ca:443',
+          username: 'openrelayproject',
+          credential: 'openrelayprojectsecret',
+        },
+      ];
+
+      iceServersCache.current = fallbackServers;
+      lastIceFetch.current = now;
+
+      return fallbackServers;
+    }
+  }, []);
+
+  const handleIceCandidate = useCallback(({ from, candidate }) => {
+    const pc = peerConnections.current.get(from);
+    if (pc) {
+      pc.addIceCandidate(new RTCIceCandidate(candidate))
+        .catch(err => {
+          console.warn('Error adding ICE candidate:', err);
+        });
+    }
+  }, []);
+
   const createPeerConnection = useCallback(
     async (remoteSocketId) => {
       if (peerConnections.current.has(remoteSocketId)) {
+        console.log('Connection already exists for user:', remoteSocketId);
         return peerConnections.current.get(remoteSocketId);
       }
 
-      const ice = await getIceServers();
+      const iceServers = await getIceServers();
       const pc = new RTCPeerConnection({
-        iceServers: ice,
+        iceServers,
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require',
+        rtcpMuxPolicy: 'require'
       });
 
-      const timeout = setTimeout(() => {
+      signalingStates.current.set(remoteSocketId, 'new');
+
+      const connectionTimeout = setTimeout(() => {
         if (pc.connectionState === 'connecting') {
+          console.warn('Connection timeout for user:', remoteSocketId);
           pc.close();
           peerConnections.current.delete(remoteSocketId);
           connectionTimeouts.current.delete(remoteSocketId);
+          signalingStates.current.delete(remoteSocketId);
         }
-      }, 15000);
-      connectionTimeouts.current.set(remoteSocketId, timeout);
+      }, 8000);
 
-      localStreamRef.current?.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current));
+      connectionTimeouts.current.set(remoteSocketId, connectionTimeout);
 
-      /* ---- ontrack – safe add / update ---- */
-      pc.ontrack = (e) => {
-        const stream = e.streams[0];
-        if (!stream) return;
-        clearTimeout(connectionTimeouts.current.get(remoteSocketId));
+      pc.ontrack = (event) => {
+        clearTimeout(connectionTimeout);
         connectionTimeouts.current.delete(remoteSocketId);
-
-        setParticipants(prev => {
-          const exists = prev.some(p => p.socketId === remoteSocketId);
-          if (!exists) {
-            return [
-              ...prev,
-              {
-                socketId: remoteSocketId,
-                userId: remoteSocketId,
-                username: 'Connecting...',
-                stream,
-                isLocal: false,
-                isHost: false,
-                videoEnabled: true,
-                audioEnabled: true,
-                isScreenSharing: false,
-              },
-            ];
-          }
-          return prev.map(p => (p.socketId === remoteSocketId ? { ...p, stream } : p));
-        });
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.userId === remoteSocketId ? { ...p, stream: event.streams[0] } : p
+          )
+        );
       };
 
-      pc.onicecandidate = e => {
-        if (e.candidate) {
-          socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: e.candidate });
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
         }
       };
 
       pc.onconnectionstatechange = () => {
+        console.log('Peer connection state:', pc.connectionState, 'for user:', remoteSocketId);
         if (pc.connectionState === 'connected') {
-          clearTimeout(connectionTimeouts.current.get(remoteSocketId));
+          clearTimeout(connectionTimeout);
           connectionTimeouts.current.delete(remoteSocketId);
-          toast.success(`Connected to ${getUsernameById(remoteSocketId)}`);
+          console.log('Successfully connected to user:', remoteSocketId);
+        } else if (pc.connectionState === 'disconnected') {
+          console.log('Connection disconnected for user:', remoteSocketId);
         } else if (pc.connectionState === 'failed') {
+          console.error('Connection failed for user:', remoteSocketId);
+          clearTimeout(connectionTimeout);
+          connectionTimeouts.current.delete(remoteSocketId);
+          signalingStates.current.delete(remoteSocketId);
+          pendingOffers.current.delete(remoteSocketId);
+          pendingAnswers.current.delete(remoteSocketId);
           pc.close();
           peerConnections.current.delete(remoteSocketId);
-          setParticipants(prev => prev.filter(p => p.socketId !== remoteSocketId));
-          toast.error(`Failed to connect to ${getUsernameById(remoteSocketId)}`);
+          setParticipants((prev) => prev.filter((p) => p.userId !== remoteSocketId));
         }
       };
 
       peerConnections.current.set(remoteSocketId, pc);
       return pc;
     },
-    [getIceServers, getUsernameById]
+    [getIceServers]
   );
 
-  /* ------------------------------------------------------------------ */
-  /* Socket listeners */
-  /* ------------------------------------------------------------------ */
-  const setupSocketListeners = useCallback(
-    socket => {
-      const onConnect = () => {
-        socket.emit(
-          'join-room',
-          { roomId, username: user.username },
-          otherUsers => {
-            const isHost = otherUsers.length === 0;
-            const local = {
-              socketId: socket.id,
-              userId: socket.id,
-              username: `${user.username} (You)`,
-              stream: localStreamRef.current,
-              isLocal: true,
-              isHost,
-              videoEnabled: true,
-              audioEnabled: true,
-              isScreenSharing: false,
-            };
-            const remotes = otherUsers.map(u => ({
-              socketId: u.userId,
-              userId: u.userId,
-              username: u.username,
-              stream: null,
-              isLocal: false,
-              isHost: u.isHost || false,
-              videoEnabled: true,
-              audioEnabled: true,
-              isScreenSharing: false,
-            }));
-            setParticipants([local, ...remotes]);
-            setIsLoading(false);
+  // Additional handlers for missing events
+  const handleToggleVideo = useCallback(({ userId, enabled }) => {
+    console.log('Toggle video for user:', userId, enabled);
+    setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, videoEnabled: enabled } : p));
+  }, []);
 
-            otherUsers.forEach(async u => {
-              const pc = await createPeerConnection(u.userId);
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              socket.emit('offer', { to: u.userId, offer });
-            });
-          }
-        );
-      };
+  const handleToggleAudio = useCallback(({ userId, enabled }) => {
+    console.log('Toggle audio for user:', userId, enabled);
+    setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, audioEnabled: enabled } : p));
+  }, []);
 
-      const onUserJoined = async ({ userId, username, isHost }) => {
-        setParticipants(prev => {
-          if (prev.some(p => p.socketId === userId)) return prev;
-          return [
-            ...prev,
-            {
-              socketId: userId,
-              userId,
-              username,
-              stream: null,
-              isLocal: false,
-              isHost,
-              videoEnabled: true,
-              audioEnabled: true,
-              isScreenSharing: false,
-            },
-          ];
-        });
-        toast.info(`${username} joined`);
-        const pc = await createPeerConnection(userId);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', { to: userId, offer });
-      };
+  const handlePinParticipant = useCallback(({ userId }) => {
+    console.log('Pin participant:', userId);
+    setPinnedParticipantId(userId);
+  }, []);
 
-      const onOffer = async ({ from, offer }) => {
-        setParticipants(prev => {
-          if (prev.some(p => p.socketId === from)) return prev;
-          return [
-            ...prev,
-            {
-              socketId: from,
-              userId: from,
-              username: 'User',
-              stream: null,
-              isLocal: false,
-              isHost: false,
-              videoEnabled: true,
-              audioEnabled: true,
-              isScreenSharing: false,
-            },
-          ];
-        });
-        const pc = await createPeerConnection(from);
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('answer', { to: from, answer });
-      };
+  const handleUnpinParticipant = useCallback(() => {
+    console.log('Unpin participant');
+    setPinnedParticipantId(null);
+  }, []);
 
-      const onAnswer = async ({ from, answer }) => {
-        const pc = peerConnections.current.get(from);
-        if (pc && pc.signalingState === 'have-local-offer') {
-          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+  const handleSessionRestored = useCallback((data) => {
+    console.log('Session restored:', data);
+    if (data.chatMessages) {
+      setMessages(data.chatMessages);
+    }
+    // Add more restores if needed (e.g., AI state)
+  }, []);
+
+  const setupSocketListeners = useCallback((socket) => {
+    const handleConnect = () => {
+      console.log('✅ Socket connected:', socket.id);
+      socket.emit('join-room', {
+        roomId,
+        username: user.username,
+        isReconnect: false
+      }, (otherUsers, sessionData) => {
+        console.log('Join room callback - other users:', otherUsers.length, 'sessionData:', !!sessionData);
+        const isHost = otherUsers.length === 0;
+        const remoteParticipants = otherUsers.map(u => ({
+          userId: u.userId,
+          username: u.username,
+          stream: null,
+          isLocal: false,
+          isHost: u.isHost || false,
+          videoEnabled: true,
+          audioEnabled: true,
+          isScreenSharing: false,
+          socketId: u.userId
+        }));
+        const localParticipant = {
+          userId: socket.id,
+          username: `${user.username} (You)`,
+          stream: localStreamRef.current,
+          isLocal: true,
+          isHost,
+          videoEnabled: true,
+          audioEnabled: true,
+          isScreenSharing: false,
+          socketId: socket.id
+        };
+        setParticipants([localParticipant, ...remoteParticipants]);
+        if (sessionData?.chatMessages) {
+          setMessages(sessionData.chatMessages);
         }
-      };
-
-      const onIceCandidate = ({ from, candidate }) => {
-        const pc = peerConnections.current.get(from);
-        if (pc && candidate) pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
-      };
-
-      const onUserLeft = ({ userId }) => {
-        peerConnections.current.get(userId)?.close();
-        peerConnections.current.delete(userId);
-        setParticipants(prev => prev.filter(p => p.socketId !== userId));
-        if (pinnedParticipantId === userId) setPinnedParticipantId(null);
-        toast.error('A user left');
-      };
-
-      socket.on('connect', onConnect);
-      socket.on('user-joined', onUserJoined);
-      socket.on('offer', onOffer);
-      socket.on('answer', onAnswer);
-      socket.on('ice-candidate', onIceCandidate);
-      socket.on('user-left', onUserLeft);
-      socket.on('chat-message', msg => setMessages(prev => [...prev, msg]));
-      socket.on('screen-share-start', ({ userId }) => setParticipants(prev => prev.map(p => (p.socketId === userId ? { ...p, isScreenSharing: true } : p))));
-      socket.on('screen-share-stop', ({ userId }) => setParticipants(prev => prev.map(p => (p.socketId === userId ? { ...p, isScreenSharing: false } : p))));
-      socket.on('pin-participant', ({ participantId }) => setPinnedParticipantId(participantId));
-      socket.on('unpin-participant', () => setPinnedParticipantId(null));
-      socket.on('ai-response', ({ user: aiUser, response, image, audio }) => {
-        setAiBotInUse(true);
-        setCurrentAIUser(aiUser);
-        setAiResponse(response);
-        if (image) setAiUploadedImage(image);
-        if (audio) setAiUploadedAudio(audio);
+        setIsLoading(false);
       });
-      socket.on('ai-complete', handleAIComplete);
+    };
 
-      return () => {
-        socket.off('connect', onConnect);
-        // …remove others
-      };
-    },
-    [createPeerConnection, roomId, user, getUsernameById, handleAIComplete]
-  );
+    const handleUserJoined = async ({ userId, username, isHost, isReconnect }) => {
+      console.log('User joined:', { userId, username, isHost, isReconnect });
+      if (isReconnect) return;
+      setParticipants((prev) => {
+        if (prev.some(p => p.userId === userId)) return prev;
+        return [...prev, {
+          userId,
+          username,
+          stream: null,
+          isLocal: false,
+          isHost,
+          videoEnabled: true,
+          audioEnabled: true,
+          isScreenSharing: false,
+          socketId: userId
+        }];
+      });
+      try {
+        const pc = await createPeerConnection(userId);
+        const currentState = signalingStates.current.get(userId);
+        if (currentState === 'new' || currentState === 'stable') {
+          if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+          }
+          signalingStates.current.set(userId, 'have-local-offer');
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          pendingOffers.current.set(userId, offer);
+          socket.emit('offer', { to: userId, offer, username: user.username });
+          console.log('Offer sent to new user:', userId);
+        }
+      } catch (err) {
+        console.error('Error in user-joined handler:', err);
+        toast.error(`Failed to connect to user ${username}.`);
+      }
+    };
 
-  /* ------------------------------------------------------------------ */
-  /* Init */
-  /* ------------------------------------------------------------------ */
+    const handleOffer = async ({ from, offer, username }) => {
+      console.log('Offer received from:', { from, username });
+      setParticipants((prev) => {
+        if (prev.some(p => p.userId === from)) return prev;
+        return [...prev, {
+          userId: from,
+          username,
+          stream: null,
+          isLocal: false,
+          isHost: false,
+          videoEnabled: true,
+          audioEnabled: true,
+          isScreenSharing: false,
+          socketId: from
+        }];
+      });
+      try {
+        const pc = await createPeerConnection(from);
+        const currentState = signalingStates.current.get(from);
+        if (currentState === 'new' || currentState === 'stable') {
+          if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+          }
+          signalingStates.current.set(from, 'have-remote-offer');
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          signalingStates.current.set(from, 'stable');
+          socket.emit('answer', { to: from, answer });
+          console.log('Answer sent to:', from);
+        }
+      } catch (err) {
+        console.error('Error in offer handler:', err);
+        toast.error(`Failed to process offer from ${username}.`);
+      }
+    };
+
+    const handleAnswer = ({ from, answer }) => {
+      console.log('Answer received from:', from);
+      const pc = peerConnections.current.get(from);
+      const currentState = signalingStates.current.get(from);
+      if (pc && currentState === 'have-local-offer') {
+        pc.setRemoteDescription(new RTCSessionDescription(answer))
+          .then(() => {
+            signalingStates.current.set(from, 'stable');
+            pendingOffers.current.delete(from);
+            console.log('Remote description set for:', from);
+          })
+          .catch(err => {
+            console.error('Error setting remote description:', err);
+            signalingStates.current.set(from, 'stable');
+            pendingOffers.current.delete(from);
+          });
+      }
+    };
+
+    const handleUserLeft = ({ userId, username }) => {
+      console.log('User left:', { userId, username });
+      const pc = peerConnections.current.get(userId);
+      if (pc) {
+        pc.getSenders().forEach(sender => sender.track && sender.track.stop());
+        pc.close();
+        peerConnections.current.delete(userId);
+      }
+      setParticipants((prev) => {
+        const updated = prev.filter((p) => p.userId !== userId);
+        if (pinnedParticipantId === userId) setPinnedParticipantId(null);
+        return updated;
+      });
+      
+      const leftUser = participants.find(p => p.userId === userId);
+      const displayName = leftUser?.username || username || 'A user';
+      
+      toast.error(`${displayName} has left the meeting`, {
+        position: "bottom-center",
+        autoClose: 3000,
+        style: {
+          background: '#ef4444',
+          color: 'white',
+        }
+      });
+    };
+
+    const handleChatMessage = (payload) => {
+      console.log('Chat message received:', payload);
+      setMessages(prev => [...prev, payload]);
+    };
+
+    const handleScreenShareStart = ({ userId }) => {
+      console.log('Screen share started by:', userId);
+      setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: true } : p));
+    };
+
+    const handleScreenShareStop = ({ userId }) => {
+      console.log('Screen share stopped by:', userId);
+      setParticipants(prev => prev.map(p => p.userId === userId ? { ...p, isScreenSharing: false } : p));
+    };
+
+    const handleError = ({ message }) => {
+      console.error('Server error:', message);
+      toast.error(message);
+    };
+
+    const handleDrawingStart = ({ from, x, y, color, tool, size }) => {
+      remoteDrawingStates.current.set(from, { color, tool, size });
+      const canvas = annotationCanvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.beginPath();
+      ctx.moveTo(x * canvas.width, y * canvas.height);
+    };
+
+    const handleDrawingMove = ({ from, x, y }) => {
+      const state = remoteDrawingStates.current.get(from);
+      const canvas = annotationCanvasRef.current;
+      if (!canvas || !state) return;
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = state.color;
+      ctx.lineWidth = state.size;
+      ctx.globalCompositeOperation = state.tool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.lineCap = 'round';
+      ctx.lineTo(x * canvas.width, y * canvas.height);
+      ctx.stroke();
+    };
+
+    const handleDrawShape = ({ from, tool, startX, startY, endX, endY, color, size }) => {
+      const canvas = annotationCanvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = color;
+      ctx.lineWidth = size;
+      ctx.globalCompositeOperation = 'source-over';
+      const sX = startX * canvas.width;
+      const sY = startY * canvas.height;
+      const eX = endX * canvas.width;
+      const eY = endY * canvas.height;
+      ctx.beginPath();
+      if (tool === 'rectangle') ctx.rect(sX, sY, eX - sX, eY - sY);
+      else if (tool === 'circle') {
+        const radius = Math.sqrt(Math.pow(eX - sX, 2) + Math.pow(eY - sY, 2));
+        ctx.arc(sX, sY, radius, 0, 2 * Math.PI);
+      }
+      ctx.stroke();
+    };
+
+    const handleClearCanvas = () => {
+      const canvas = annotationCanvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+
+    const handleAIResponse = ({ user: aiUser, response, image, audio }) => {
+      setAiBotInUse(true);
+      setCurrentAIUser(aiUser);
+      setAiResponse(response);
+      if (image) setAiUploadedImage(image);
+      if (audio) setAiUploadedAudio(audio);
+    };
+
+    const handleAIComplete = () => {
+      setAiBotInUse(false);
+      setCurrentAIUser(null);
+      setAiResponse('');
+      setAiUploadedImage(null);
+      setAiUploadedAudio(null);
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('user-joined', handleUserJoined);
+    socket.on('offer', handleOffer);
+    socket.on('answer', handleAnswer);
+    socket.on('ice-candidate', handleIceCandidate);
+    socket.on('user-left', handleUserLeft);
+    socket.on('chat-message', handleChatMessage);
+    socket.on('screen-share-start', handleScreenShareStart);
+    socket.on('screen-share-stop', handleScreenShareStop);
+    socket.on('error', handleError);
+    socket.on('drawing-start', handleDrawingStart);
+    socket.on('drawing-move', handleDrawingMove);
+    socket.on('draw-shape', handleDrawShape);
+    socket.on('clear-canvas', handleClearCanvas);
+    socket.on('ai-response', handleAIResponse);
+    socket.on('ai-complete', handleAIComplete);
+    // New listeners
+    socket.on('toggle-video', handleToggleVideo);
+    socket.on('toggle-audio', handleToggleAudio);
+    socket.on('pin-participant', handlePinParticipant);
+    socket.on('unpin-participant', handleUnpinParticipant);
+    socket.on('session-restored', handleSessionRestored);
+
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off('user-joined', handleUserJoined);
+      socket.off('offer', handleOffer);
+      socket.off('answer', handleAnswer);
+      socket.off('ice-candidate', handleIceCandidate);
+      socket.off('user-left', handleUserLeft);
+      socket.off('chat-message', handleChatMessage);
+      socket.off('screen-share-start', handleScreenShareStart);
+      socket.off('screen-share-stop', handleScreenShareStop);
+      socket.off('error', handleError);
+      socket.off('drawing-start', handleDrawingStart);
+      socket.off('drawing-move', handleDrawingMove);
+      socket.off('draw-shape', handleDrawShape);
+      socket.off('clear-canvas', handleClearCanvas);
+      socket.off('ai-response', handleAIResponse);
+      socket.off('ai-complete', handleAIComplete);
+      // Off new listeners
+      socket.off('toggle-video', handleToggleVideo);
+      socket.off('toggle-audio', handleToggleAudio);
+      socket.off('pin-participant', handlePinParticipant);
+      socket.off('unpin-participant', handleUnpinParticipant);
+      socket.off('session-restored', handleSessionRestored);
+    };
+  }, [roomId, user.username, createPeerConnection, handleIceCandidate, handleToggleVideo, handleToggleAudio, handlePinParticipant, handleUnpinParticipant, handleSessionRestored]); // Removed state deps to prevent rebinding
+
   useEffect(() => {
     if (isInitialized.current) return;
     isInitialized.current = true;
 
-    const init = async () => {
-      if (!user) return navigate('/login');
+    let mounted = true;
+    let socketCleanup = () => {};
+
+    const initialize = async () => {
+      if (!user) {
+        if (mounted) {
+          toast.error('Please log in to join the meeting.');
+          navigate('/home');
+        }
+        return;
+      }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480, frameRate: 15 },
-          audio: true,
-        });
+        if (mounted) setIsLoading(true);
+
+        const mediaConstraints = {
+          video: {
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 15, max: 20 },
+            facingMode: 'user'
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 44100
+          }
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
+        console.log('Optimized local stream initialized:', stream);
 
-        socketRef.current = io(SERVER_URL, { auth: { token: user.token } });
-        setupSocketListeners(socketRef.current);
-      } catch {
-        toast.error('Camera/mic access denied');
-        navigate('/home');
+        socketRef.current = io(SERVER_URL, {
+          auth: { token: user.token },
+          transports: ['websocket'],
+          reconnection: true,
+          reconnectionAttempts: 3,
+          reconnectionDelay: 500,
+          reconnectionDelayMax: 2000,
+          timeout: 5000,
+          forceNew: true
+        });
+
+        socketCleanup = setupSocketListeners(socketRef.current);
+
+        // Add global error listener
+        socketRef.current.on('connect_error', (error) => {
+          console.error('Socket.IO connection error:', error);
+          toast.error(`Connection failed: ${error.message}`);
+        });
+
+        if (mounted) setIsLoading(false);
+      } catch (error) {
+        console.error('Initialization error:', error);
+        if (mounted) toast.error('Failed to access camera or microphone. Check permissions.');
+        if (mounted) navigate('/home');
       }
     };
-    init();
-  }, [user, navigate, setupSocketListeners]);
 
-  /* ------------------------------------------------------------------ */
-  /* Track replacement – FIXED */
-  /* ------------------------------------------------------------------ */
+    initialize();
+
+    return () => {
+      mounted = false;
+      console.log('Cleaning up Meeting component');
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current = null;
+      }
+      peerConnections.current.forEach(pc => pc.close());
+      peerConnections.current.clear();
+
+      connectionTimeouts.current.forEach(timeout => clearTimeout(timeout));
+      connectionTimeouts.current.clear();
+
+      signalingStates.current.clear();
+      pendingOffers.current.clear();
+      pendingAnswers.current.clear();
+
+      if (aiAnimationRef.current) {
+        cancelAnimationFrame(aiAnimationRef.current);
+      }
+
+      if (socketRef.current) {
+        socketCleanup();
+        socketRef.current.off('connect_error');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      isInitialized.current = false;
+    };
+  }, [user, navigate, roomId, setupSocketListeners]); // Added roomId to deps if needed
+
   const replaceTrack = useCallback(
     async (newTrack, isScreenShare = false) => {
-      const local = localStreamRef.current;
-      if (!local) return;
-      const old = local.getVideoTracks()[0];
-      if (old) old.stop();
-      local.removeTrack(old);
-      local.addTrack(newTrack);
+      const localStream = localStreamRef.current;
+      if (!localStream) return;
 
-      peerConnections.current.forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+      const oldTrack = localStream.getVideoTracks()[0];
+      if (oldTrack) oldTrack.stop();
+
+      localStream.removeTrack(oldTrack);
+      localStream.addTrack(newTrack);
+      peerConnections.current.forEach((pc) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
         if (sender) sender.replaceTrack(newTrack);
       });
-
-      setParticipants(prev =>
-        prev.map(p => (p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p))
-      );
-      socketRef.current?.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop', {
-        userId: socketRef.current.id,
-      });
+      setParticipants((prev) => prev.map((p) => p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p));
+      socketRef.current?.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop', { userId: socketRef.current.id });
     },
     []
   );
 
   const toggleAudio = () => {
-    const track = localStreamRef.current?.getAudioTracks()[0];
-    if (track) {
-      track.enabled = !track.enabled;
-      setIsAudioMuted(!track.enabled);
-      setParticipants(prev => prev.map(p => (p.isLocal ? { ...p, audioEnabled: track.enabled } : p)));
+    const audioTrack = localStreamRef.current?.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      const enabled = audioTrack.enabled;
+      setIsAudioMuted(!enabled);
+      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, audioEnabled: enabled } : p));
+      socketRef.current?.emit('toggle-audio', { enabled });
     }
   };
 
   const toggleVideo = async () => {
-    if (isVideoEnabled) {
-      localStreamRef.current.getVideoTracks()[0].enabled = false;
+    if (!localStreamRef.current) return;
+    const videoTrack = localStreamRef.current.getVideoTracks()[0];
+    if (videoTrack.enabled) {
+      videoTrack.enabled = false;
       setIsVideoEnabled(false);
-      setParticipants(prev => prev.map(p => (p.isLocal ? { ...p, videoEnabled: false } : p)));
+      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: false } : p));
+      socketRef.current?.emit('toggle-video', { enabled: false });
     } else {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      await replaceTrack(stream.getVideoTracks()[0]);
-      setIsVideoEnabled(true);
-      setParticipants(prev => prev.map(p => (p.isLocal ? { ...p, videoEnabled: true } : p)));
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 480, max: 640 },
+            height: { ideal: 360, max: 480 },
+            frameRate: { ideal: 15, max: 20 }
+          }
+        });
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        await replaceTrack(newVideoTrack, false);
+        localCameraTrackRef.current = newVideoTrack;
+        setIsVideoEnabled(true);
+        setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: true } : p));
+        socketRef.current?.emit('toggle-video', { enabled: true });
+      } catch (err) {
+        console.error('Error enabling video:', err);
+        toast.error('Failed to start video.');
+      }
     }
   };
 
   const handleScreenShare = async () => {
     if (isSharingScreen) {
-      await replaceTrack(localCameraTrackRef.current);
+      await replaceTrack(localCameraTrackRef.current, false);
       setIsSharingScreen(false);
-      screenStreamRef.current?.getTracks().forEach(t => t.stop());
+      screenStreamRef.current?.getTracks().forEach(track => track.stop());
     } else {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      screenStreamRef.current = stream;
-      const track = stream.getVideoTracks()[0];
-      await replaceTrack(track, true);
-      setIsSharingScreen(true);
-      track.onended = () => handleScreenShare();
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        screenStreamRef.current = screenStream;
+        const screenTrack = screenStream.getVideoTracks()[0];
+        await replaceTrack(screenTrack, true);
+        setIsSharingScreen(true);
+        screenTrack.onended = async () => {
+          await replaceTrack(localCameraTrackRef.current, false);
+          setIsSharingScreen(false);
+        };
+      } catch (err) {
+        console.error('Screen share error:', err);
+        toast.error('Screen sharing failed.');
+      }
     }
   };
 
-  const handlePinParticipant = socketId => {
-    if (pinnedParticipantId === socketId) {
-      setPinnedParticipantId(null);
-      socketRef.current?.emit('unpin-participant');
-    } else {
-      setPinnedParticipantId(socketId);
-      socketRef.current?.emit('pin-participant', { participantId: socketId });
-    }
+  const handleSwipe = (direction) => {
+    setGridPage((prev) => Math.max(0, Math.min(prev + direction, totalGridPages - 1)));
   };
 
-  const handleSwipe = dir => setGridPage(p => Math.max(0, Math.min(p + dir, totalGridPages - 1)));
+  const handleToolbarMouseDown = (e) => {
+    const toolbar = e.currentTarget.parentElement;
+    const rect = toolbar.getBoundingClientRect();
+    dragInfo.current = {
+      isDragging: true,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    };
+    window.addEventListener('mousemove', handleToolbarMouseMove);
+    window.addEventListener('mouseup', handleToolbarMouseUp);
+  };
 
-  if (isLoading) return <LoadingSpinner />;
+  const handleExitRoom = () => {
+    try {
+      socketRef.current?.emit('leave-room', { userId: socketRef.current?.id, username: user.username });
+    } catch (e) {
+      console.warn('Error emitting leave-room:', e);
+    }
+    navigate('/home');
+  };
+
+  if (isLoading) return <div className="pro-meeting-page flex items-center justify-center"><LoadingSpinner size="large" /></div>;
 
   return (
     <div className="pro-meeting-page">
-      <MeetingHeader roomId={roomId} realParticipantsCount={realParticipantsCount} onCopyInvite={copyInviteLink} />
+      <MeetingHeader 
+        roomId={roomId} 
+        participants={allParticipants} // Pass only real participants
+        realParticipantsCount={realParticipantsCount} // Pass the count
+        onCopyInvite={copyInviteLink}
+      />
       <div className="pro-meeting-body">
         <div className={`pro-mainarea-container ${isChatOpen ? 'with-chat-sidebar' : ''}`}>
           <MeetingMainArea
-            participants={displayParticipants}
-            realParticipants={allParticipants}
+            participants={displayParticipants} // Pass participants with AI for display
+            realParticipants={allParticipants} // Pass real participants for counting
             isSomeoneScreenSharing={isSomeoneScreenSharing}
             toolbarPosition={toolbarPosition}
-            setToolbarPosition={setToolbarPosition}
             currentTool={currentTool}
             currentBrushSize={currentBrushSize}
-            annotationCanvasRef={annotationCanvasRef}
-            remoteDrawingStates={remoteDrawingStates}
-            drawingStateRef={drawingStateRef}
+            handleToolbarMouseDown={handleToolbarMouseDown}
+            handleMouseDown={handleMouseDown}
+            handleMouseMove={handleMouseMove}
+            handleMouseUp={handleMouseUp}
             handleSwipe={handleSwipe}
             gridPage={gridPage}
             totalGridPages={totalGridPages}
             pinnedParticipantId={pinnedParticipantId}
-            handlePinParticipant={handlePinParticipant}
             isMirroringBrowser={isMirroringBrowser}
             socketRef={socketRef}
-            handleExitRoom={() => navigate('/home')}
+            handleExitRoom={handleExitRoom}
             aiCanvasRef={aiCanvasRef}
             setGridPage={setGridPage}
             aiBotInUse={aiBotInUse}
@@ -683,44 +1145,65 @@ const Meeting = () => {
             AIAvatar={AIAvatar}
           />
         </div>
-
-        {/* Chat & sidebars – unchanged */}
+        
+        {/* Chat Sidebar - Fixed on the right */}
         {isChatOpen && (
           <div className="pro-chat-sidebar-overlay" onClick={() => setIsChatOpen(false)}>
-            <div className="pro-chat-sidebar" onClick={e => e.stopPropagation()}>
+            <div className="pro-chat-sidebar" onClick={(e) => e.stopPropagation()}>
               <Chat
                 messages={messages}
-                onSendMessage={msg => {
-                  const payload = { socketId: socketRef.current.id, username: user.username, message: msg, timestamp: Date.now() };
+                onSendMessage={(message) => {
+                  const payload = {
+                    userId: socketRef.current?.id,
+                    username: user.username,
+                    message: message,
+                    timestamp: Date.now(),
+                    isSystemMessage: false
+                  };
+                  console.log('Sending chat message:', payload);
                   socketRef.current?.emit('send-chat-message', payload);
                   setMessages(prev => [...prev, payload]);
                 }}
-                currentUser={{ socketId: socketRef.current?.id, username: user.username }}
+                currentUser={{
+                  userId: socketRef.current?.id,
+                  username: user.username
+                }}
                 onClose={() => setIsChatOpen(false)}
               />
             </div>
           </div>
         )}
-
+        
+        {/* Popup Sidebars for Participants and AI */}
         {(isParticipantsOpen || isAIPopupOpen) && (
-          <div className="pro-sidebar-overlay" onClick={() => { setIsParticipantsOpen(false); setIsAIPopupOpen(false); }}>
+          <div className="pro-sidebar-overlay" onClick={() => {
+            if (isParticipantsOpen) setIsParticipantsOpen(false);
+            if (isAIPopupOpen) setIsAIPopupOpen(false);
+          }}>
             {isParticipantsOpen && (
-              <div className="pro-sidebar-popup" onClick={e => e.stopPropagation()}>
+              <div className="pro-sidebar-popup" onClick={(e) => e.stopPropagation()}>
                 <MeetingSidebar
                   isChatOpen={isChatOpen}
                   isParticipantsOpen={isParticipantsOpen}
                   messages={messages}
                   user={user}
-                  onSendMessage={p => { socketRef.current?.emit('send-chat-message', p); setMessages(prev => [...prev, p]); }}
+                  onSendMessage={(payload) => {
+                    socketRef.current?.emit('send-chat-message', payload);
+                    setMessages((prev) => [...prev, payload]);
+                  }}
                   onCloseChat={() => setIsChatOpen(false)}
-                  participants={allParticipants}
+                  participants={allParticipants} // Pass only real participants to sidebar
+                  aiParticipant={aiParticipant} // Pass AI separately
                   onCloseParticipants={() => setIsParticipantsOpen(false)}
                   roomId={roomId}
+                  getUserAvatar={getUserAvatar}
+                  AIAvatar={AIAvatar}
                 />
               </div>
             )}
+
             {isAIPopupOpen && (
-              <div className="pro-sidebar-popup" onClick={e => e.stopPropagation()}>
+              <div className="pro-sidebar-popup" onClick={(e) => e.stopPropagation()}>
                 <AIPopup
                   onClose={() => setIsAIPopupOpen(false)}
                   onAIRequest={handleAIRequest}
@@ -737,7 +1220,7 @@ const Meeting = () => {
           </div>
         )}
       </div>
-
+      
       <MeetingControls
         isAudioMuted={isAudioMuted}
         toggleAudio={toggleAudio}
@@ -751,11 +1234,21 @@ const Meeting = () => {
         setIsParticipantsOpen={setIsParticipantsOpen}
         isAIPopupOpen={isAIPopupOpen}
         setIsAIPopupOpen={setIsAIPopupOpen}
-        handleExitRoom={() => navigate('/home')}
+        handleExitRoom={handleExitRoom}
         onCopyInvite={copyInviteLink}
       />
-
-      <canvas ref={aiCanvasRef} style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }} />
+      
+      {/* Hidden canvas for AI animation */}
+      <canvas
+        ref={aiCanvasRef}
+        style={{
+          position: 'absolute',
+          top: -1000,
+          left: -1000,
+          width: 640,
+          height: 480
+        }}
+      />
     </div>
   );
 };

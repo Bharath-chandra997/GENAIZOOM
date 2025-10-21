@@ -156,11 +156,6 @@ const Meeting = () => {
   const iceServersCache = useRef(null);
   const lastIceFetch = useRef(0);
 
-  // Signaling state management
-  const signalingStates = useRef(new Map());
-  const pendingOffers = useRef(new Map());
-  const pendingAnswers = useRef(new Map());
-
   // Detect if browser mirrors front camera tracks
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
@@ -517,15 +512,12 @@ const Meeting = () => {
         rtcpMuxPolicy: 'require'
       });
 
-      signalingStates.current.set(remoteSocketId, 'new');
-
       const connectionTimeout = setTimeout(() => {
         if (pc.connectionState === 'connecting') {
           console.warn('Connection timeout for user:', remoteSocketId);
           pc.close();
           peerConnections.current.delete(remoteSocketId);
           connectionTimeouts.current.delete(remoteSocketId);
-          signalingStates.current.delete(remoteSocketId);
         }
       }, 15000);
 
@@ -578,9 +570,6 @@ const Meeting = () => {
           console.error('Connection failed for user:', remoteSocketId);
           clearTimeout(connectionTimeout);
           connectionTimeouts.current.delete(remoteSocketId);
-          signalingStates.current.delete(remoteSocketId);
-          pendingOffers.current.delete(remoteSocketId);
-          pendingAnswers.current.delete(remoteSocketId);
           pc.close();
           peerConnections.current.delete(remoteSocketId);
           setParticipants((prev) => prev.filter((p) => p.userId !== remoteSocketId));
@@ -677,6 +666,8 @@ const Meeting = () => {
 
     const handleOffer = async ({ from, offer, username }) => {
       console.log('Received offer from:', from);
+      
+      // Add participant if not already in the list
       setParticipants((prev) => {
         if (prev.some(p => p.userId === from)) return prev;
         return [...prev, {
@@ -707,7 +698,7 @@ const Meeting = () => {
     const handleAnswer = async ({ from, answer }) => {
       console.log('Received answer from:', from);
       const pc = peerConnections.current.get(from);
-      if (pc) {
+      if (pc && pc.signalingState === 'have-local-offer') {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
         } catch (err) {
@@ -923,10 +914,6 @@ const Meeting = () => {
 
           connectionTimeouts.current.forEach(timeout => clearTimeout(timeout));
           connectionTimeouts.current.clear();
-
-          signalingStates.current.clear();
-          pendingOffers.current.clear();
-          pendingAnswers.current.clear();
 
           if (aiAnimationRef.current) {
             cancelAnimationFrame(aiAnimationRef.current);

@@ -20,19 +20,8 @@ const MeetingHeader = ({
           </div>
         </div>
       </div>
-      
-      <div className="pro-meeting-header__right">
-        <button 
-          className="pro-invite-button"
-          onClick={onCopyInvite}
-          title="Copy invite link"
-        >
-          <span className="pro-invite-button__icon">📋</span>
-          <span className="pro-invite-button__text">Invite</span>
-        </button>
-      </div>
     </div>
   );
 };
-
+ 
 export default MeetingHeader;

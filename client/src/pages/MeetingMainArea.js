@@ -75,6 +75,12 @@ const MeetingMainArea = ({
     const hasVideo = participant.videoEnabled && participant.stream;
     const isScreenSharing = participant.isScreenSharing;
 
+    // Fixed mirroring logic: Always mirror local (unless iOS Safari already does), never mirror remote
+    let videoClass = 'pro-video-element';
+    if (participant.isLocal && !isMirroringBrowser) {
+      videoClass += ' pro-video-element--mirrored';
+    }
+
     return (
       <div
         key={participant.userId || `participant-${index}`}
@@ -91,9 +97,7 @@ const MeetingMainArea = ({
               ref={video => setVideoRef(participant, video)}
               autoPlay
               muted={participant.isLocal}
-              className={`pro-video-element ${
-                participant.isLocal && isMirroringBrowser ? 'pro-video-element--mirrored' : ''
-              }`}
+              className={videoClass}
             />
           ) : isAI ? (
             <div className="pro-ai-visualization">
@@ -205,50 +209,6 @@ const MeetingMainArea = ({
     );
   };
 
-  // Render annotation toolbar
-  const renderAnnotationToolbar = () => (
-    <div
-      className="pro-annotation-toolbar"
-      style={{
-        left: `${toolbarPosition.x}px`,
-        top: `${toolbarPosition.y}px`,
-      }}
-    >
-      <div className="pro-toolbar-handle" onMouseDown={handleToolbarMouseDown}>
-        🎨
-      </div>
-      <div className="pro-toolbar-tools">
-        <button
-          className={`pro-tool-btn ${currentTool === 'pen' ? 'pro-tool-btn--active' : ''}`}
-          title="Pen"
-        >
-          ✏️
-        </button>
-        <button
-          className={`pro-tool-btn ${currentTool === 'eraser' ? 'pro-tool-btn--active' : ''}`}
-          title="Eraser"
-        >
-          🧹
-        </button>
-        <button
-          className={`pro-tool-btn ${currentTool === 'rectangle' ? 'pro-tool-btn--active' : ''}`}
-          title="Rectangle"
-        >
-          ⬜
-        </button>
-        <button
-          className={`pro-tool-btn ${currentTool === 'circle' ? 'pro-tool-btn--active' : ''}`}
-          title="Circle"
-        >
-          ⭕
-        </button>
-        <div className="pro-brush-size">
-          Size: {currentBrushSize}px
-        </div>
-      </div>
-    </div>
-  );
-
   // Render pagination controls
   const renderPagination = () => {
     if (totalGridPages <= 1) return null;
@@ -299,6 +259,12 @@ const MeetingMainArea = ({
           <button className="pro-toolbar-btn" title="Raise hand">
             ✋
           </button>
+          <button className="pro-toolbar-btn" title="Share screen">
+            📺
+          </button>
+          <button className="pro-toolbar-btn" title="Record meeting">
+            ⏺️
+          </button>
         </div>
         
         <div className="pro-toolbar-right">
@@ -314,22 +280,10 @@ const MeetingMainArea = ({
 
       {/* Main Content Area */}
       <div className="pro-mainarea-grid">
-        <canvas
-          ref={annotationCanvasRef}
-          className="pro-annotation-canvas"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        />
-        
         {isSomeoneScreenSharing ? renderScreenShareView() : renderGridView()}
         
         {renderPagination()}
       </div>
-
-      {/* Annotation Toolbar */}
-      {renderAnnotationToolbar()}
     </div>
   );
 };

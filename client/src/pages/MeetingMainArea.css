@@ -8,7 +8,6 @@
   background: #0f1115;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 .pro-mainarea-toolbar-strip {
@@ -68,7 +67,7 @@
   transform: translateY(-1px);
 }
 
-/* Main Grid Area */
+/* Main Grid Area - Increased size */
 .pro-mainarea-grid {
   position: relative;
   flex: 1 1 auto;
@@ -80,39 +79,29 @@
   background: #0f1115;
 }
 
-/* Annotation Canvas */
-.pro-annotation-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 5;
-  cursor: crosshair;
-  pointer-events: auto;
-}
-
-/* Video Grid Styles */
+/* Video Grid Styles - Larger grid */
 .pro-video-grid {
   display: grid;
-  gap: 12px;
+  gap: 16px;
   width: 100%;
   height: 100%;
-  max-height: 100%;
-  place-items: center;
+  max-height: none; /* Remove height cap for larger grid */
+  place-items: stretch;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
 }
 
-/* Grid layouts for different participant counts */
+/* Grid layouts for different participant counts - Adjusted for larger view */
 .pro-video-grid--1 {
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
-  max-width: 1000px;
+  max-width: none;
 }
 
 .pro-video-grid--2 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr;
-  max-width: 1000px;
+  max-width: none;
 }
 
 .pro-video-grid--3 {
@@ -121,13 +110,13 @@
   grid-template-areas: 
     "video1 video2"
     "video3 video3";
-  max-width: 1000px;
+  max-width: none;
 }
 
 .pro-video-grid--4 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  max-width: 1000px;
+  max-width: none;
 }
 
 .pro-video-grid-item {
@@ -139,7 +128,7 @@
   grid-area: video3;
 }
 
-/* Video Frame Styles */
+/* Video Frame Styles - No shadow, larger responsive */
 .pro-video-frame {
   position: relative;
   background: #1a1d24;
@@ -150,29 +139,25 @@
   aspect-ratio: 16/9;
   border: 2px solid transparent;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  /* Removed box-shadow */
   animation: videoFrameAppear 0.3s ease-out;
   cursor: pointer;
 }
 
 .pro-video-frame:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .pro-video-frame--active {
   border-color: #3b82f6;
-  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
 }
 
 .pro-video-frame--pinned {
   border-color: #10b981;
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
 }
 
 .pro-video-frame--screen-share {
   border-color: #f59e0b;
-  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3);
 }
 
 .pro-video-frame--ai {
@@ -283,7 +268,6 @@
   max-height: 60%;
   border-radius: 8px;
   margin-bottom: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .pro-ai-uploaded-audio {
@@ -456,68 +440,6 @@
   position: relative;
 }
 
-/* Annotation Toolbar */
-.pro-annotation-toolbar {
-  position: absolute;
-  background: rgba(23, 26, 33, 0.95);
-  border: 1px solid #2a2f3a;
-  border-radius: 8px;
-  padding: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  z-index: 100;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(10px);
-}
-
-.pro-toolbar-handle {
-  cursor: move;
-  padding: 6px;
-  border-radius: 4px;
-  background: #374151;
-  user-select: none;
-}
-
-.pro-toolbar-handle:hover {
-  background: #4b5563;
-}
-
-.pro-toolbar-tools {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.pro-tool-btn {
-  background: #374151;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-}
-
-.pro-tool-btn:hover {
-  background: #4b5563;
-  transform: scale(1.1);
-}
-
-.pro-tool-btn--active {
-  background: #3b82f6;
-  transform: scale(1.1);
-}
-
-.pro-brush-size {
-  font-size: 12px;
-  color: #94a3b8;
-  padding: 4px 8px;
-  background: #1f2937;
-  border-radius: 4px;
-  margin-left: 4px;
-}
-
 /* Grid Pagination */
 .pro-grid-pagination {
   position: absolute;
@@ -608,10 +530,6 @@
   
   .pro-screenshare-participant {
     width: 120px;
-  }
-  
-  .pro-annotation-toolbar {
-    transform: scale(0.9);
   }
 }
 

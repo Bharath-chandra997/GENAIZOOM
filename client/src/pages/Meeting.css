@@ -1104,32 +1104,8 @@
   border-radius: 0;
   border: none;
   box-shadow: none;
-}
-
-/* Responsive design for chat sidebar */
-@media (max-width: 1024px) {
-  .pro-chat-sidebar-overlay {
-    width: 350px;
-  }
-  
-  .pro-mainarea-container.with-chat-sidebar {
-    margin-right: 350px;
-  }
-}
-
-@media (max-width: 768px) {
-  .pro-chat-sidebar-overlay {
-    width: 100%;
-  }
-  
-  .pro-mainarea-container.with-chat-sidebar {
-    margin-right: 0;
-    transform: translateX(-100%);
-  }
-  
-  .pro-chat-sidebar {
-    width: 100%;
-  }
+  display: flex;
+  flex-direction: column;
 }
 
 /* Enhanced Chat Container for Sidebar */
@@ -1141,18 +1117,22 @@
   background: linear-gradient(135deg, #1e293b, #0f172a);
   border-bottom: 1px solid #334155;
   padding: 20px;
+  flex-shrink: 0;
 }
 
 .pro-chat-sidebar .chat-messages {
   flex: 1;
   padding: 20px;
   background: #0f1115;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .pro-chat-sidebar .chat-form {
   background: linear-gradient(135deg, #1e293b, #0f172a);
   border-top: 1px solid #334155;
   padding: 20px;
+  flex-shrink: 0;
 }
 
 /* Larger chat messages in sidebar */
@@ -1180,4 +1160,40 @@
 
 .pro-chat-sidebar {
   cursor: default;
+}
+
+/* Debug styles to ensure visibility */
+.chat-messages {
+  border: 1px solid transparent; /* Remove if not needed */
+}
+
+.chat-message {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Responsive design for chat sidebar */
+@media (max-width: 1024px) {
+  .pro-chat-sidebar-overlay {
+    width: 350px;
+  }
+  
+  .pro-mainarea-container.with-chat-sidebar {
+    margin-right: 350px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pro-chat-sidebar-overlay {
+    width: 100%;
+  }
+  
+  .pro-mainarea-container.with-chat-sidebar {
+    margin-right: 0;
+    transform: translateX(-100%);
+  }
+  
+  .pro-chat-sidebar {
+    width: 100%;
+  }
 }

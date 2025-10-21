@@ -7,8 +7,8 @@ const Chat = ({ messages, onSendMessage, currentUser, onClose }) => {
   const inputRef = useRef(null);
 
   useEffect(() => {
-    console.log('Chat messages updated:', messages);
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    console.log('Chat messages updated:', messages); // Debug log
+    scrollToBottom();
   }, [messages]);
 
   useEffect(() => {
@@ -17,19 +17,27 @@ const Chat = ({ messages, onSendMessage, currentUser, onClose }) => {
     }
   }, []);
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (newMessage.trim()) {
-      console.log('Submitting message:', newMessage);
+      console.log('Submitting message:', newMessage); // Debug log
       onSendMessage(newMessage);
       setNewMessage('');
     }
   };
 
   const formatTime = (timestamp) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
+
+  console.log('Current user in chat:', currentUser); // Debug log
+  console.log('Messages length:', messages.length); // Debug log
 
   return (
     <div className="chat-container">
@@ -45,40 +53,45 @@ const Chat = ({ messages, onSendMessage, currentUser, onClose }) => {
       </div>
       
       <div className="chat-messages">
-        {messages.length === 0 ? (
+        {messages && messages.length === 0 ? (
           <div className="chat-empty">
             <div className="chat-empty-icon">💬</div>
             <div className="chat-empty-title">No messages yet</div>
             <div className="chat-empty-text">Start the conversation!</div>
           </div>
         ) : (
-          messages.map((message, index) => (
-            <div
-              key={message.id || `message-${index}`}
-              className={`chat-message ${
-                message.isSystemMessage 
-                  ? 'system' 
-                  : message.userId === currentUser.userId 
-                    ? 'own' 
-                    : 'other'
-              }`}
-            >
-              {message.isSystemMessage ? (
-                <>
-                  <div className="message-content">{message.message}</div>
-                  <div className="message-time">{formatTime(message.timestamp)}</div>
-                </>
-              ) : (
-                <>
-                  <div className="message-header">
-                    <span className="message-author">{message.username}</span>
-                    <span className="message-time">{formatTime(message.timestamp)}</span>
-                  </div>
-                  <div className="message-content">{message.message}</div>
-                </>
-              )}
-            </div>
-          ))
+          messages.map((message, index) => {
+            console.log('Rendering message:', message); // Debug log
+            return (
+              <div
+                key={message.id || `message-${index}-${message.timestamp}`}
+                className={`chat-message ${
+                  message.isSystemMessage 
+                    ? 'system' 
+                    : message.userId === currentUser?.userId 
+                      ? 'own' 
+                      : 'other'
+                }`}
+              >
+                {message.isSystemMessage ? (
+                  <>
+                    <div className="message-content">{message.message}</div>
+                    <div className="message-time">{formatTime(message.timestamp)}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="message-header">
+                      <span className="message-author">
+                        {message.userId === currentUser?.userId ? 'You' : message.username}
+                      </span>
+                      <span className="message-time">{formatTime(message.timestamp)}</span>
+                    </div>
+                    <div className="message-content">{message.message}</div>
+                  </>
+                )}
+              </div>
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>

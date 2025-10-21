@@ -986,26 +986,34 @@ const Meeting = () => {
         </div>
         
         {/* Chat Sidebar - Fixed on the right */}
-        {isChatOpen && (
-          <div className="pro-chat-sidebar-overlay">
-            <div className="pro-chat-sidebar" onClick={(e) => e.stopPropagation()}>
-              <Chat
-                messages={messages}
-                onSendMessage={(message) => {
-                  const payload = {
-                    userId: socketRef.current?.id,
-                    username: user.username,
-                    message: message,
-                    timestamp: Date.now()
-                  };
-                  socketRef.current?.emit('send-chat-message', payload);
-                }}
-                currentUser={user}
-                onClose={() => setIsChatOpen(false)}
-              />
-            </div>
-          </div>
-        )}
+        {/* Chat Sidebar - Fixed on the right */}
+{isChatOpen && (
+  <div className="pro-chat-sidebar-overlay" onClick={() => setIsChatOpen(false)}>
+    <div className="pro-chat-sidebar" onClick={(e) => e.stopPropagation()}>
+      <Chat
+        messages={messages}
+        onSendMessage={(message) => {
+          const payload = {
+            userId: socketRef.current?.id,
+            username: user.username,
+            message: message,
+            timestamp: Date.now(),
+            isSystemMessage: false
+          };
+          console.log('Sending chat message:', payload); // Debug log
+          socketRef.current?.emit('send-chat-message', payload);
+          // Add the message to local state immediately
+          setMessages(prev => [...prev, payload]);
+        }}
+        currentUser={{
+          userId: socketRef.current?.id,
+          username: user.username
+        }}
+        onClose={() => setIsChatOpen(false)}
+      />
+    </div>
+  </div>
+)}
         
         {/* Popup Sidebars for Participants and AI */}
         {(isParticipantsOpen || isAIPopupOpen) && (

@@ -35,7 +35,6 @@
   --transition-fast: 0.15s ease-in-out;
 }
 
-/* Chat Container - Now inside popup */
 /* Chat Container - For Sidebar */
 .chat-container {
   width: 100%;
@@ -48,7 +47,7 @@
   overflow: hidden;
 }
 
-/* Rest of your existing Chat.css styles remain the same */
+/* Chat Header - Compact */
 .chat-header {
   display: flex;
   align-items: center;
@@ -63,22 +62,6 @@
   margin: 0;
 }
 
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  background: #0f1115;
-  position: relative;
-  min-height: 0;
-  width: 100%;
-  box-sizing: border-box;
-  margin: 0;
-}
-
-/* ... rest of your existing Chat.css ... */
 .chat-title {
   font-size: var(--font-size-base);
   font-weight: 600;
@@ -118,7 +101,20 @@
 }
 
 /* Chat Messages Area */
-
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  background: #0f1115;
+  position: relative;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+}
 
 .chat-messages::-webkit-scrollbar {
   width: 4px;
@@ -187,6 +183,7 @@
   word-wrap: break-word;
   box-sizing: border-box;
   width: fit-content;
+  animation: messageSlideIn 0.3s ease-out;
 }
 
 .chat-message.own {

@@ -299,12 +299,6 @@ const MeetingMainArea = ({
           <button className="pro-toolbar-btn" title="Raise hand">
             ✋
           </button>
-          <button className="pro-toolbar-btn" title="Share screen">
-            📺
-          </button>
-          <button className="pro-toolbar-btn" title="Record meeting">
-            ⏺️
-          </button>
         </div>
         
         <div className="pro-toolbar-right">

@@ -1,6 +1,4 @@
 import React from 'react';
-import './MeetingHeader.css';
-
 const MeetingHeader = ({ 
   roomId, 
   participants = [], 

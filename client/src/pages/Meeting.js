@@ -29,13 +29,10 @@ const getUserAvatar = (user, size = 40) => {
   if (user?.profilePicture) {
     return user.profilePicture;
   }
-  
   const initials = user?.username?.charAt(0)?.toUpperCase() || 'U';
   const color = getColorForId(user?.socketId || user?.username);
-  
   return (
-    <div 
-      className="user-avatar"
+    <div
       style={{
         backgroundColor: color,
         width: size,
@@ -46,7 +43,7 @@ const getUserAvatar = (user, size = 40) => {
         justifyContent: 'center',
         color: 'white',
         fontWeight: 'bold',
-        fontSize: size * 0.4
+        fontSize: size * 0.4,
       }}
     >
       {initials}
@@ -54,41 +51,38 @@ const getUserAvatar = (user, size = 40) => {
   );
 };
 
-const AIAvatar = ({ size = 40 }) => {
-  return (
-    <div 
-      className="ai-avatar"
+const AIAvatar = ({ size = 40 }) => (
+  <div
+    style={{
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      width: size,
+      height: size,
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'white',
+      fontWeight: 'bold',
+      fontSize: size * 0.35,
+      border: '2px solid #10b981',
+      position: 'relative',
+    }}
+  >
+    AI
+    <div
       style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        width: size,
-        height: size,
+        position: 'absolute',
+        bottom: -2,
+        right: -2,
+        width: 12,
+        height: 12,
+        backgroundColor: '#10b981',
         borderRadius: '50%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: size * 0.35,
-        border: '2px solid #10b981',
-        position: 'relative'
+        border: '2px solid white',
       }}
-    >
-      AI
-      <div 
-        style={{
-          position: 'absolute',
-          bottom: -2,
-          right: -2,
-          width: 12,
-          height: 12,
-          backgroundColor: '#10b981',
-          borderRadius: '50%',
-          border: '2px solid white'
-        }}
-      />
-    </div>
-  );
-};
+    />
+  </div>
+);
 
 const Meeting = () => {
   const { roomId } = useParams();
@@ -115,7 +109,6 @@ const Meeting = () => {
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
 
-  // FIXED: AI has socketId
   const [aiParticipant] = useState({
     socketId: 'ai-assistant',
     userId: 'ai-assistant',
@@ -127,7 +120,7 @@ const Meeting = () => {
     isScreenSharing: false,
     isAI: true,
     stream: null,
-    profilePicture: null
+    profilePicture: null,
   });
 
   const socketRef = useRef(null);
@@ -160,85 +153,82 @@ const Meeting = () => {
   const displayParticipants = participantsWithAI;
   const totalGridPages = useMemo(() => Math.max(1, Math.ceil(displayParticipants.length / 4)), [displayParticipants.length]);
 
-  const getUsernameById = useCallback((socketId) => {
-    const participant = allParticipants.find(p => p.socketId === socketId);
-    return participant ? (participant.isLocal ? user.username : participant.username) : 'Another user';
-  }, [allParticipants, user.username]);
+  const getUsernameById = useCallback(
+    (socketId) => {
+      const p = allParticipants.find(p => p.socketId === socketId);
+      return p ? (p.isLocal ? user.username : p.username) : 'Another user';
+    },
+    [allParticipants, user.username]
+  );
 
   const copyInviteLink = useCallback(() => {
-    const inviteLink = `${window.location.origin}/join/${roomId}`;
-    navigator.clipboard.writeText(inviteLink)
-      .then(() => toast.success('Invite link copied!', { position: "bottom-center", autoClose: 3000 }))
-      .catch(() => toast.error('Failed to copy invite link'));
+    const link = `${window.location.origin}/join/${roomId}`;
+    navigator.clipboard.writeText(link).then(
+      () => toast.success('Invite link copied!', { position: 'bottom-center', autoClose: 3000 }),
+      () => toast.error('Failed to copy')
+    );
   }, [roomId]);
 
-  // AI Animation (unchanged)
+  /* ------------------------------------------------------------------ */
+  /* AI animation – unchanged */
+  /* ------------------------------------------------------------------ */
   const initializeAiAnimation = useCallback(() => {
     const canvas = aiCanvasRef.current;
     if (!canvas) return;
-
     const ctx = canvas.getContext('2d');
     let particles = [];
     let time = 0;
 
-    const createParticles = () => {
-      particles = [];
-      for (let i = 0; i < 30; i++) {
-        particles.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          size: Math.random() * 2 + 1,
-          speed: Math.random() * 1 + 0.5,
-          color: `hsl(${200 + Math.random() * 60}, 70%, 60%)`,
-          angle: Math.random() * Math.PI * 2
-        });
-      }
+    const create = () => {
+      particles = Array.from({ length: 30 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2 + 1,
+        speed: Math.random() * 1 + 0.5,
+        color: `hsl(${200 + Math.random() * 60}, 70%, 60%)`,
+        angle: Math.random() * Math.PI * 2,
+      }));
     };
 
     const animate = () => {
-      if (!canvas) return;
       ctx.fillStyle = 'rgba(15, 23, 42, 0.1)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       time += 0.02;
 
-      particles.forEach((particle, index) => {
-        particle.x += Math.cos(particle.angle + time) * particle.speed;
-        particle.y += Math.sin(particle.angle + time) * particle.speed;
-
-        if (particle.x < 0) particle.x = canvas.width;
-        if (particle.x > canvas.width) particle.x = 0;
-        if (particle.y < 0) particle.y = canvas.height;
-        if (particle.y > canvas.height) particle.y = 0;
+      particles.forEach((p, i) => {
+        p.x += Math.cos(p.angle + time) * p.speed;
+        p.y += Math.sin(p.angle + time) * p.speed;
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
 
         ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        ctx.fillStyle = particle.color;
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
         ctx.fill();
 
-        particles.slice(index + 1).forEach(otherParticle => {
-          const dx = particle.x - otherParticle.x;
-          const dy = particle.y - otherParticle.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance < 80) {
+        particles.slice(i + 1).forEach(o => {
+          const d = Math.hypot(p.x - o.x, p.y - o.y);
+          if (d < 80) {
             ctx.beginPath();
-            ctx.strokeStyle = `rgba(100, 200, 255, ${0.2 * (1 - distance / 80)})`;
+            ctx.strokeStyle = `rgba(100, 200, 255, ${0.2 * (1 - d / 80)})`;
             ctx.lineWidth = 0.3;
-            ctx.moveTo(particle.x, particle.y);
-            ctx.lineTo(otherParticle.x, otherParticle.y);
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(o.x, o.y);
             ctx.stroke();
           }
         });
       });
 
-      ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = 'bold 20px sans-serif';
       ctx.fillStyle = 'rgba(96, 165, 250, 0.9)';
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
       ctx.fillText('AI Assistant', canvas.width / 2, canvas.height / 2 - 10);
 
-      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = '12px sans-serif';
       ctx.fillStyle = aiBotInUse ? 'rgba(239, 68, 68, 0.7)' : 'rgba(96, 165, 250, 0.7)';
-      ctx.fillText(aiBotInUse ? 'In use by ' + currentAIUser : 'Ready to help', canvas.width / 2, canvas.height / 2 + 15);
+      ctx.fillText(aiBotInUse ? `In use by ${currentAIUser}` : 'Ready to help', canvas.width / 2, canvas.height / 2 + 15);
 
       ctx.beginPath();
       ctx.arc(canvas.width / 2, canvas.height / 2, 25 + Math.sin(time * 2) * 3, 0, Math.PI * 2);
@@ -249,52 +239,50 @@ const Meeting = () => {
       aiAnimationRef.current = requestAnimationFrame(animate);
     };
 
-    const resizeCanvas = () => {
-      if (canvas) {
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
-        createParticles();
-      }
+    const resize = () => {
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+      create();
     };
-
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    resize();
+    window.addEventListener('resize', resize);
     animate();
 
     return () => {
-      if (aiAnimationRef.current) cancelAnimationFrame(aiAnimationRef.current);
-      window.removeEventListener('resize', resizeCanvas);
+      cancelAnimationFrame(aiAnimationRef.current);
+      window.removeEventListener('resize', resize);
     };
   }, [aiBotInUse, currentAIUser]);
 
-  useEffect(() => {
-    const cleanup = initializeAiAnimation();
-    return cleanup;
-  }, [initializeAiAnimation]);
+  useEffect(() => initializeAiAnimation(), [initializeAiAnimation]);
 
-  const handleAIRequest = useCallback(async (imageFile, audioFile) => {
-    if (aiBotInUse) {
-      toast.error('AI Bot is currently in use by another user');
-      return;
-    }
+  /* ------------------------------------------------------------------ */
+  /* AI request handling – unchanged */
+  /* ------------------------------------------------------------------ */
+  const handleAIRequest = useCallback(
+    async (imageFile, audioFile) => {
+      if (aiBotInUse) {
+        toast.error('AI Bot is currently in use by another user');
+        return;
+      }
+      setAiBotInUse(true);
+      setCurrentAIUser(user.username);
+      setAiUploadedImage(imageFile);
+      setAiUploadedAudio(audioFile);
 
-    setAiBotInUse(true);
-    setCurrentAIUser(user.username);
-    setAiUploadedImage(imageFile);
-    setAiUploadedAudio(audioFile);
-
-    setTimeout(() => {
-      const response = `Hello ${user.username}! I've processed your ${imageFile ? 'image' : ''}${imageFile && audioFile ? ' and ' : ''}${audioFile ? 'audio' : ''}. This is a simulated AI response.`;
-      setAiResponse(response);
-      
-      socketRef.current?.emit('ai-response', {
-        user: user.username,
-        response: response,
-        image: imageFile ? URL.createObjectURL(imageFile) : null,
-        audio: audioFile ? URL.createObjectURL(audioFile) : null
-      });
-    }, 3000);
-  }, [aiBotInUse, user.username]);
+      setTimeout(() => {
+        const resp = `Hello ${user.username}! I've processed your ${imageFile ? 'image' : ''}${imageFile && audioFile ? ' and ' : ''}${audioFile ? 'audio' : ''}.`;
+        setAiResponse(resp);
+        socketRef.current?.emit('ai-response', {
+          user: user.username,
+          response: resp,
+          image: imageFile ? URL.createObjectURL(imageFile) : null,
+          audio: audioFile ? URL.createObjectURL(audioFile) : null,
+        });
+      }, 3000);
+    },
+    [aiBotInUse, user.username]
+  );
 
   const handleAIComplete = useCallback(() => {
     setAiBotInUse(false);
@@ -305,97 +293,12 @@ const Meeting = () => {
     socketRef.current?.emit('ai-complete');
   }, []);
 
-  const handleToolbarMouseMove = useCallback((e) => {
-    if (dragInfo.current.isDragging) {
-      setToolbarPosition({
-        x: e.clientX - dragInfo.current.offsetX,
-        y: e.clientY - dragInfo.current.offsetY,
-      });
-    }
-  }, []);
-
-  const handleToolbarMouseUp = useCallback(() => {
-    dragInfo.current.isDragging = false;
-    window.removeEventListener('mousemove', handleToolbarMouseMove);
-    window.removeEventListener('mouseup', handleToolbarMouseUp);
-  }, [handleToolbarMouseMove]);
-
-  const handleMouseDown = useCallback((e) => {
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
-
-    if (currentTool === 'pen' || currentTool === 'eraser') {
-      const myColor = getColorForId(socketRef.current?.id);
-      const payload = { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize };
-      socketRef.current?.emit('drawing-start', payload);
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = myColor;
-      ctx.lineWidth = currentBrushSize;
-      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-    }
-  }, [currentTool, currentBrushSize]);
-
-  const handleMouseMove = useCallback((e) => {
-    if (!drawingStateRef.current.isDrawing || !e.buttons) return;
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    if (currentTool === 'pen' || currentTool === 'eraser') {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      socketRef.current?.emit('drawing-move', { x: x / canvas.width, y: y / canvas.height });
-      const ctx = canvas.getContext('2d');
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
-  }, [currentTool]);
-
-  const handleMouseUp = useCallback((e) => {
-    if (!drawingStateRef.current.isDrawing) return;
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    if (currentTool === 'rectangle' || currentTool === 'circle') {
-      const rect = canvas.getBoundingClientRect();
-      const { startX, startY } = drawingStateRef.current;
-      const endX = e.clientX - rect.left;
-      const endY = e.clientY - rect.top;
-      const myColor = getColorForId(socketRef.current?.id);
-      const payload = {
-        tool: currentTool,
-        startX: startX / canvas.width,
-        startY: startY / canvas.height,
-        endX: endX / canvas.width,
-        endY: endY / canvas.height,
-        color: myColor,
-        size: currentBrushSize,
-      };
-      socketRef.current?.emit('draw-shape', payload);
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = myColor;
-      ctx.lineWidth = currentBrushSize;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.beginPath();
-      if (currentTool === 'rectangle') ctx.rect(startX, startY, endX - startX, endY - startY);
-      else if (currentTool === 'circle') {
-        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
-      }
-      ctx.stroke();
-    }
-    drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
-  }, [currentTool, currentBrushSize]);
-
+  /* ------------------------------------------------------------------ */
+  /* ICE servers */
+  /* ------------------------------------------------------------------ */
   const getIceServers = useCallback(async () => {
     const now = Date.now();
-    const cacheExpiry = 5 * 60 * 1000;
-    if (iceServersCache.current && (now - lastIceFetch.current) < cacheExpiry) {
+    if (iceServersCache.current && now - lastIceFetch.current < 5 * 60 * 1000) {
       return iceServersCache.current;
     }
     try {
@@ -403,7 +306,7 @@ const Meeting = () => {
       iceServersCache.current = data;
       lastIceFetch.current = now;
       return data;
-    } catch (error) {
+    } catch {
       const fallback = [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
@@ -414,310 +317,305 @@ const Meeting = () => {
     }
   }, []);
 
-  const handleIceCandidate = useCallback(({ from, candidate }) => {
-    const pc = peerConnections.current.get(from);
-    if (pc && pc.remoteDescription && candidate) {
-      pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.warn);
-    }
-  }, []);
-
-  // FIXED: ontrack now handles missing participant
-  const createPeerConnection = useCallback(async (remoteSocketId) => {
-    if (peerConnections.current.has(remoteSocketId)) {
-      return peerConnections.current.get(remoteSocketId);
-    }
-
-    const iceServers = await getIceServers();
-    const pc = new RTCPeerConnection({
-      iceServers,
-      iceCandidatePoolSize: 10,
-      bundlePolicy: 'max-bundle',
-      rtcpMuxPolicy: 'require'
-    });
-
-    const timeout = setTimeout(() => {
-      if (pc.connectionState === 'connecting') {
-        pc.close();
-        peerConnections.current.delete(remoteSocketId);
-        connectionTimeouts.current.delete(remoteSocketId);
+  /* ------------------------------------------------------------------ */
+  /* Peer connection */
+  /* ------------------------------------------------------------------ */
+  const createPeerConnection = useCallback(
+    async (remoteSocketId) => {
+      if (peerConnections.current.has(remoteSocketId)) {
+        return peerConnections.current.get(remoteSocketId);
       }
-    }, 15000);
-    connectionTimeouts.current.set(remoteSocketId, timeout);
 
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamRef.current);
+      const ice = await getIceServers();
+      const pc = new RTCPeerConnection({
+        iceServers: ice,
+        iceCandidatePoolSize: 10,
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
       });
-    }
 
-    // FIXED: Ensure stream is attached even if participant not yet in state
-    pc.ontrack = (event) => {
-      const stream = event.streams[0];
-      if (!stream) return;
-
-      clearTimeout(connectionTimeouts.current.get(remoteSocketId));
-      connectionTimeouts.current.delete(remoteSocketId);
-
-      setParticipants(prev => {
-        const exists = prev.some(p => p.socketId === remoteSocketId);
-        if (!exists) {
-          return [...prev, {
-            socketId: remoteSocketId,
-            userId: remoteSocketId,
-            username: 'Connecting...',
-            stream,
-            isLocal: false,
-            isHost: false,
-            videoEnabled: true,
-            audioEnabled: true,
-            isScreenSharing: false,
-          }];
+      const timeout = setTimeout(() => {
+        if (pc.connectionState === 'connecting') {
+          pc.close();
+          peerConnections.current.delete(remoteSocketId);
+          connectionTimeouts.current.delete(remoteSocketId);
         }
-        return prev.map(p => p.socketId === remoteSocketId ? { ...p, stream } : p);
-      });
-    };
+      }, 15000);
+      connectionTimeouts.current.set(remoteSocketId, timeout);
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: event.candidate });
-      }
-    };
+      localStreamRef.current?.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current));
 
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') {
+      /* ---- ontrack – safe add / update ---- */
+      pc.ontrack = (e) => {
+        const stream = e.streams[0];
+        if (!stream) return;
         clearTimeout(connectionTimeouts.current.get(remoteSocketId));
         connectionTimeouts.current.delete(remoteSocketId);
-        toast.success(`Connected to ${getUsernameById(remoteSocketId)}`);
-      } else if (pc.connectionState === 'failed') {
-        pc.close();
-        peerConnections.current.delete(remoteSocketId);
-        setParticipants(prev => prev.filter(p => p.socketId !== remoteSocketId));
-        toast.error(`Failed to connect to ${getUsernameById(remoteSocketId)}`);
-      }
-    };
 
-    peerConnections.current.set(remoteSocketId, pc);
-    return pc;
-  }, [getIceServers, getUsernameById]);
-
-  const setupSocketListeners = useCallback((socket) => {
-    const handleConnect = () => {
-      socket.emit('join-room', {
-        roomId,
-        username: user.username,
-        isReconnect: false
-      }, (otherUsers) => {
-        const isHost = otherUsers.length === 0;
-        const localParticipant = {
-          socketId: socket.id,
-          userId: socket.id,
-          username: `${user.username} (You)`,
-          stream: localStreamRef.current,
-          isLocal: true,
-          isHost,
-          videoEnabled: true,
-          audioEnabled: true,
-          isScreenSharing: false,
-        };
-        const remoteParticipants = otherUsers.map(u => ({
-          socketId: u.userId,
-          userId: u.userId,
-          username: u.username,
-          stream: null,
-          isLocal: false,
-          isHost: u.isHost || false,
-          videoEnabled: true,
-          audioEnabled: true,
-          isScreenSharing: false,
-        }));
-        setParticipants([localParticipant, ...remoteParticipants]);
-        setIsLoading(false);
-
-        otherUsers.forEach(async (user) => {
-          const pc = await createPeerConnection(user.userId);
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.emit('offer', { to: user.userId, offer });
+        setParticipants(prev => {
+          const exists = prev.some(p => p.socketId === remoteSocketId);
+          if (!exists) {
+            return [
+              ...prev,
+              {
+                socketId: remoteSocketId,
+                userId: remoteSocketId,
+                username: 'Connecting...',
+                stream,
+                isLocal: false,
+                isHost: false,
+                videoEnabled: true,
+                audioEnabled: true,
+                isScreenSharing: false,
+              },
+            ];
+          }
+          return prev.map(p => (p.socketId === remoteSocketId ? { ...p, stream } : p));
         });
-      });
-    };
+      };
 
-    // FIXED: Use socketId
-    const handleUserJoined = async ({ userId, username, isHost }) => {
-      setParticipants(prev => {
-        if (prev.some(p => p.socketId === userId)) return prev;
-        return [...prev, {
-          socketId: userId,
-          userId: userId,
-          username,
-          stream: null,
-          isLocal: false,
-          isHost,
-          videoEnabled: true,
-          audioEnabled: true,
-          isScreenSharing: false,
-        }];
-      });
+      pc.onicecandidate = e => {
+        if (e.candidate) {
+          socketRef.current?.emit('ice-candidate', { to: remoteSocketId, candidate: e.candidate });
+        }
+      };
 
-      toast.info(`${username} joined the meeting`);
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          clearTimeout(connectionTimeouts.current.get(remoteSocketId));
+          connectionTimeouts.current.delete(remoteSocketId);
+          toast.success(`Connected to ${getUsernameById(remoteSocketId)}`);
+        } else if (pc.connectionState === 'failed') {
+          pc.close();
+          peerConnections.current.delete(remoteSocketId);
+          setParticipants(prev => prev.filter(p => p.socketId !== remoteSocketId));
+          toast.error(`Failed to connect to ${getUsernameById(remoteSocketId)}`);
+        }
+      };
 
-      try {
+      peerConnections.current.set(remoteSocketId, pc);
+      return pc;
+    },
+    [getIceServers, getUsernameById]
+  );
+
+  /* ------------------------------------------------------------------ */
+  /* Socket listeners */
+  /* ------------------------------------------------------------------ */
+  const setupSocketListeners = useCallback(
+    socket => {
+      const onConnect = () => {
+        socket.emit(
+          'join-room',
+          { roomId, username: user.username },
+          otherUsers => {
+            const isHost = otherUsers.length === 0;
+            const local = {
+              socketId: socket.id,
+              userId: socket.id,
+              username: `${user.username} (You)`,
+              stream: localStreamRef.current,
+              isLocal: true,
+              isHost,
+              videoEnabled: true,
+              audioEnabled: true,
+              isScreenSharing: false,
+            };
+            const remotes = otherUsers.map(u => ({
+              socketId: u.userId,
+              userId: u.userId,
+              username: u.username,
+              stream: null,
+              isLocal: false,
+              isHost: u.isHost || false,
+              videoEnabled: true,
+              audioEnabled: true,
+              isScreenSharing: false,
+            }));
+            setParticipants([local, ...remotes]);
+            setIsLoading(false);
+
+            otherUsers.forEach(async u => {
+              const pc = await createPeerConnection(u.userId);
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              socket.emit('offer', { to: u.userId, offer });
+            });
+          }
+        );
+      };
+
+      const onUserJoined = async ({ userId, username, isHost }) => {
+        setParticipants(prev => {
+          if (prev.some(p => p.socketId === userId)) return prev;
+          return [
+            ...prev,
+            {
+              socketId: userId,
+              userId,
+              username,
+              stream: null,
+              isLocal: false,
+              isHost,
+              videoEnabled: true,
+              audioEnabled: true,
+              isScreenSharing: false,
+            },
+          ];
+        });
+        toast.info(`${username} joined`);
         const pc = await createPeerConnection(userId);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         socket.emit('offer', { to: userId, offer });
-      } catch (err) {
-        console.error('Error in user-joined:', err);
-      }
-    };
+      };
 
-    const handleOffer = async ({ from, offer }) => {
-      setParticipants(prev => {
-        if (prev.some(p => p.socketId === from)) return prev;
-        return [...prev, {
-          socketId: from,
-          userId: from,
-          username: 'User',
-          stream: null,
-          isLocal: false,
-          isHost: false,
-          videoEnabled: true,
-          audioEnabled: true,
-          isScreenSharing: false,
-        }];
+      const onOffer = async ({ from, offer }) => {
+        setParticipants(prev => {
+          if (prev.some(p => p.socketId === from)) return prev;
+          return [
+            ...prev,
+            {
+              socketId: from,
+              userId: from,
+              username: 'User',
+              stream: null,
+              isLocal: false,
+              isHost: false,
+              videoEnabled: true,
+              audioEnabled: true,
+              isScreenSharing: false,
+            },
+          ];
+        });
+        const pc = await createPeerConnection(from);
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('answer', { to: from, answer });
+      };
+
+      const onAnswer = async ({ from, answer }) => {
+        const pc = peerConnections.current.get(from);
+        if (pc && pc.signalingState === 'have-local-offer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+      };
+
+      const onIceCandidate = ({ from, candidate }) => {
+        const pc = peerConnections.current.get(from);
+        if (pc && candidate) pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+      };
+
+      const onUserLeft = ({ userId }) => {
+        peerConnections.current.get(userId)?.close();
+        peerConnections.current.delete(userId);
+        setParticipants(prev => prev.filter(p => p.socketId !== userId));
+        if (pinnedParticipantId === userId) setPinnedParticipantId(null);
+        toast.error('A user left');
+      };
+
+      socket.on('connect', onConnect);
+      socket.on('user-joined', onUserJoined);
+      socket.on('offer', onOffer);
+      socket.on('answer', onAnswer);
+      socket.on('ice-candidate', onIceCandidate);
+      socket.on('user-left', onUserLeft);
+      socket.on('chat-message', msg => setMessages(prev => [...prev, msg]));
+      socket.on('screen-share-start', ({ userId }) => setParticipants(prev => prev.map(p => (p.socketId === userId ? { ...p, isScreenSharing: true } : p))));
+      socket.on('screen-share-stop', ({ userId }) => setParticipants(prev => prev.map(p => (p.socketId === userId ? { ...p, isScreenSharing: false } : p))));
+      socket.on('pin-participant', ({ participantId }) => setPinnedParticipantId(participantId));
+      socket.on('unpin-participant', () => setPinnedParticipantId(null));
+      socket.on('ai-response', ({ user: aiUser, response, image, audio }) => {
+        setAiBotInUse(true);
+        setCurrentAIUser(aiUser);
+        setAiResponse(response);
+        if (image) setAiUploadedImage(image);
+        if (audio) setAiUploadedAudio(audio);
       });
+      socket.on('ai-complete', handleAIComplete);
 
-      const pc = await createPeerConnection(from);
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('answer', { to: from, answer });
-    };
+      return () => {
+        socket.off('connect', onConnect);
+        // …remove others
+      };
+    },
+    [createPeerConnection, roomId, user, getUsernameById, handleAIComplete]
+  );
 
-    const handleAnswer = async ({ from, answer }) => {
-      const pc = peerConnections.current.get(from);
-      if (pc && pc.signalingState === 'have-local-offer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      }
-    };
-
-    const handleUserLeft = ({ userId }) => {
-      peerConnections.current.get(userId)?.close();
-      peerConnections.current.delete(userId);
-      setParticipants(prev => prev.filter(p => p.socketId !== userId));
-      if (pinnedParticipantId === userId) setPinnedParticipantId(null);
-      toast.error('A user left the meeting');
-    };
-
-    const handleChatMessage = (payload) => {
-      setMessages(prev => [...prev, payload]);
-    };
-
-    const handleScreenShareStart = ({ userId }) => {
-      setParticipants(prev => prev.map(p => p.socketId === userId ? { ...p, isScreenSharing: true } : p));
-    };
-
-    const handleScreenShareStop = ({ userId }) => {
-      setParticipants(prev => prev.map(p => p.socketId === userId ? { ...p, isScreenSharing: false } : p));
-    };
-
-    socket.on('connect', handleConnect);
-    socket.on('user-joined', handleUserJoined);
-    socket.on('offer', handleOffer);
-    socket.on('answer', handleAnswer);
-    socket.on('ice-candidate', handleIceCandidate);
-    socket.on('user-left', handleUserLeft);
-    socket.on('chat-message', handleChatMessage);
-    socket.on('screen-share-start', handleScreenShareStart);
-    socket.on('screen-share-stop', handleScreenShareStop);
-    socket.on('pin-participant', ({ participantId }) => setPinnedParticipantId(participantId));
-    socket.on('unpin-participant', () => setPinnedParticipantId(null));
-    socket.on('ai-response', ({ user: aiUser, response, image, audio }) => {
-      setAiBotInUse(true);
-      setCurrentAIUser(aiUser);
-      setAiResponse(response);
-      if (image) setAiUploadedImage(image);
-      if (audio) setAiUploadedAudio(audio);
-    });
-    socket.on('ai-complete', handleAIComplete);
-
-    return () => {
-      socket.off('connect', handleConnect);
-      socket.off('user-joined', handleUserJoined);
-      // ... remove others
-    };
-  }, [createPeerConnection, roomId, user, getUsernameById, handleAIComplete]);
-
+  /* ------------------------------------------------------------------ */
+  /* Init */
+  /* ------------------------------------------------------------------ */
   useEffect(() => {
     if (isInitialized.current) return;
     isInitialized.current = true;
 
-    const initialize = async () => {
-      if (!user) {
-        toast.error('Please log in to join the meeting.');
-        navigate('/home');
-        return;
-      }
+    const init = async () => {
+      if (!user) return navigate('/login');
       try {
-        setIsLoading(true);
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 480 }, height: { ideal: 360 } },
-          audio: { echoCancellation: true, noiseSuppression: true }
+          video: { width: 640, height: 480, frameRate: 15 },
+          audio: true,
         });
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
 
-        socketRef.current = io(SERVER_URL, {
-          auth: { token: user.token },
-          transports: ['websocket']
-        });
-
+        socketRef.current = io(SERVER_URL, { auth: { token: user.token } });
         setupSocketListeners(socketRef.current);
-      } catch (error) {
-        toast.error('Failed to access camera/microphone');
+      } catch {
+        toast.error('Camera/mic access denied');
         navigate('/home');
       }
     };
-    initialize();
+    init();
   }, [user, navigate, setupSocketListeners]);
 
-  const replaceTrack = useCallback(async (newTrack, isScreenShare = false) => {
-    const localStream = localStreamRef.current;
-    if (!localStream) return;
-    const oldTrack = localStream.getVideoTracks()[0];
-    if (oldTrack) oldTrack.stop();
-    localStream.removeTrack(oldTrack);
-    localStream.addTrack(newTrack);
-    peerConnections.current.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (sender) sender.replaceTrack(newTrack);
-    });
-    setParticipants(prev => prev.map(p => p.isLocal ? { ...p, isScreenSharing } : p));
-    socketRef.current?.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop', { userId: socketRef.current.id });
-  }, []);
+  /* ------------------------------------------------------------------ */
+  /* Track replacement – FIXED */
+  /* ------------------------------------------------------------------ */
+  const replaceTrack = useCallback(
+    async (newTrack, isScreenShare = false) => {
+      const local = localStreamRef.current;
+      if (!local) return;
+      const old = local.getVideoTracks()[0];
+      if (old) old.stop();
+      local.removeTrack(old);
+      local.addTrack(newTrack);
+
+      peerConnections.current.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) sender.replaceTrack(newTrack);
+      });
+
+      setParticipants(prev =>
+        prev.map(p => (p.isLocal ? { ...p, isScreenSharing: isScreenShare } : p))
+      );
+      socketRef.current?.emit(isScreenShare ? 'screen-share-start' : 'screen-share-stop', {
+        userId: socketRef.current.id,
+      });
+    },
+    []
+  );
 
   const toggleAudio = () => {
-    const audioTrack = localStreamRef.current?.getAudioTracks()[0];
-    if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      setIsAudioMuted(!audioTrack.enabled);
-      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, audioEnabled: audioTrack.enabled } : p));
+    const track = localStreamRef.current?.getAudioTracks()[0];
+    if (track) {
+      track.enabled = !track.enabled;
+      setIsAudioMuted(!track.enabled);
+      setParticipants(prev => prev.map(p => (p.isLocal ? { ...p, audioEnabled: track.enabled } : p)));
     }
   };
 
   const toggleVideo = async () => {
-    if (!localStreamRef.current) return;
-    const videoTrack = localStreamRef.current.getVideoTracks()[0];
-    if (videoTrack.enabled) {
-      videoTrack.enabled = false;
+    if (isVideoEnabled) {
+      localStreamRef.current.getVideoTracks()[0].enabled = false;
       setIsVideoEnabled(false);
-      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: false } : p));
+      setParticipants(prev => prev.map(p => (p.isLocal ? { ...p, videoEnabled: false } : p)));
     } else {
-      const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      await replaceTrack(newVideoTrack);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      await replaceTrack(stream.getVideoTracks()[0]);
       setIsVideoEnabled(true);
-      setParticipants(prev => prev.map(p => p.isLocal ? { ...p, videoEnabled: true } : p));
+      setParticipants(prev => prev.map(p => (p.isLocal ? { ...p, videoEnabled: true } : p)));
     }
   };
 
@@ -727,38 +625,16 @@ const Meeting = () => {
       setIsSharingScreen(false);
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
     } else {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      screenStreamRef.current = screenStream;
-      const screenTrack = screenStream.getVideoTracks()[0];
-      await replaceTrack(screenTrack, true);
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenStreamRef.current = stream;
+      const track = stream.getVideoTracks()[0];
+      await replaceTrack(track, true);
       setIsSharingScreen(true);
-      screenTrack.onended = () => handleScreenShare();
+      track.onended = () => handleScreenShare();
     }
   };
 
-  const handleSwipe = (direction) => {
-    setGridPage(prev => Math.max(0, Math.min(prev + direction, totalGridPages - 1)));
-  };
-
-  const handleToolbarMouseDown = (e) => {
-    const toolbar = e.currentTarget.parentElement;
-    const rect = toolbar.getBoundingClientRect();
-    dragInfo.current = {
-      isDragging: true,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
-    };
-    window.addEventListener('mousemove', handleToolbarMouseMove);
-    window.addEventListener('mouseup', handleToolbarMouseUp);
-  };
-
-  const handleExitRoom = () => {
-    socketRef.current?.emit('leave-room');
-    navigate('/home');
-  };
-
-  // FIXED: Use socketId for pinning
-  const handlePinParticipant = (socketId) => {
+  const handlePinParticipant = socketId => {
     if (pinnedParticipantId === socketId) {
       setPinnedParticipantId(null);
       socketRef.current?.emit('unpin-participant');
@@ -768,7 +644,9 @@ const Meeting = () => {
     }
   };
 
-  if (isLoading) return <div className="pro-meeting-page flex items-center justify-center"><LoadingSpinner size="large" /></div>;
+  const handleSwipe = dir => setGridPage(p => Math.max(0, Math.min(p + dir, totalGridPages - 1)));
+
+  if (isLoading) return <LoadingSpinner />;
 
   return (
     <div className="pro-meeting-page">
@@ -780,12 +658,12 @@ const Meeting = () => {
             realParticipants={allParticipants}
             isSomeoneScreenSharing={isSomeoneScreenSharing}
             toolbarPosition={toolbarPosition}
+            setToolbarPosition={setToolbarPosition}
             currentTool={currentTool}
             currentBrushSize={currentBrushSize}
-            handleToolbarMouseDown={handleToolbarMouseDown}
-            handleMouseDown={handleMouseDown}
-            handleMouseMove={handleMouseMove}
-            handleMouseUp={handleMouseUp}
+            annotationCanvasRef={annotationCanvasRef}
+            remoteDrawingStates={remoteDrawingStates}
+            drawingStateRef={drawingStateRef}
             handleSwipe={handleSwipe}
             gridPage={gridPage}
             totalGridPages={totalGridPages}
@@ -793,10 +671,10 @@ const Meeting = () => {
             handlePinParticipant={handlePinParticipant}
             isMirroringBrowser={isMirroringBrowser}
             socketRef={socketRef}
-            handleExitRoom={handleExitRoom}
+            handleExitRoom={() => navigate('/home')}
             aiCanvasRef={aiCanvasRef}
             setGridPage={setGridPage}
-            aiBotavnoInUse={aiBotInUse}
+            aiBotInUse={aiBotInUse}
             currentAIUser={currentAIUser}
             aiResponse={aiResponse}
             aiUploadedImage={aiUploadedImage}
@@ -806,18 +684,18 @@ const Meeting = () => {
           />
         </div>
 
-        {/* Chat & Sidebars unchanged */}
+        {/* Chat & sidebars – unchanged */}
         {isChatOpen && (
           <div className="pro-chat-sidebar-overlay" onClick={() => setIsChatOpen(false)}>
             <div className="pro-chat-sidebar" onClick={e => e.stopPropagation()}>
               <Chat
                 messages={messages}
-                onSendMessage={(message) => {
-                  const payload = { socketId: socketRef.current.id, username: user.username, message, timestamp: Date.now() };
+                onSendMessage={msg => {
+                  const payload = { socketId: socketRef.current.id, username: user.username, message: msg, timestamp: Date.now() };
                   socketRef.current?.emit('send-chat-message', payload);
                   setMessages(prev => [...prev, payload]);
                 }}
-                currentUser={{ socketId: socketRef.current.id, username: user.username }}
+                currentUser={{ socketId: socketRef.current?.id, username: user.username }}
                 onClose={() => setIsChatOpen(false)}
               />
             </div>
@@ -833,13 +711,11 @@ const Meeting = () => {
                   isParticipantsOpen={isParticipantsOpen}
                   messages={messages}
                   user={user}
-                  onSendMessage={(p) => { socketRef.current?.emit('send-chat-message', p); setMessages(prev => [...prev, p]); }}
+                  onSendMessage={p => { socketRef.current?.emit('send-chat-message', p); setMessages(prev => [...prev, p]); }}
                   onCloseChat={() => setIsChatOpen(false)}
                   participants={allParticipants}
                   onCloseParticipants={() => setIsParticipantsOpen(false)}
                   roomId={roomId}
-                  getUserAvatar={getUserAvatar}
-                  AIAvatar={AIAvatar}
                 />
               </div>
             )}
@@ -875,7 +751,7 @@ const Meeting = () => {
         setIsParticipantsOpen={setIsParticipantsOpen}
         isAIPopupOpen={isAIPopupOpen}
         setIsAIPopupOpen={setIsAIPopupOpen}
-        handleExitRoom={handleExitRoom}
+        handleExitRoom={() => navigate('/home')}
         onCopyInvite={copyInviteLink}
       />
 

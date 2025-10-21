@@ -1043,4 +1043,140 @@
 .pro-pagination-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+
+  /* Chat Sidebar Styles */
+.pro-chat-sidebar-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 400px;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: flex-end;
+  animation: fadeInRight 0.3s ease-out;
+}
+
+@keyframes fadeInRight {
+  from {
+    background: rgba(0, 0, 0, 0);
+    transform: translateX(100%);
+  }
+  to {
+    background: rgba(0, 0, 0, 0.5);
+    transform: translateX(0);
+  }
+}
+
+.pro-chat-sidebar {
+  width: 100%;
+  height: 100%;
+  background: #0f1115;
+  border-left: 1px solid #2a2f3a;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Adjust main container when chat is open */
+.pro-mainarea-container.with-chat-sidebar {
+  margin-right: 400px;
+  transition: margin-right 0.3s ease-out;
+}
+
+/* Ensure the chat container fills the sidebar */
+.pro-chat-sidebar .chat-container {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+}
+
+/* Responsive design for chat sidebar */
+@media (max-width: 1024px) {
+  .pro-chat-sidebar-overlay {
+    width: 350px;
+  }
+  
+  .pro-mainarea-container.with-chat-sidebar {
+    margin-right: 350px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pro-chat-sidebar-overlay {
+    width: 100%;
+  }
+  
+  .pro-mainarea-container.with-chat-sidebar {
+    margin-right: 0;
+    transform: translateX(-100%);
+  }
+  
+  .pro-chat-sidebar {
+    width: 100%;
+  }
+}
+
+/* Enhanced Chat Container for Sidebar */
+.pro-chat-sidebar .chat-container {
+  background: #0f1115;
+}
+
+.pro-chat-sidebar .chat-header {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border-bottom: 1px solid #334155;
+  padding: 20px;
+}
+
+.pro-chat-sidebar .chat-messages {
+  flex: 1;
+  padding: 20px;
+  background: #0f1115;
+}
+
+.pro-chat-sidebar .chat-form {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border-top: 1px solid #334155;
+  padding: 20px;
+}
+
+/* Larger chat messages in sidebar */
+.pro-chat-sidebar .chat-message {
+  max-width: 85%;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+
+.pro-chat-sidebar .message-content {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.pro-chat-sidebar .chat-input {
+  font-size: 14px;
+  padding: 12px 16px;
+  min-height: 44px;
+}
+
+/* Backdrop click to close */
+.pro-chat-sidebar-overlay {
+  cursor: pointer;
+}
+
+.pro-chat-sidebar {
+  cursor: default;
 }

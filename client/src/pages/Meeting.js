@@ -957,7 +957,7 @@ const Meeting = () => {
         onCopyInvite={copyInviteLink}
       />
       <div className="pro-meeting-body">
-        <div className="pro-mainarea-container">
+        <div className={`pro-mainarea-container ${isChatOpen ? 'with-chat-sidebar' : ''}`}>
           <MeetingMainArea
             participants={allParticipants}
             isSomeoneScreenSharing={isSomeoneScreenSharing}
@@ -985,32 +985,34 @@ const Meeting = () => {
           />
         </div>
         
-        {/* Popup Sidebars */}
-        {(isChatOpen || isParticipantsOpen || isAIPopupOpen) && (
+        {/* Chat Sidebar - Fixed on the right */}
+        {isChatOpen && (
+          <div className="pro-chat-sidebar-overlay">
+            <div className="pro-chat-sidebar" onClick={(e) => e.stopPropagation()}>
+              <Chat
+                messages={messages}
+                onSendMessage={(message) => {
+                  const payload = {
+                    userId: socketRef.current?.id,
+                    username: user.username,
+                    message: message,
+                    timestamp: Date.now()
+                  };
+                  socketRef.current?.emit('send-chat-message', payload);
+                }}
+                currentUser={user}
+                onClose={() => setIsChatOpen(false)}
+              />
+            </div>
+          </div>
+        )}
+        
+        {/* Popup Sidebars for Participants and AI */}
+        {(isParticipantsOpen || isAIPopupOpen) && (
           <div className="pro-sidebar-overlay" onClick={() => {
-            if (isChatOpen) setIsChatOpen(false);
             if (isParticipantsOpen) setIsParticipantsOpen(false);
             if (isAIPopupOpen) setIsAIPopupOpen(false);
           }}>
-            {isChatOpen && (
-              <div className="pro-sidebar-popup chat-sidebar" onClick={(e) => e.stopPropagation()}>
-                <Chat
-                  messages={messages}
-                  onSendMessage={(message) => {
-                    const payload = {
-                      userId: socketRef.current?.id,
-                      username: user.username,
-                      message: message,
-                      timestamp: Date.now()
-                    };
-                    socketRef.current?.emit('send-chat-message', payload);
-                  }}
-                  currentUser={user}
-                  onClose={() => setIsChatOpen(false)}
-                />
-              </div>
-            )}
-            
             {isParticipantsOpen && (
               <div className="pro-sidebar-popup" onClick={(e) => e.stopPropagation()}>
                 <MeetingSidebar

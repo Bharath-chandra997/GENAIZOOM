@@ -25,6 +25,74 @@ const getColorForId = (id) => {
   return `hsl(${hue}, 90%, 60%)`;
 };
 
+// Function to get user avatar from Google Auth
+const getUserAvatar = (user, size = 40) => {
+  if (user?.profilePicture) {
+    return user.profilePicture;
+  }
+  
+  // Fallback to initials with colored background
+  const initials = user?.username?.charAt(0)?.toUpperCase() || 'U';
+  const color = getColorForId(user?.userId || user?.username);
+  
+  return (
+    <div 
+      className="user-avatar"
+      style={{
+        backgroundColor: color,
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: size * 0.4
+      }}
+    >
+      {initials}
+    </div>
+  );
+};
+
+// AI Avatar component
+const AIAvatar = ({ size = 40 }) => {
+  return (
+    <div 
+      className="ai-avatar"
+      style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: size * 0.35,
+        border: '2px solid #10b981',
+        position: 'relative'
+      }}
+    >
+      🤖
+      <div 
+        style={{
+          position: 'absolute',
+          bottom: -2,
+          right: -2,
+          width: 12,
+          height: 12,
+          backgroundColor: '#10b981',
+          borderRadius: '50%',
+          border: '2px solid white'
+        }}
+      />
+    </div>
+  );
+};
+
 const Meeting = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
@@ -63,7 +131,8 @@ const Meeting = () => {
     isAI: true,
     stream: null,
     socketId: 'ai-assistant',
-    color: '#3B82F6'
+    color: '#3B82F6',
+    profilePicture: null // AI has no profile picture
   });
 
   // Refs
@@ -95,10 +164,17 @@ const Meeting = () => {
   // Detect if browser mirrors front camera tracks (e.g., iOS Safari)
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
-  // All participants including AI
+  // All participants including AI (but we'll separate them for display)
   const allParticipants = useMemo(() => {
+    return [...participants];
+  }, [participants]);
+
+  const participantsWithAI = useMemo(() => {
     return [aiParticipant, ...participants];
   }, [aiParticipant, participants]);
+
+  // Real participants count (excluding AI)
+  const realParticipantsCount = useMemo(() => participants.length, [participants]);
 
   // Derived State
   const defaultMainParticipant = useMemo(() => {
@@ -114,7 +190,7 @@ const Meeting = () => {
     [allParticipants]
   );
 
-  const displayParticipants = allParticipants;
+  const displayParticipants = participantsWithAI;
   const totalGridPages = useMemo(() => Math.max(1, Math.ceil(displayParticipants.length / 4)), [displayParticipants.length]);
 
   const getUsernameById = useCallback((userId) => {
@@ -140,7 +216,8 @@ const Meeting = () => {
       });
   }, [roomId]);
 
-  // AI Animation
+  // ... (rest of your existing functions remain the same until the return statement)
+    // AI Animation
   const initializeAiAnimation = useCallback(() => {
     const canvas = aiCanvasRef.current;
     if (!canvas) return;
@@ -953,13 +1030,15 @@ const Meeting = () => {
     <div className="pro-meeting-page">
       <MeetingHeader 
         roomId={roomId} 
-        participants={allParticipants} 
+        participants={allParticipants} // Pass only real participants
+        realParticipantsCount={realParticipantsCount} // Pass the count
         onCopyInvite={copyInviteLink}
       />
       <div className="pro-meeting-body">
         <div className={`pro-mainarea-container ${isChatOpen ? 'with-chat-sidebar' : ''}`}>
           <MeetingMainArea
-            participants={allParticipants}
+            participants={displayParticipants} // Pass participants with AI for display
+            realParticipants={allParticipants} // Pass real participants for counting
             isSomeoneScreenSharing={isSomeoneScreenSharing}
             toolbarPosition={toolbarPosition}
             currentTool={currentTool}
@@ -982,38 +1061,38 @@ const Meeting = () => {
             aiResponse={aiResponse}
             aiUploadedImage={aiUploadedImage}
             aiUploadedAudio={aiUploadedAudio}
+            getUserAvatar={getUserAvatar}
+            AIAvatar={AIAvatar}
           />
         </div>
         
         {/* Chat Sidebar - Fixed on the right */}
-        {/* Chat Sidebar - Fixed on the right */}
-{isChatOpen && (
-  <div className="pro-chat-sidebar-overlay" onClick={() => setIsChatOpen(false)}>
-    <div className="pro-chat-sidebar" onClick={(e) => e.stopPropagation()}>
-      <Chat
-        messages={messages}
-        onSendMessage={(message) => {
-          const payload = {
-            userId: socketRef.current?.id,
-            username: user.username,
-            message: message,
-            timestamp: Date.now(),
-            isSystemMessage: false
-          };
-          console.log('Sending chat message:', payload); // Debug log
-          socketRef.current?.emit('send-chat-message', payload);
-          // Add the message to local state immediately
-          setMessages(prev => [...prev, payload]);
-        }}
-        currentUser={{
-          userId: socketRef.current?.id,
-          username: user.username
-        }}
-        onClose={() => setIsChatOpen(false)}
-      />
-    </div>
-  </div>
-)}
+        {isChatOpen && (
+          <div className="pro-chat-sidebar-overlay" onClick={() => setIsChatOpen(false)}>
+            <div className="pro-chat-sidebar" onClick={(e) => e.stopPropagation()}>
+              <Chat
+                messages={messages}
+                onSendMessage={(message) => {
+                  const payload = {
+                    userId: socketRef.current?.id,
+                    username: user.username,
+                    message: message,
+                    timestamp: Date.now(),
+                    isSystemMessage: false
+                  };
+                  console.log('Sending chat message:', payload);
+                  socketRef.current?.emit('send-chat-message', payload);
+                  setMessages(prev => [...prev, payload]);
+                }}
+                currentUser={{
+                  userId: socketRef.current?.id,
+                  username: user.username
+                }}
+                onClose={() => setIsChatOpen(false)}
+              />
+            </div>
+          </div>
+        )}
         
         {/* Popup Sidebars for Participants and AI */}
         {(isParticipantsOpen || isAIPopupOpen) && (
@@ -1033,9 +1112,12 @@ const Meeting = () => {
                     setMessages((prev) => [...prev, payload]);
                   }}
                   onCloseChat={() => setIsChatOpen(false)}
-                  participants={allParticipants}
+                  participants={allParticipants} // Pass only real participants to sidebar
+                  aiParticipant={aiParticipant} // Pass AI separately
                   onCloseParticipants={() => setIsParticipantsOpen(false)}
                   roomId={roomId}
+                  getUserAvatar={getUserAvatar}
+                  AIAvatar={AIAvatar}
                 />
               </div>
             )}
@@ -1091,4 +1173,5 @@ const Meeting = () => {
   );
 };
 
+export { getUserAvatar, AIAvatar };
 export default Meeting;

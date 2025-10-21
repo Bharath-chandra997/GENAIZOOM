@@ -9,7 +9,7 @@ import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import AIPopup from './AIPopup';
-import Chat from './Chat';
+import Chat from '../components/Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
 import './Meeting.css';
 

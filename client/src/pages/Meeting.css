@@ -349,7 +349,7 @@
   justify-content: space-between;
 }
 
-/* Responsive Video Grid */
+/* Responsive Video Grid - Fixed to 4 frames max per page */
 .pro-mainarea-grid {
   position: relative;
   flex: 1 1 auto;
@@ -358,6 +358,7 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
+  overflow: hidden;
 }
 
 .pro-video-grid {
@@ -366,43 +367,22 @@
   width: 100%;
   height: 100%;
   max-height: 100%;
-  place-items: center;
+  place-items: stretch;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
 }
 
-/* Grid layouts for different participant counts */
-.pro-video-grid--1 {
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr;
-  max-width: 1000px;
+/* Ensure exactly 4 frames, with responsive sizing */
+.pro-video-grid-item {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.pro-video-grid--2 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr;
-  max-width: 1000px;
-}
-
-.pro-video-grid--3 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  grid-template-areas: 
-    "video1 video2"
-    "video3 video3";
-  max-width: 1000px;
-}
-
-.pro-video-grid--4 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  max-width: 1000px;
-}
-
-.pro-video-grid--5-plus {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  grid-auto-rows: 1fr;
-}
-
-/* Video Frame Styles - Wider aspect ratio */
+/* Video Frame Styles - Responsive and capped size */
 .pro-video-frame {
   position: relative;
   background: #1a1d24;
@@ -410,11 +390,14 @@
   overflow: hidden;
   width: 100%;
   height: 100%;
+  max-height: 300px; /* Cap AI and other frames */
   aspect-ratio: 16/9;
   border: 2px solid transparent;
   transition: all 0.2s ease;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   animation: videoFrameAppear 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
 }
 
 .pro-video-frame--active {
@@ -431,11 +414,20 @@
   border-color: #f59e0b;
 }
 
+.pro-video-frame--ai {
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  border: 2px solid #3b82f6;
+  position: relative;
+  overflow: hidden;
+  max-height: 300px; /* Ensure AI frame not too big */
+}
+
 .pro-video-container {
   width: 100%;
   height: 100%;
   position: relative;
   background: #000;
+  flex: 1;
 }
 
 .pro-video-element {
@@ -517,7 +509,7 @@
   background: #6b7280;
 }
 
-/* Grid Pagination */
+/* Grid Pagination - Enhanced for swiping */
 .pro-grid-pagination {
   position: absolute;
   left: 0;
@@ -528,6 +520,7 @@
   justify-content: center;
   gap: 8px;
   z-index: 10;
+  touch-action: pan-y; /* Allow vertical scroll, prevent horizontal interference */
 }
 
 .pro-grid-pagination button {
@@ -540,6 +533,7 @@
   font-size: 12px;
   font-weight: 500;
   transition: background 0.2s ease;
+  touch-action: manipulation;
 }
 
 .pro-grid-pagination button:hover {
@@ -564,6 +558,7 @@
   background: #64748b;
   transition: all 0.2s ease;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .pro-grid-dot:hover {
@@ -573,6 +568,19 @@
 .pro-grid-dot--active {
   background: #ffffff;
   transform: scale(1.2);
+}
+
+/* Touch/Swipe Support for Grid */
+.pro-mainarea-grid {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pro-mainarea-grid::-webkit-scrollbar {
+  display: none;
 }
 
 /* Screen Share View */
@@ -590,6 +598,7 @@
   border-radius: 8px;
   overflow: hidden;
   position: relative;
+  max-height: 600px; /* Responsive cap */
 }
 
 .pro-screenshare-participants {
@@ -611,7 +620,7 @@
   position: relative;
 }
 
-/* AI Participant Styles */
+/* AI Participant Styles - Responsive sizing */
 .pro-video-frame--ai {
   background: linear-gradient(135deg, #0f172a, #1e293b);
   border: 2px solid #3b82f6;
@@ -881,7 +890,7 @@
   }
 }
 
-/* Responsive Design */
+/* Responsive Design - Adjust for screen sizes */
 @media (max-width: 1024px) {
   .pro-mainarea-container {
     padding: 12px;
@@ -891,9 +900,12 @@
     max-width: 380px;
   }
   
-  .pro-video-grid--4 {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
+  .pro-video-grid {
+    gap: 8px;
+  }
+  
+  .pro-video-frame {
+    max-height: 250px;
   }
 }
 
@@ -916,19 +928,19 @@
     border-radius: 8px;
   }
   
-  .pro-video-grid--3,
-  .pro-video-grid--4 {
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(auto-fit, minmax(200px, 1fr));
-    grid-template-areas: none;
+  .pro-video-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(2, 1fr);
+    gap: 6px;
   }
   
   .pro-video-frame {
-    min-height: 200px;
+    max-height: 200px;
   }
   
   .pro-video-frame--ai {
     border-width: 1px;
+    max-height: 200px;
   }
   
   .pro-ai-status {
@@ -961,6 +973,10 @@
   .pro-ai-popup-content {
     padding: 16px;
   }
+
+  .pro-screenshare-main {
+    max-height: 400px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -977,12 +993,11 @@
   }
   
   .pro-video-grid {
-    gap: 8px;
+    gap: 4px;
   }
   
   .pro-video-frame {
-    min-height: 160px;
-    border-radius: 6px;
+    max-height: 150px;
   }
   
   .pro-participant-info {
@@ -1005,6 +1020,25 @@
     width: 18px;
     height: 18px;
     font-size: 9px;
+  }
+
+  .pro-grid-pagination {
+    bottom: 8px;
+    gap: 4px;
+  }
+
+  .pro-grid-pagination button {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .pro-grid-dots {
+    gap: 4px;
+  }
+
+  .pro-grid-dot {
+    width: 6px;
+    height: 6px;
   }
 }
 
@@ -1043,8 +1077,8 @@
 .pro-pagination-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-
 }
+
 /* Chat Sidebar Styles */
 .pro-chat-sidebar-overlay {
   position: fixed;
@@ -1197,7 +1231,8 @@
     width: 100%;
   }
 }
-/* Meeting Header Styles */
+
+/* Meeting Header Styles - Invite button at top */
 .pro-meeting-header {
   display: flex;
   align-items: center;
@@ -1206,6 +1241,8 @@
   background: linear-gradient(135deg, #1e293b, #0f172a);
   border-bottom: 1px solid #334155;
   color: white;
+  position: relative;
+  z-index: 10;
 }
 
 .pro-meeting-header__left {
@@ -1251,6 +1288,10 @@
   cursor: pointer;
   font-weight: 500;
   transition: all 0.2s ease;
+  position: absolute;
+  top: 12px;
+  right: 24px;
+  z-index: 20;
 }
 
 .pro-invite-button:hover {

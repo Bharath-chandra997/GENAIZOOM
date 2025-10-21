@@ -9,6 +9,7 @@ import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import AIPopup from './AIPopup';
+import Chat from './Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
 import './Meeting.css';
 
@@ -108,7 +109,6 @@ const Meeting = () => {
     return allParticipants[0] || null;
   }, [allParticipants]);
 
-
   const isSomeoneScreenSharing = useMemo(() =>
     allParticipants.some(p => p.isScreenSharing),
     [allParticipants]
@@ -149,7 +149,6 @@ const Meeting = () => {
     let particles = [];
     let time = 0;
 
-    // Create particles for AI visualization
     const createParticles = () => {
       particles = [];
       for (let i = 0; i < 30; i++) {
@@ -173,23 +172,19 @@ const Meeting = () => {
       time += 0.02;
 
       particles.forEach((particle, index) => {
-        // Update particle position
         particle.x += Math.cos(particle.angle + time) * particle.speed;
         particle.y += Math.sin(particle.angle + time) * particle.speed;
 
-        // Wrap around edges
         if (particle.x < 0) particle.x = canvas.width;
         if (particle.x > canvas.width) particle.x = 0;
         if (particle.y < 0) particle.y = canvas.height;
         if (particle.y > canvas.height) particle.y = 0;
 
-        // Draw particle
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
         ctx.fillStyle = particle.color;
         ctx.fill();
 
-        // Draw connections
         particles.slice(index + 1).forEach(otherParticle => {
           const dx = particle.x - otherParticle.x;
           const dy = particle.y - otherParticle.y;
@@ -206,19 +201,16 @@ const Meeting = () => {
         });
       });
 
-      // Draw AI text
       ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.fillStyle = 'rgba(96, 165, 250, 0.9)';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('AI Assistant', canvas.width / 2, canvas.height / 2 - 10);
 
-      // Draw status text
       ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.fillStyle = aiBotInUse ? 'rgba(239, 68, 68, 0.7)' : 'rgba(96, 165, 250, 0.7)';
       ctx.fillText(aiBotInUse ? 'In use by ' + currentAIUser : 'Ready to help', canvas.width / 2, canvas.height / 2 + 15);
 
-      // Draw pulsing circle
       ctx.beginPath();
       ctx.arc(canvas.width / 2, canvas.height / 2, 25 + Math.sin(time * 2) * 3, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(96, 165, 250, ${0.5 + Math.sin(time) * 0.3})`;
@@ -236,7 +228,6 @@ const Meeting = () => {
       }
     };
 
-    // Initialize
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
     animate();
@@ -249,7 +240,6 @@ const Meeting = () => {
     };
   }, [aiBotInUse, currentAIUser]);
 
-  // Initialize AI when component mounts
   useEffect(() => {
     const cleanup = initializeAiAnimation();
     return cleanup;
@@ -269,12 +259,10 @@ const Meeting = () => {
     setAiUploadedImage(imageFile);
     setAiUploadedAudio(audioFile);
 
-    // Simulate AI processing
     setTimeout(() => {
       const response = `Hello ${user.username}! I've processed your ${imageFile ? 'image' : ''}${imageFile && audioFile ? ' and ' : ''}${audioFile ? 'audio' : ''}. This is a simulated AI response. In a real implementation, this would connect to an AI service.`;
       setAiResponse(response);
       
-      // Broadcast to all participants
       socketRef.current?.emit('ai-response', {
         user: user.username,
         response: response,
@@ -293,7 +281,6 @@ const Meeting = () => {
     socketRef.current?.emit('ai-complete');
   }, []);
 
-  // Add the missing functions that were causing errors
   const handleToolbarMouseMove = useCallback((e) => {
     if (dragInfo.current.isDragging) {
       setToolbarPosition({
@@ -429,7 +416,6 @@ const Meeting = () => {
     }
   }, []);
 
-  // Add the missing handleIceCandidate function
   const handleIceCandidate = useCallback(({ from, candidate }) => {
     const pc = peerConnections.current.get(from);
     if (pc) {
@@ -635,33 +621,31 @@ const Meeting = () => {
       }
     };
 
-  // In Meeting.jsx, update the handleUserLeft function in setupSocketListeners:
-const handleUserLeft = ({ userId, username }) => {
-  const pc = peerConnections.current.get(userId);
-  if (pc) {
-    pc.getSenders().forEach(sender => sender.track && sender.track.stop());
-    pc.close();
-    peerConnections.current.delete(userId);
-  }
-  setParticipants((prev) => {
-    const updated = prev.filter((p) => p.userId !== userId);
-    if (pinnedParticipantId === userId) setPinnedParticipantId(null);
-    return updated;
-  });
-  
-  // Show toast with username at bottom center - FIXED: Use proper username
-  const leftUser = participants.find(p => p.userId === userId);
-  const displayName = leftUser?.username || username || 'A user';
-  
-  toast.error(`${displayName} has left the meeting`, {
-    position: "bottom-center",
-    autoClose: 3000,
-    style: {
-      background: '#ef4444',
-      color: 'white',
-    }
-  });
-};
+    const handleUserLeft = ({ userId, username }) => {
+      const pc = peerConnections.current.get(userId);
+      if (pc) {
+        pc.getSenders().forEach(sender => sender.track && sender.track.stop());
+        pc.close();
+        peerConnections.current.delete(userId);
+      }
+      setParticipants((prev) => {
+        const updated = prev.filter((p) => p.userId !== userId);
+        if (pinnedParticipantId === userId) setPinnedParticipantId(null);
+        return updated;
+      });
+      
+      const leftUser = participants.find(p => p.userId === userId);
+      const displayName = leftUser?.username || username || 'A user';
+      
+      toast.error(`${displayName} has left the meeting`, {
+        position: "bottom-center",
+        autoClose: 3000,
+        style: {
+          background: '#ef4444',
+          color: 'white',
+        }
+      });
+    };
 
     const handleChatMessage = (payload) => setMessages(prev => [...prev, payload]);
 
@@ -954,7 +938,6 @@ const handleUserLeft = ({ userId, username }) => {
     window.addEventListener('mouseup', handleToolbarMouseUp);
   };
 
-
   const handleExitRoom = () => {
     try {
       socketRef.current?.emit('leave-room', { userId: socketRef.current?.id, username: user.username });
@@ -1010,20 +993,20 @@ const handleUserLeft = ({ userId, username }) => {
             if (isAIPopupOpen) setIsAIPopupOpen(false);
           }}>
             {isChatOpen && (
-              <div className="pro-sidebar-popup" onClick={(e) => e.stopPropagation()}>
-                <MeetingSidebar
-                  isChatOpen={isChatOpen}
-                  isParticipantsOpen={isParticipantsOpen}
+              <div className="pro-sidebar-popup chat-sidebar" onClick={(e) => e.stopPropagation()}>
+                <Chat
                   messages={messages}
-                  user={user}
-                  onSendMessage={(payload) => {
+                  onSendMessage={(message) => {
+                    const payload = {
+                      userId: socketRef.current?.id,
+                      username: user.username,
+                      message: message,
+                      timestamp: Date.now()
+                    };
                     socketRef.current?.emit('send-chat-message', payload);
-                    setMessages((prev) => [...prev, payload]);
                   }}
-                  onCloseChat={() => setIsChatOpen(false)}
-                  participants={allParticipants}
-                  onCloseParticipants={() => setIsParticipantsOpen(false)}
-                  roomId={roomId}
+                  currentUser={user}
+                  onClose={() => setIsChatOpen(false)}
                 />
               </div>
             )}

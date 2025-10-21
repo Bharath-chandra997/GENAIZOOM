@@ -1044,7 +1044,8 @@
   opacity: 0.5;
   cursor: not-allowed;
 
-  /* Chat Sidebar Styles */
+}
+/* Chat Sidebar Styles */
 .pro-chat-sidebar-overlay {
   position: fixed;
   top: 0;

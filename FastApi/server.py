@@ -92,8 +92,8 @@ async def predict(
         
         # FIXED: Correct param names for this Space
         result = client.predict(
-            image=file(image_input),
-            audio=file(audio_input),
+            image_input=file(image_path),
+            audio_input=file(audio_path),
             api_name="/predict"
         )
 

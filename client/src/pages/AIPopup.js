@@ -2,198 +2,120 @@ import React, { useState, useRef } from 'react';
 import { toast } from 'react-toastify';
 import './AIPopup.css';
 
-const AIPopup = ({ 
-  onClose, 
-  onAIRequest, 
-  onAIComplete, 
-  aiBotInUse, 
-  currentAIUser, 
-  aiResponse, 
-  aiUploadedImage, 
+const AIPopup = ({
+  onClose,
+  onAIRequest,
+  onAIComplete,
+  aiResponse,
+  aiUploadedImage,
   aiUploadedAudio,
-  user 
+  user,
+  isAIProcessing,
+  currentUploader,
 }) => {
   const [imageFile, setImageFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
   const audioInputRef = useRef(null);
 
-  const handleImageUpload = (e) => {
+  const handleImageChange = (e) => {
     const file = e.target.files[0];
-    if (file && file.type.startsWith('image/')) {
+    if (file) {
       setImageFile(file);
     }
   };
 
-  const handleAudioUpload = (e) => {
+  const handleAudioChange = (e) => {
     const file = e.target.files[0];
-    if (file && file.type.startsWith('audio/')) {
+    if (file) {
       setAudioFile(file);
     }
   };
 
   const handleSubmit = async () => {
-    if (aiBotInUse && currentAIUser !== user.username) {
-      toast.error('AI Bot is currently in use by another user', {
-        position: "bottom-center"
+    if (!imageFile || !audioFile) {
+      toast.error('Please upload both an image and an audio file.', {
+        position: 'bottom-center',
       });
       return;
     }
-
-    if (!imageFile && !audioFile) {
-      alert('Please upload an image or audio file');
-      return;
-    }
-
-    setIsProcessing(true);
     await onAIRequest(imageFile, audioFile);
-    setIsProcessing(false);
-  };
-
-  const handleComplete = () => {
     setImageFile(null);
     setAudioFile(null);
-    onAIComplete();
+    if (imageInputRef.current) imageInputRef.current.value = '';
+    if (audioInputRef.current) audioInputRef.current.value = '';
   };
 
-  const removeImage = () => {
-    setImageFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const removeAudio = () => {
-    setAudioFile(null);
-    if (audioInputRef.current) {
-      audioInputRef.current.value = '';
-    }
-  };
+  const isUploader = currentUploader === user.userId;
 
   return (
-    <div className="pro-sidebar-container">
-      <div className="pro-sidebar">
-        <div className="pro-sidebar-header">
-          <h3 className="pro-sidebar-title">AI Assistant</h3>
-          <button className="pro-sidebar-close" onClick={onClose}>×</button>
+    <div className="ai-popup">
+      <div className="ai-popup-header">
+        <h2>AI Assistant</h2>
+        <button className="ai-popup-close" onClick={onClose}>
+          &times;
+        </button>
+      </div>
+      <div className="ai-popup-content">
+        <div className="ai-upload-section">
+          <label>Upload Image (JPEG/PNG):</label>
+          <input
+            type="file"
+            accept="image/jpeg,image/png"
+            onChange={handleImageChange}
+            disabled={isAIProcessing || !!currentUploader}
+            ref={imageInputRef}
+          />
         </div>
-
-        <div className="pro-sidebar-content">
-          <div className="pro-ai-popup-content">
-            {/* Status Section */}
-            <div className="pro-ai-status-section">
-              <div className={`pro-ai-status-indicator ${aiBotInUse ? 'in-use' : 'available'}`}>
-                <div className="pro-ai-status-dot"></div>
-                <span>
-                  {aiBotInUse 
-                    ? `In use by ${currentAIUser}`
-                    : 'Available'
-                  }
-                </span>
-              </div>
-            </div>
-
-            {/* Upload Section */}
-            {!aiBotInUse && !aiResponse && (
-              <div className="pro-ai-upload-section">
-                <div className="pro-ai-upload-area">
-                  <h4>Upload Image</h4>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="pro-ai-file-input"
-                  />
-                  {imageFile && (
-                    <div className="pro-ai-upload-preview">
-                      <img src={URL.createObjectURL(imageFile)} alt="Preview" />
-                      <button onClick={removeImage} className="pro-ai-remove-btn">Remove</button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pro-ai-upload-area">
-                  <h4>Upload Audio</h4>
-                  <input
-                    ref={audioInputRef}
-                    type="file"
-                    accept="audio/*"
-                    onChange={handleAudioUpload}
-                    className="pro-ai-file-input"
-                  />
-                  {audioFile && (
-                    <div className="pro-ai-upload-preview">
-                      <audio controls src={URL.createObjectURL(audioFile)} />
-                      <button onClick={removeAudio} className="pro-ai-remove-btn">Remove</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Submit Button - Always visible when not in use */}
-            {!aiBotInUse && !aiResponse && (
-              <div className="pro-ai-submit-bar">
-                <button 
-                  onClick={handleSubmit}
-                  disabled={isProcessing || (!imageFile && !audioFile)}
-                  className="pro-ai-submit-btn"
-                >
-                  {isProcessing ? 'Processing...' : 'Process with AI'}
-                </button>
-              </div>
-            )}
-
-            {/* Response Section */}
-            {aiResponse && (
-              <div className="pro-ai-response-section">
-                <h4>AI Response</h4>
-                <div className="pro-ai-response-content">
-                  <div className="pro-ai-user-info">
-                    Requested by: <strong>{currentAIUser}</strong>
-                  </div>
-                  
-                  {aiUploadedImage && (
-                    <div className="pro-ai-uploaded-media">
-                      <img src={aiUploadedImage} alt="Uploaded" />
-                    </div>
-                  )}
-                  
-                  {aiUploadedAudio && (
-                    <div className="pro-ai-uploaded-media">
-                      <audio controls src={aiUploadedAudio} />
-                    </div>
-                  )}
-                  
-                  <div className="pro-ai-response-text">
-                    {aiResponse}
-                  </div>
-
-                  {currentAIUser === user.username && (
-                    <button 
-                      onClick={handleComplete}
-                      className="pro-ai-complete-btn"
-                    >
-                      Complete Session
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Waiting Section */}
-            {aiBotInUse && !aiResponse && (
-              <div className="pro-ai-waiting-section">
-                <div className="pro-ai-loading">
-                  <div className="pro-ai-spinner"></div>
-                  <p>AI is processing the request from {currentAIUser}...</p>
-                </div>
-              </div>
-            )}
+        <div className="ai-upload-section">
+          <label>Upload Audio (MP3/WAV):</label>
+          <input
+            type="file"
+            accept="audio/mpeg,audio/wav"
+            onChange={handleAudioChange}
+            disabled={isAIProcessing || !!currentUploader}
+            ref={audioInputRef}
+          />
+        </div>
+        <button
+          className="ai-submit-button"
+          onClick={handleSubmit}
+          disabled={isAIProcessing || !imageFile || !audioFile || !!currentUploader}
+        >
+          {isAIProcessing ? 'Processing...' : 'Process with AI'}
+        </button>
+        {currentUploader && !isUploader && (
+          <p className="ai-locked-message">
+            AI is currently locked by another user.
+          </p>
+        )}
+        {aiUploadedImage && (
+          <div className="ai-media-section">
+            <h3>Uploaded Image:</h3>
+            <img src={aiUploadedImage} alt="Uploaded" className="ai-uploaded-image" />
           </div>
-        </div>
+        )}
+        {aiUploadedAudio && (
+          <div className="ai-media-section">
+            <h3>Uploaded Audio:</h3>
+            <audio controls src={aiUploadedAudio} className="ai-uploaded-audio" />
+          </div>
+        )}
+        {aiResponse && (
+          <div className="ai-response-section">
+            <h3>AI Response:</h3>
+            <p>{aiResponse}</p>
+          </div>
+        )}
+        {isUploader && (aiUploadedImage || aiUploadedAudio || aiResponse) && (
+          <button
+            className="ai-unlock-button"
+            onClick={onAIComplete}
+            disabled={isAIProcessing}
+          >
+            Unlock AI
+          </button>
+        )}
       </div>
     </div>
   );

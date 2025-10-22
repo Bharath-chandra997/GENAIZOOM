@@ -1345,3 +1345,88 @@
 .pro-participants-card--ai .pro-participants-card__name {
   color: #34d399;
 }
+.pro-meeting-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #0f172a;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+}
+
+.pro-meeting-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.pro-mainarea-container {
+  flex: 1;
+  position: relative;
+  display: flex;
+  overflow: hidden;
+}
+
+.pro-mainarea-container.with-chat-sidebar {
+  margin-right: 320px;
+}
+
+.pro-chat-sidebar-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pro-chat-sidebar {
+  width: 320px;
+  background: #1e293b;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.pro-sidebar-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.pro-sidebar-popup {
+  background: #1e293b;
+  border-radius: 8px;
+  width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 768px) {
+  .pro-mainarea-container.with-chat-sidebar {
+    margin-right: 0;
+  }
+
+  .pro-chat-sidebar-overlay {
+    width: 100%;
+  }
+
+  .pro-chat-sidebar {
+    width: 100%;
+  }
+
+  .pro-sidebar-popup {
+    width: 90%;
+  }
+}

@@ -21,7 +21,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 client = None
 try:
     logger.info(f"Connecting to Hugging Face Space: {HF_SPACE_NAME}...")
-    client = Client(HF_SPACE_NAME, max_wait=300)  # Added: 5-min queue timeout
+    client = Client(HF_SPACE_NAME)  # FIXED: Removed max_wait (not supported in your gradio_client version)
     logger.info("✅ Connection to Hugging Face Space successful!")
 except Exception as e:
     logger.error(f"❌ Failed to connect to Hugging Face Space: {e}")
@@ -90,7 +90,7 @@ async def predict(
 
         logger.info(f"Submitting prediction job for image: {image_path}, audio: {audio_path}")
         
-        # FIXED: Correct param names for this Space
+        # Use original params (matches your Colab success)
         result = client.predict(
             image_input=file(image_path),
             audio_input=file(audio_path),

@@ -21,7 +21,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 client = None
 try:
     logger.info(f"Connecting to Hugging Face Space: {HF_SPACE_NAME}...")
-    client = Client(HF_SPACE_NAME)
+    client = Client(HF_SPACE_NAME, max_wait=300)  # Added: 5-min queue timeout
     logger.info("✅ Connection to Hugging Face Space successful!")
 except Exception as e:
     logger.error(f"❌ Failed to connect to Hugging Face Space: {e}")
@@ -29,10 +29,10 @@ except Exception as e:
 # --- FASTAPI APP SETUP ---
 app = FastAPI(title="SynergySphere VQA Proxy API")
 
-# Enable CORS - FIXED: Allow frontend and local dev
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://genaizoom123.onrender.com", "http://localhost:3000"],  # Frontend domain + dev
+    allow_origins=["https://genaizoom123.onrender.com", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -60,13 +60,11 @@ async def predict(
 ):
     """
     Proxy endpoint for the VQA model.
-    Receives an image and audio file, saves them temporarily, sends them
-    to the Gradio backend for prediction, and returns the result.
     """
     if not client:
         raise HTTPException(
             status_code=503,
-            detail="Gradio client is not connected to the Hugging Face Space. The proxy cannot process requests."
+            detail="Gradio client is not connected to the Hugging Face Space."
         )
 
     # Validate file types
@@ -92,14 +90,17 @@ async def predict(
 
         logger.info(f"Submitting prediction job for image: {image_path}, audio: {audio_path}")
         
-        # Call Gradio API
+        # FIXED: Correct param names for this Space
         result = client.predict(
-            image_input=file(image_path),
-            audio_input=file(audio_path),
+            image=file(image_path),
+            audio=file(audio_path),
             api_name="/predict"
         )
 
         logger.info(f"Received prediction: {result}")
+        if not result:
+            raise HTTPException(status_code=500, detail="Empty prediction from model")
+
         return JSONResponse(content={"prediction": result})
 
     except Exception as e:
@@ -119,17 +120,11 @@ async def predict(
 
 @app.get("/")
 async def health_check():
-    """
-    Health check to verify server status and connection.
-    """
     if client:
-        status = "✅ Proxy server is running and connected to Hugging Face Space."
-        return {"status": status}
+        return {"status": "✅ Proxy server is running and connected to Hugging Face Space."}
     else:
-        status = "❌ Proxy server is running but FAILED to connect to Hugging Face Space."
-        return JSONResponse(content={"status": status}, status_code=503)
+        return JSONResponse(content={"status": "❌ Proxy server is running but FAILED to connect."}, status_code=503)
 
-# --- RUNNING THE APP ---
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))

@@ -99,7 +99,7 @@ const Meeting = () => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
+  const [isParticipantsOpen, setIsParticipants] = useState(false);
   const [isAIPopupOpen, setIsAIPopupOpen] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -150,6 +150,7 @@ const Meeting = () => {
   const signalingStates = useRef(new Map());
   const pendingOffers = useRef(new Map());
   const pendingAnswers = useRef(new Map());
+  const pendingIceCandidates = useRef(new Map());  // New ref for queuing ICE candidates
 
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
@@ -609,10 +610,19 @@ const Meeting = () => {
 
   const handleIceCandidate = useCallback(({ from, candidate }) => {
     const pc = peerConnections.current.get(from);
-    if (pc) {
+    if (!pc) {
+      console.warn('No peer connection for user:', from);
+      return;
+    }
+    if (pc.remoteDescription && pc.remoteDescription.type) {
       pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
         console.warn('Error adding ICE candidate:', err);
       });
+    } else {
+      console.log('Queuing ICE candidate for:', from);
+      const pending = pendingIceCandidates.current.get(from) || [];
+      pending.push(candidate);
+      pendingIceCandidates.current.set(from, pending);
     }
   }, []);
 
@@ -708,6 +718,14 @@ const Meeting = () => {
           }
           signalingStates.current.set(from, 'have-remote-offer');
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          // Apply queued ICE candidates
+          const queuedCandidates = pendingIceCandidates.current.get(from) || [];
+          for (const candidate of queuedCandidates) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+              console.warn('Error adding queued ICE candidate:', err);
+            });
+          }
+          pendingIceCandidates.current.delete(from);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           signalingStates.current.set(from, 'stable');
@@ -729,6 +747,14 @@ const Meeting = () => {
       if (pc && signalingStates.current.get(from) === 'have-local-offer') {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          // Apply queued ICE candidates
+          const queuedCandidates = pendingIceCandidates.current.get(from) || [];
+          for (const candidate of queuedCandidates) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+              console.warn('Error adding queued ICE candidate:', err);
+            });
+          }
+          pendingIceCandidates.current.delete(from);
           signalingStates.current.set(from, 'stable');
           console.log('Remote description set for:', from);
         } catch (err) {
@@ -1019,39 +1045,7 @@ const Meeting = () => {
         socket.off('shared-media-removal', handleSharedMediaRemoval);
       };
     },
-    [
-      roomId,
-      user.username,
-      user.userId,
-      user.profilePicture,
-      createPeerConnection,
-      handleIceCandidate,
-      handleToggleVideo,
-      handleToggleAudio,
-      handlePinParticipant,
-      handleUnpinParticipant,
-      handleSessionRestored,
-      handleAIStartProcessing,
-      handleAIFinishProcessing,
-      handleAIImageUploaded,
-      handleAIAudioUploaded,
-      handleAIBotLocked,
-      handleAIBotUnlocked,
-      handleSharedAIResult,
-      handleSharedMediaDisplay,
-      handleSharedMediaRemoval,
-      handleOffer,
-      handleAnswer,
-      handleUserLeft,
-      handleChatMessage,
-      handleScreenShareStart,
-      handleScreenShareStop,
-      handleError,
-      handleDrawingStart,
-      handleDrawingMove,
-      handleDrawShape,
-      handleClearCanvas,
-    ]
+    [roomId, user.username, user.userId, user.profilePicture, createPeerConnection, handleIceCandidate, handleToggleVideo, handleToggleAudio, handlePinParticipant, handleUnpinParticipant, handleSessionRestored, handleAIStartProcessing, handleAIFinishProcessing, handleAIImageUploaded, handleAIAudioUploaded, handleAIBotLocked, handleAIBotUnlocked, handleSharedAIResult, handleSharedMediaDisplay, handleSharedMediaRemoval, handleOffer, handleAnswer, handleUserLeft, handleChatMessage, handleScreenShareStart, handleScreenShareStop, handleError, handleDrawingStart, handleDrawingMove, handleDrawShape, handleClearCanvas]
   );
 
   useEffect(() => {
@@ -1092,16 +1086,20 @@ const Meeting = () => {
           auth: { token: user.token },
           transports: ['websocket'],
           reconnection: true,
-          reconnectionAttempts: 3,
-          reconnectionDelay: 500,
-          reconnectionDelayMax: 2000,
-          timeout: 5000,
-          forceNew: true,
+          reconnectionAttempts: 10, // Increased from 3
+          reconnectionDelay: 1000, // Start with 1s
+          reconnectionDelayMax: 5000, // Max 5s
+          timeout: 10000, // Increased from 5000
+          forceNew: false, // Allow reusing connections
         });
         socketCleanup = setupSocketListeners(socketRef.current);
         socketRef.current.on('connect_error', (error) => {
           console.error('Socket.IO connection error:', error);
-          toast.error(`Connection failed: ${error.message}`);
+          toast.error(`Connection failed: ${error.message}. Retrying...`, { position: 'bottom-center' });
+        });
+        socketRef.current.on('reconnect_failed', () => {
+          console.error('Socket.IO reconnection failed after max attempts');
+          toast.error('Failed to reconnect to server. Please refresh the page.', { position: 'bottom-center' });
         });
         if (mounted) setIsLoading(false);
       } catch (error) {
@@ -1126,10 +1124,12 @@ const Meeting = () => {
       signalingStates.current.clear();
       pendingOffers.current.clear();
       pendingAnswers.current.clear();
+      pendingIceCandidates.current.clear(); // Clear queued ICE candidates
       if (aiAnimationRef.current) cancelAnimationFrame(aiAnimationRef.current);
       if (socketRef.current) {
         socketCleanup();
         socketRef.current.off('connect_error');
+        socketRef.current.off('reconnect_failed');
         socketRef.current.disconnect();
         socketRef.current = null;
       }

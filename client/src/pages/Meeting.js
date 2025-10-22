@@ -22,14 +22,14 @@ import './Meeting.css';
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 const VQA_API_URL = 'https://genaizoom-1.onrender.com/predict';
 
-// === AXIOS RETRY INTERCEPTOR (Handles cold start) ===
+// === fASTAPI COLD START RETRY ===
 axios.interceptors.response.use(
   (res) => res,
   async (err) => {
     const cfg = err.config;
     if (err.code === 'ERR_NETWORK' && !cfg.__retryCount) {
       cfg.__retryCount = 1;
-      console.warn('FastAPI cold start detected – retrying in 3s...');
+      console.warn('FastAPI cold start – retrying in 3s...');
       await new Promise((r) => setTimeout(r, 3000));
       return axios(cfg);
     }
@@ -51,7 +51,7 @@ const getUserAvatar = (user, size = 40) => {
   if (user?.profilePicture) {
     return user.profilePicture;
   }
-  const initials = user?.username?.charAt(0)?.toUpperCase() || 'U';
+  const initials = user?.  (user?.username?.charAt(0)?.toUpperCase() || 'U');
   const color = getColorForId(user?.userId || user?.username);
   return (
     <div
@@ -736,7 +736,7 @@ const Meeting = () => {
           if (state === 'new' || state === 'stable') {
             if (localStreamRef.current) {
               localStreamRef.current.getTracks().forEach((track) =>
-                back(pc.addTrack(track, localStreamRef.current))
+                pc.addTrack(track, localStreamRef.current)
               );
             }
             signalingStates.current.set(userId, 'have-local-offer');

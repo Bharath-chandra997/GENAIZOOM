@@ -29,12 +29,12 @@ except Exception as e:
 # --- FASTAPI APP SETUP ---
 app = FastAPI(title="SynergySphere VQA Proxy API")
 
-# **FIXED: CORRECTED CORS CONFIGURATION** - Removed duplicate allow_origins parameter
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://genaizoom123.onrender.com",  # Frontend production
-        "http://localhost:3000"                # Frontend development
+        "https://genaizoom123.onrender.com",
+        "http://localhost:3000"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
@@ -46,15 +46,18 @@ security = HTTPBearer()
 
 async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
+    jwt_secret = os.getenv('JWT_SECRET')
+    if not jwt_secret:
+        logger.error("JWT_SECRET environment variable is not set")
+        raise HTTPException(status_code=500, detail="Server configuration error: JWT_SECRET not set")
     try:
-        # FIXED: Log token issues
         logger.info(f"Verifying token for /predict...")
-        payload = jwt.decode(token, os.getenv('JWT_SECRET'), algorithms=['HS256'])
+        payload = jwt.decode(token, jwt_secret, algorithms=['HS256'])
         logger.info(f"Token verified for user: {payload.get('username', 'unknown')}")
         return payload
     except jwt.PyJWTError as e:
-        logger.error(f"JWT verification failed: {e} (check JWT_SECRET env var)")
-        raise HTTPException(status_code=401, detail='Invalid or expired token')
+        logger.error(f"JWT verification failed: {e}")
+        raise HTTPException(status_code=401, detail=f"Invalid or expired token: {str(e)}")
 
 # --- API ROUTES ---
 

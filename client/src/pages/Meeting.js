@@ -288,8 +288,12 @@ const Meeting = () => {
         toast.error('Invalid audio file. Must be MP3/WAV and less than 100MB.', { position: 'bottom-center' });
         return;
       }
-      if (!imageFile || !audioFile) {
-        toast.error('Both image and audio files are required.', { position: 'bottom-center' });
+      if (!imageFile) {
+        toast.error('Image file is required.', { position: 'bottom-center' });
+        return;
+      }
+      if (!audioFile) {
+        toast.error('Audio file is required.', { position: 'bottom-center' });
         return;
       }
 
@@ -305,6 +309,7 @@ const Meeting = () => {
         if (imageFile) {
           const imageFormData = new FormData();
           imageFormData.append('file', imageFile);
+          console.log('Uploading image:', { filename: imageFile.name, size: imageFile.size, type: imageFile.type });
           const imageResponse = await axios.post(`${SERVER_URL}/upload/image`, imageFormData, {
             headers: {
               Authorization: `Bearer ${user.token}`,
@@ -325,6 +330,7 @@ const Meeting = () => {
         if (audioFile) {
           const audioFormData = new FormData();
           audioFormData.append('file', audioFile);
+          console.log('Uploading audio:', { filename: audioFile.name, size: audioFile.size, type: audioFile.type });
           const audioResponse = await axios.post(`${SERVER_URL}/upload/audio`, audioFormData, {
             headers: {
               Authorization: `Bearer ${user.token}`,
@@ -337,7 +343,7 @@ const Meeting = () => {
             userId: user.userId,
             username: user.username,
             filename: audioFile.name,
-            size: imageFile.size,
+            size: audioFile.size,
           });
           setAiUploadedAudio(audioUrl);
         }
@@ -346,13 +352,17 @@ const Meeting = () => {
         const formData = new FormData();
         formData.append('image', imageFile);
         formData.append('audio', audioFile);
+        console.log('VQA request FormData:');
+        for (let pair of formData.entries()) {
+          console.log(`${pair[0]}: ${pair[1]}`);
+        }
 
         const response = await axios.post(VQA_API_URL, formData, {
           headers: {
             Authorization: `Bearer ${user.token}`,
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 60000, // 60 seconds for VQA processing
+          timeout: 60000,
         });
 
         const prediction = response.data.prediction;
@@ -362,15 +372,21 @@ const Meeting = () => {
         socketRef.current?.emit('shared-ai-result', { response: prediction, username: user.username });
 
         // Update meeting session
+        const sessionPayload = {
+          isProcessing: false,
+          output: prediction,
+          completedAt: new Date().toISOString(),
+          currentUploader: null,
+          uploaderUsername: null,
+        };
+        console.log('Sending meeting session update:', {
+          url: `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
+          payload: sessionPayload,
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
         await axios.post(
           `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
-          {
-            isProcessing: false,
-            output: prediction,
-            completedAt: new Date(),
-            currentUploader: null,
-            uploaderUsername: null,
-          },
+          sessionPayload,
           { headers: { Authorization: `Bearer ${user.token}` } }
         );
 

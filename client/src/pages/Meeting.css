@@ -318,7 +318,7 @@
 .pro-mainarea {
   position: relative;
   width: 100%;
-  max-width: none; /* Removed max-width to allow full expansion */
+  max-width: none;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -341,12 +341,12 @@
 
 .pro-video-grid {
   display: grid;
-  gap: 16px; /* Increased gap for better spacing */
-  width: 95vw; /* Increased to nearly full viewport width */
-  height: 95%; /* Increased to use more vertical space */
+  gap: 16px;
+  width: 95vw;
+  height: 98%;
   place-items: stretch;
-  grid-template-columns: repeat(2, minmax(360px, 1fr)); /* Larger minimum size for grid items */
-  grid-template-rows: repeat(2, minmax(200px, 1fr)); /* Larger minimum row height */
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
+  grid-template-rows: repeat(2, minmax(280px, 1fr)); /* Increased height */
 }
 
 /* Ensure exactly 4 frames, with responsive sizing */
@@ -359,15 +359,15 @@
   overflow: hidden;
 }
 
-/* Video Frame Styles - Larger size */
+/* Video Frame Styles - Larger size, no dark background */
 .pro-video-frame {
   position: relative;
-  background: #1a1d24;
+  background: transparent; /* Removed dark color */
   border-radius: 8px;
   overflow: hidden;
   width: 100%;
   height: 100%;
-  max-height: none; /* Removed max-height cap */
+  max-height: none;
   aspect-ratio: 16/9;
   border: 2px solid transparent;
   transition: all 0.2s ease;
@@ -485,8 +485,8 @@
 .pro-status-icon--hand-raised {
   background: #f59e0b;
   font-size: 12px;
-  transform: none; /* Ensure hand emoji is not mirrored */
-  content: '✋'; /* Use right-hand emoji */
+  transform: none;
+  content: '✋';
 }
 
 /* Grid Pagination - Enhanced for swiping */
@@ -500,7 +500,7 @@
   justify-content: center;
   gap: 8px;
   z-index: 10;
-  touch-action: pan-y; /* Allow vertical scroll, prevent horizontal interference */
+  touch-action: pan-y;
 }
 
 .pro-grid-pagination button {
@@ -848,7 +848,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #374151, #1f2937);
+  background: #e5e7eb; /* Light gray */
   border-radius: 6px;
 }
 
@@ -898,12 +898,12 @@
   
   .pro-video-grid {
     gap: 12px;
-    grid-template-columns: repeat(2, minmax(300px, 1fr)); /* Adjusted for larger frames */
-    grid-template-rows: repeat(2, minmax(180px, 1fr));
+    grid-template-columns: repeat(2, minmax(300px, 1fr));
+    grid-template-rows: repeat(2, minmax(240px, 1fr));
   }
   
   .pro-video-frame {
-    max-height: none; /* Allow full height */
+    max-height: none;
   }
 }
 
@@ -928,12 +928,12 @@
   
   .pro-video-grid {
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: repeat(2, minmax(160px, 1fr));
+    grid-template-rows: repeat(2, minmax(200px, 1fr));
     gap: 8px;
   }
   
   .pro-video-frame {
-    max-height: none; /* Allow full height */
+    max-height: none;
   }
   
   .pro-video-frame--ai {
@@ -972,7 +972,7 @@
   }
 
   .pro-screenshare-main {
-    max-height: none; /* Allow full height */
+    max-height: none;
   }
 }
 
@@ -987,11 +987,11 @@
   .pro-video-grid {
     gap: 4px;
     grid-template-columns: 1fr;
-    grid-template-rows: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-rows: repeat(auto-fit, minmax(180px, 1fr));
   }
   
   .pro-video-frame {
-    max-height: none; /* Allow full height */
+    max-height: none;
   }
   
   .pro-participant-info {
@@ -1192,7 +1192,7 @@
 
 /* Debug styles to ensure visibility */
 .chat-messages {
-  border: 1px solid transparent; /* Remove if not needed */
+  border: 1px solid transparent;
 }
 
 .chat-message {

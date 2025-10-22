@@ -22,6 +22,21 @@ import './Meeting.css';
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 const VQA_API_URL = 'https://genaizoom-1.onrender.com/predict';
 
+// === AXIOS RETRY INTERCEPTOR (Handles cold start) ===
+axios.interceptors.response.use(
+  (res) => res,
+  async (err) => {
+    const cfg = err.config;
+    if (err.code === 'ERR_NETWORK' && !cfg.__retryCount) {
+      cfg.__retryCount = 1;
+      console.warn('FastAPI cold start detected – retrying in 3s...');
+      await new Promise((r) => setTimeout(r, 3000));
+      return axios(cfg);
+    }
+    return Promise.reject(err);
+  }
+);
+
 const getColorForId = (id) => {
   if (!id) return '#FFFFFF';
   let hash = 0;
@@ -721,7 +736,7 @@ const Meeting = () => {
           if (state === 'new' || state === 'stable') {
             if (localStreamRef.current) {
               localStreamRef.current.getTracks().forEach((track) =>
-                pc.addTrack(track, localStreamRef.current)
+                back(pc.addTrack(track, localStreamRef.current))
               );
             }
             signalingStates.current.set(userId, 'have-local-offer');
@@ -805,6 +820,21 @@ const Meeting = () => {
   useEffect(() => {
     let mounted = true;
     let socketCleanup = () => {};
+
+    // === WAKE UP FASTAPI ON MOUNT ===
+    const wakeFastAPI = async () => {
+      if (!user?.token) return;
+      try {
+        await fetch('https://genaizoom-1.onrender.com/ping', {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
+        console.log('FastAPI backend is awake');
+      } catch (e) {
+        console.warn('FastAPI wake-up failed (will retry on AI call):', e);
+      }
+    };
+    wakeFastAPI();
 
     const init = async () => {
       if (!user) {

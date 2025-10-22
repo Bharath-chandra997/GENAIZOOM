@@ -29,10 +29,10 @@ except Exception as e:
 # --- FASTAPI APP SETUP ---
 app = FastAPI(title="SynergySphere VQA Proxy API")
 
-# Enable CORS
+# Enable CORS - FIXED: Allow frontend and local dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://genaizoom123.onrender.com"],
+    allow_origins=["https://genaizoom123.onrender.com", "http://localhost:3000"],  # Frontend domain + dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

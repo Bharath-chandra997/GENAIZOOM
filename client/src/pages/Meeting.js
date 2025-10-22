@@ -14,7 +14,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import './Meeting.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
-const VQA_API_URL = 'https://genaizoom123.onrender.com/predict'; // FastAPI server URL
+const VQA_API_URL = 'https://genaizoom123.onrender.com/predict';
 
 const getColorForId = (id) => {
   if (!id) return '#FFFFFF';
@@ -275,6 +275,24 @@ const Meeting = () => {
         return;
       }
 
+      // Validate files
+      const validImageTypes = ['image/jpeg', 'image/png'];
+      const validAudioTypes = ['audio/mpeg', 'audio/wav'];
+      const maxFileSize = 100 * 1024 * 1024; // 100MB
+
+      if (imageFile && (!validImageTypes.includes(imageFile.type) || imageFile.size > maxFileSize)) {
+        toast.error('Invalid image file. Must be JPEG/PNG and less than 100MB.', { position: 'bottom-center' });
+        return;
+      }
+      if (audioFile && (!validAudioTypes.includes(audioFile.type) || audioFile.size > maxFileSize)) {
+        toast.error('Invalid audio file. Must be MP3/WAV and less than 100MB.', { position: 'bottom-center' });
+        return;
+      }
+      if (!imageFile || !audioFile) {
+        toast.error('Both image and audio files are required.', { position: 'bottom-center' });
+        return;
+      }
+
       setAiBotInUse(true);
       setCurrentAIUser(user.username);
       socketRef.current?.emit('ai-start-processing', { userId: user.userId, username: user.username, roomId });
@@ -283,7 +301,7 @@ const Meeting = () => {
       let audioUrl = null;
 
       try {
-        // Upload files to Node.js server and get Cloudinary URLs
+        // Upload files to Node.js server
         if (imageFile) {
           const imageFormData = new FormData();
           imageFormData.append('file', imageFile);
@@ -319,22 +337,22 @@ const Meeting = () => {
             userId: user.userId,
             username: user.username,
             filename: audioFile.name,
-            size: audioFile.size,
+            size: imageFile.size,
           });
           setAiUploadedAudio(audioUrl);
         }
 
-        // Send files to FastAPI server for VQA prediction
+        // Send files to FastAPI server
         const formData = new FormData();
-        if (imageFile) formData.append('image', imageFile);
-        if (audioFile) formData.append('audio', audioFile);
+        formData.append('image', imageFile);
+        formData.append('audio', audioFile);
 
         const response = await axios.post(VQA_API_URL, formData, {
           headers: {
             Authorization: `Bearer ${user.token}`,
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 30000, // 30 seconds timeout
+          timeout: 60000, // 60 seconds for VQA processing
         });
 
         const prediction = response.data.prediction;
@@ -343,7 +361,7 @@ const Meeting = () => {
         socketRef.current?.emit('ai-finish-processing', { response: prediction });
         socketRef.current?.emit('shared-ai-result', { response: prediction, username: user.username });
 
-        // Update meeting session via API
+        // Update meeting session
         await axios.post(
           `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
           {
@@ -358,14 +376,24 @@ const Meeting = () => {
 
         toast.success('AI processing completed!', { position: 'bottom-center' });
       } catch (error) {
-        console.error('AI request error:', error);
+        console.error('AI request error:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data,
+          code: error.code,
+          stack: error.stack,
+        });
         let errorMessage = 'Failed to process AI request.';
         if (error.response?.status === 503) {
-          errorMessage = 'AI service is currently unavailable.';
+          errorMessage = 'AI service is currently unavailable. Please try again later.';
         } else if (error.response?.status === 401) {
           errorMessage = 'Authentication failed. Please log in again.';
+        } else if (error.response?.status === 400) {
+          errorMessage = 'Invalid file format or missing files.';
         } else if (error.code === 'ECONNABORTED') {
-          errorMessage = 'AI request timed out.';
+          errorMessage = 'AI request timed out. Please check your network.';
+        } else if (error.response?.data?.detail) {
+          errorMessage = error.response.data.detail;
         }
         toast.error(errorMessage, { position: 'bottom-center' });
 
@@ -389,7 +417,6 @@ const Meeting = () => {
     socketRef.current?.emit('shared-media-removal', { username: user.username });
   }, [roomId, user.username]);
 
-  // Socket.IO handlers for AI events
   const handleAIStartProcessing = useCallback(({ userId, username }) => {
     setAiBotInUse(true);
     setCurrentAIUser(username);
@@ -635,6 +662,162 @@ const Meeting = () => {
     [getIceServers]
   );
 
+  const handleOffer = useCallback(
+    async ({ from, offer, username }) => {
+      console.log('Offer received from:', { from, username });
+      setParticipants((prev) => {
+        if (prev.some((p) => p.userId === from)) return prev;
+        return [
+          ...prev,
+          {
+            userId: from,
+            username,
+            stream: null,
+            isLocal: false,
+            isHost: false,
+            videoEnabled: true,
+            audioEnabled: true,
+            isScreenSharing: false,
+            socketId: from,
+            profilePicture: null,
+          },
+        ];
+      });
+      try {
+        const pc = await createPeerConnection(from);
+        const currentState = signalingStates.current.get(from);
+        if (currentState === 'new' || currentState === 'stable') {
+          if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach((track) => pc.addTrack(track, localStreamRef.current));
+          }
+          signalingStates.current.set(from, 'have-remote-offer');
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          signalingStates.current.set(from, 'stable');
+          socketRef.current.emit('answer', { to: from, answer });
+          console.log('Answer sent to:', from);
+        }
+      } catch (err) {
+        console.error('Error in offer handler:', err);
+        toast.error(`Failed to process offer from ${username}.`, { position: 'bottom-center' });
+      }
+    },
+    [createPeerConnection, socketRef, localStreamRef, signalingStates]
+  );
+
+  const handleAnswer = useCallback(
+    async ({ from, answer }) => {
+      console.log('Answer received from:', from);
+      const pc = peerConnections.current.get(from);
+      if (pc && signalingStates.current.get(from) === 'have-local-offer') {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          signalingStates.current.set(from, 'stable');
+          console.log('Remote description set for:', from);
+        } catch (err) {
+          console.error('Error setting remote description:', err);
+          toast.error('Failed to process answer.', { position: 'bottom-center' });
+        }
+      }
+    },
+    []
+  );
+
+  const handleUserLeft = useCallback(({ userId }) => {
+    console.log('User left:', userId);
+    const pc = peerConnections.current.get(userId);
+    if (pc) {
+      pc.close();
+      peerConnections.current.delete(userId);
+      connectionTimeouts.current.get(userId)?.clearTimeout();
+      connectionTimeouts.current.delete(userId);
+      signalingStates.current.delete(userId);
+      pendingOffers.current.delete(userId);
+      pendingAnswers.current.delete(userId);
+    }
+    setParticipants((prev) => prev.filter((p) => p.userId !== userId));
+  }, []);
+
+  const handleChatMessage = useCallback(({ userId, username, message, timestamp, isSystemMessage }) => {
+    setMessages((prev) => [
+      ...prev,
+      { userId, username, message, timestamp, isSystemMessage },
+    ]);
+  }, []);
+
+  const handleScreenShareStart = useCallback(({ userId }) => {
+    setParticipants((prev) =>
+      prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: true } : p))
+    );
+  }, []);
+
+  const handleScreenShareStop = useCallback(({ userId }) => {
+    setParticipants((prev) =>
+      prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false } : p))
+    );
+  }, []);
+
+  const handleError = useCallback(({ message }) => {
+    toast.error(message, { position: 'bottom-center' });
+  }, []);
+
+  const handleDrawingStart = useCallback(({ userId, x, y, color, tool, size }) => {
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    remoteDrawingStates.current.set(userId, { x: x * canvas.width, y: y * canvas.height, color, tool, size });
+    if (tool === 'pen' || tool === 'eraser') {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = size;
+      ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x * canvas.width, y * canvas.height);
+    }
+  }, []);
+
+  const handleDrawingMove = useCallback(({ userId, x, y }) => {
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    const state = remoteDrawingStates.current.get(userId);
+    if (!state || (state.tool !== 'pen' && state.tool !== 'eraser')) return;
+    const ctx = canvas.getContext('2d');
+    ctx.lineTo(x * canvas.width, y * canvas.height);
+    ctx.stroke();
+  }, []);
+
+  const handleDrawShape = useCallback(({ userId, tool, startX, startY, endX, endY, color, size }) => {
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = color;
+    ctx.lineWidth = size;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.beginPath();
+    if (tool === 'rectangle') {
+      ctx.rect(
+        startX * canvas.width,
+        startY * canvas.height,
+        (endX - startX) * canvas.width,
+        (endY - startY) * canvas.height
+      );
+    } else if (tool === 'circle') {
+      const radius = Math.sqrt(
+        Math.pow((endX - startX) * canvas.width, 2) + Math.pow((endY - startY) * canvas.height, 2)
+      );
+      ctx.arc(startX * canvas.width, startY * canvas.height, radius, 0, 2 * Math.PI);
+    }
+    ctx.stroke();
+  }, []);
+
+  const handleClearCanvas = useCallback(() => {
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }, []);
+
   const handleToggleVideo = useCallback(({ userId, enabled }) => {
     console.log('Toggle video for user:', userId, enabled);
     setParticipants((prev) => prev.map((p) => (p.userId === userId ? { ...p, videoEnabled: enabled } : p)));
@@ -760,156 +943,6 @@ const Meeting = () => {
         }
       };
 
-      const handleOffer = async ({ from, offer, username }) => {
-        console.log('Offer received from:', { from, username });
-        setParticipants((prev) => {
-          if (prev.some((p) => p.userId === from)) return prev;
-          return [
-            ...prev,
-            {
-              userId: from,
-              username,
-              stream: null,
-              isLocal: false,
-              isHost: false,
-              videoEnabled: true,
-              audioEnabled: true,
-              isScreenSharing: false,
-              socketId: from,
-            },
-          ];
-        });
-        try {
-          const pc = await createPeerConnection(from);
-          const currentState = signalingStates.current.get(from);
-          if (currentState === 'new' || currentState === 'stable') {
-            if (localStreamRef.current) {
-              localStreamRef.current.getTracks().forEach((track) => pc.addTrack(track, localStreamRef.current));
-            }
-            signalingStates.current.set(from, 'have-remote-offer');
-            await pc.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            signalingStates.current.set(from, 'stable');
-            socket.emit('answer', { to: from, answer });
-            console.log('Answer sent to:', from);
-          }
-        } catch (err) {
-          console.error('Error in offer handler:', err);
-          toast.error(`Failed to process offer from ${username}.`);
-        }
-      };
-
-      const handleAnswer = ({ from, answer }) => {
-        console.log('Answer received from:', from);
-        const pc = peerConnections.current.get(from);
-        const currentState = signalingStates.current.get(from);
-        if (pc && currentState === 'have-local-offer') {
-          pc.setRemoteDescription(new RTCSessionDescription(answer))
-            .then(() => {
-              signalingStates.current.set(from, 'stable');
-              pendingOffers.current.delete(from);
-              console.log('Remote description set for:', from);
-            })
-            .catch((err) => {
-              console.error('Error setting remote description:', err);
-              signalingStates.current.set(from, 'stable');
-              pendingOffers.current.delete(from);
-            });
-        }
-      };
-
-      const handleUserLeft = ({ userId, username }) => {
-        console.log('User left:', { userId, username });
-        const pc = peerConnections.current.get(userId);
-        if (pc) {
-          pc.getSenders().forEach((sender) => sender.track && sender.track.stop());
-          pc.close();
-          peerConnections.current.delete(userId);
-        }
-        setParticipants((prev) => {
-          const updated = prev.filter((p) => p.userId !== userId);
-          if (pinnedParticipantId === userId) setPinnedParticipantId(null);
-          return updated;
-        });
-        const leftUser = participants.find((p) => p.userId === userId);
-        const displayName = leftUser?.username || username || 'A user';
-        toast.error(`${displayName} has left the meeting`, {
-          position: 'bottom-center',
-          autoClose: 3000,
-          style: { background: '#ef4444', color: 'white' },
-        });
-      };
-
-      const handleChatMessage = (payload) => {
-        console.log('Chat message received:', payload);
-        setMessages((prev) => [...prev, payload]);
-      };
-
-      const handleScreenShareStart = ({ userId }) => {
-        console.log('Screen share started by:', userId);
-        setParticipants((prev) => prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: true } : p)));
-      };
-
-      const handleScreenShareStop = ({ userId }) => {
-        console.log('Screen share stopped by:', userId);
-        setParticipants((prev) => prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false } : p)));
-      };
-
-      const handleError = ({ message }) => {
-        console.error('Server error:', message);
-        toast.error(message);
-      };
-
-      const handleDrawingStart = ({ from, x, y, color, tool, size }) => {
-        remoteDrawingStates.current.set(from, { color, tool, size });
-        const canvas = annotationCanvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        ctx.beginPath();
-        ctx.moveTo(x * canvas.width, y * canvas.height);
-      };
-
-      const handleDrawingMove = ({ from, x, y }) => {
-        const state = remoteDrawingStates.current.get(from);
-        const canvas = annotationCanvasRef.current;
-        if (!canvas || !state) return;
-        const ctx = canvas.getContext('2d');
-        ctx.strokeStyle = state.color;
-        ctx.lineWidth = state.size;
-        ctx.globalCompositeOperation = state.tool === 'eraser' ? 'destination-out' : 'source-over';
-        ctx.lineCap = 'round';
-        ctx.lineTo(x * canvas.width, y * canvas.height);
-        ctx.stroke();
-      };
-
-      const handleDrawShape = ({ from, tool, startX, startY, endX, endY, color, size }) => {
-        const canvas = annotationCanvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        ctx.strokeStyle = color;
-        ctx.lineWidth = size;
-        ctx.globalCompositeOperation = 'source-over';
-        const sX = startX * canvas.width;
-        const sY = startY * canvas.height;
-        const eX = endX * canvas.width;
-        const eY = endY * canvas.height;
-        ctx.beginPath();
-        if (tool === 'rectangle') ctx.rect(sX, sY, eX - sX, eY - sY);
-        else if (tool === 'circle') {
-          const radius = Math.sqrt(Math.pow(eX - sX, 2) + Math.pow(eY - sY, 2));
-          ctx.arc(sX, sY, radius, 0, 2 * Math.PI);
-        }
-        ctx.stroke();
-      };
-
-      const handleClearCanvas = () => {
-        const canvas = annotationCanvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      };
-
       socket.on('connect', handleConnect);
       socket.on('user-joined', handleUserJoined);
       socket.on('offer', handleOffer);
@@ -991,6 +1024,17 @@ const Meeting = () => {
       handleSharedAIResult,
       handleSharedMediaDisplay,
       handleSharedMediaRemoval,
+      handleOffer,
+      handleAnswer,
+      handleUserLeft,
+      handleChatMessage,
+      handleScreenShareStart,
+      handleScreenShareStop,
+      handleError,
+      handleDrawingStart,
+      handleDrawingMove,
+      handleDrawShape,
+      handleClearCanvas,
     ]
   );
 

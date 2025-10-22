@@ -10,63 +10,6 @@
   overflow: hidden;
 }
 
-.pro-mainarea-toolbar-strip {
-  background: #171a21;
-  border-bottom: 1px solid #2a2f3a;
-  padding: 12px 16px;
-  min-height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-.pro-toolbar-left,
-.pro-toolbar-center,
-.pro-toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pro-meeting-info {
-  color: #94a3b8;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.pro-toolbar-btn {
-  background: #374151;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 12px;
-  color: #e5e7eb;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 16px;
-}
-
-.pro-toolbar-btn:hover {
-  background: #4b5563;
-  transform: translateY(-1px);
-}
-
-.pro-exit-meeting-btn {
-  background: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 16px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.pro-exit-meeting-btn:hover {
-  background: #dc2626;
-  transform: translateY(-1px);
-}
-
 /* Main Grid Area - Increased size */
 .pro-mainarea-grid {
   position: relative;
@@ -83,25 +26,22 @@
 .pro-video-grid {
   display: grid;
   gap: 16px;
-  width: 100%;
-  height: 100%;
-  max-height: none; /* Remove height cap for larger grid */
+  width: 95vw; /* Increased to nearly full viewport width */
+  height: 95%; /* Increased to use more vertical space */
   place-items: stretch;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(360px, 1fr)); /* Larger minimum size */
+  grid-template-rows: repeat(2, minmax(200px, 1fr)); /* Larger minimum row height */
 }
 
 /* Grid layouts for different participant counts - Adjusted for larger view */
 .pro-video-grid--1 {
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
-  max-width: none;
 }
 
 .pro-video-grid--2 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr;
-  max-width: none;
 }
 
 .pro-video-grid--3 {
@@ -110,13 +50,11 @@
   grid-template-areas: 
     "video1 video2"
     "video3 video3";
-  max-width: none;
 }
 
 .pro-video-grid--4 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
-  max-width: none;
 }
 
 .pro-video-grid-item {
@@ -139,7 +77,6 @@
   aspect-ratio: 16/9;
   border: 2px solid transparent;
   transition: all 0.2s ease;
-  /* Removed box-shadow */
   animation: videoFrameAppear 0.3s ease-out;
   cursor: pointer;
 }
@@ -501,27 +438,10 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .pro-mainarea-toolbar-strip {
-    padding: 8px 12px;
-    min-height: 44px;
-  }
-  
-  .pro-toolbar-btn {
-    padding: 6px 10px;
-    font-size: 14px;
-  }
-  
-  .pro-exit-meeting-btn {
-    padding: 6px 12px;
-    font-size: 14px;
-  }
-  
   .pro-video-grid {
     gap: 8px;
-  }
-  
-  .pro-video-frame {
-    min-height: 200px;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(2, minmax(160px, 1fr));
   }
   
   .pro-screenshare-participants {
@@ -541,17 +461,8 @@
   .pro-video-grid--3,
   .pro-video-grid--4 {
     grid-template-columns: 1fr;
-    grid-template-rows: repeat(auto-fit, minmax(160px, 1fr));
+    grid-template-rows: repeat(auto-fit, minmax(140px, 1fr));
     grid-template-areas: none;
-  }
-  
-  .pro-toolbar-center {
-    gap: 4px;
-  }
-  
-  .pro-toolbar-btn {
-    padding: 4px 8px;
-    font-size: 12px;
   }
   
   .pro-participant-info {

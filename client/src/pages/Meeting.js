@@ -22,21 +22,6 @@ import './Meeting.css';
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 const VQA_API_URL = 'https://genaizoom-1.onrender.com/predict';
 
-// === fASTAPI COLD START RETRY ===
-axios.interceptors.response.use(
-  (res) => res,
-  async (err) => {
-    const cfg = err.config;
-    if (err.code === 'ERR_NETWORK' && !cfg.__retryCount) {
-      cfg.__retryCount = 1;
-      console.warn('FastAPI cold start – retrying in 3s...');
-      await new Promise((r) => setTimeout(r, 3000));
-      return axios(cfg);
-    }
-    return Promise.reject(err);
-  }
-);
-
 const getColorForId = (id) => {
   if (!id) return '#FFFFFF';
   let hash = 0;
@@ -51,7 +36,7 @@ const getUserAvatar = (user, size = 40) => {
   if (user?.profilePicture) {
     return user.profilePicture;
   }
-  const initials = user?.  (user?.username?.charAt(0)?.toUpperCase() || 'U');
+  const initials = (user?.username?.charAt(0)?.toUpperCase() || 'U');
   const color = getColorForId(user?.userId || user?.username);
   return (
     <div
@@ -299,6 +284,8 @@ const Meeting = () => {
         console.log('Starting AI request for user:', user.username, {
           image: imageFile?.name,
           audio: audioFile?.name,
+          endpoint: VQA_API_URL,
+          token: user.token.substring(0, 20) + '...',
         });
 
         const lockResponse = await axios.post(
@@ -336,6 +323,11 @@ const Meeting = () => {
         ) {
           throw new Error('Invalid audio file. Must be MP3/WAV and less than 100 MB.');
         }
+
+        console.log('Uploading files:', {
+          image: { name: imageFile.name, type: imageFile.type, size: imageFile.size },
+          audio: { name: audioFile.name, type: audioFile.type, size: audioFile.size },
+        });
 
         const upload = async (formData, type) => {
           console.log(`Uploading ${type}:`, {
@@ -405,7 +397,10 @@ const Meeting = () => {
             currentUploader: null,
             uploaderUsername: null,
           },
-          { headers: { Authorization: `Bearer ${user.token}` } }
+          {
+            headers: { Authorization: `Bearer ${user.token}` },
+            timeout: 5000,
+          }
         );
 
         toast.success('AI processing completed!', { position: 'bottom-center' });
@@ -425,6 +420,8 @@ const Meeting = () => {
           status: error.response?.status,
           data: error.response?.data,
           code: error.code,
+          stack: error.stack,
+          url: VQA_API_URL,
         });
 
         let errorMessage = error.message;
@@ -436,10 +433,26 @@ const Meeting = () => {
           else if (status === 400) errorMessage = 'Invalid file format or missing files.';
           else if (status === 403) errorMessage = 'Not authorized to access AI.';
           else errorMessage = data?.error || data?.detail || error.message;
-        } else if (error.code === 'ECONNABORTED') {
-          errorMessage = 'AI request timed out. Files kept — retry "Process with AI".';
+        } else if (error.code === 'ERR_NETWORK') {
+          errorMessage = 'Network error: Unable to reach AI server. Please try again.';
         }
         toast.error(errorMessage, { position: 'bottom-center' });
+
+        if (isLocked) {
+          try {
+            await axios.post(
+              `${SERVER_URL}/api/ai/unlock/${roomId}`,
+              { userId: user.userId },
+              {
+                headers: { Authorization: `Bearer ${user.token}` },
+                timeout: 5000,
+              }
+            );
+            console.log('AI unlocked on error');
+          } catch (unlockError) {
+            console.warn('Failed to unlock AI:', unlockError.message);
+          }
+        }
       } finally {
         setIsAIProcessing(false);
       }
@@ -457,7 +470,10 @@ const Meeting = () => {
       await axios.post(
         `${SERVER_URL}/api/ai/unlock/${roomId}`,
         { userId: user.userId },
-        { headers: { Authorization: `Bearer ${user.token}` } }
+        {
+          headers: { Authorization: `Bearer ${user.token}` },
+          timeout: 5000,
+        }
       );
       console.log('AI unlocked on manual complete');
     } catch (e) {
@@ -708,7 +724,8 @@ const Meeting = () => {
         );
       };
 
-      const onUserJoined = async ({ userId, username, isHost, profilePicture }) => {
+      socket.on('connect', onConnect);
+      socket.on('user-joined', async ({ userId, username, isHost, profilePicture }) => {
         if (userId === socket.id) return;
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === userId)) return prev;
@@ -746,10 +763,7 @@ const Meeting = () => {
         } catch (e) {
           console.error('User-joined handler error:', e);
         }
-      };
-
-      socket.on('connect', onConnect);
-      socket.on('user-joined', onUserJoined);
+      });
       socket.on('offer', handleOffer);
       socket.on('answer', handleAnswer);
       socket.on('ice-candidate', handleIceCandidate);
@@ -785,7 +799,7 @@ const Meeting = () => {
 
       return () => {
         socket.off('connect', onConnect);
-        socket.off('user-joined', onUserJoined);
+        socket.off('user-joined');
         socket.off('offer', handleOffer);
         socket.off('answer', handleAnswer);
         socket.off('ice-candidate', handleIceCandidate);

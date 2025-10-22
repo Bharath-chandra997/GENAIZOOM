@@ -10,7 +10,8 @@ const jwt = require('jsonwebtoken');
 const twilio = require('twilio');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
-const fs = require('fs'); // For temp file cleanup
+const fs = require('fs');
+const redis = require('redis'); // Added for distributed locking
 require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const meetingRoutes = require('./routes/meetings');
@@ -40,6 +41,13 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
   process.exit(1);
 }
 
+// Redis Client Setup
+const redisClient = redis.createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379', // Set REDIS_URL in Render
+});
+redisClient.on('error', (err) => logError('Redis Client Error', err));
+redisClient.connect().then(() => info('Connected to Redis')).catch(err => logError('Redis Connection Error', err));
+
 // App & Server Setup
 const app = express();
 const server = http.createServer(app);
@@ -53,7 +61,7 @@ const io = new Server(server, {
 });
 
 // Multer Setup for Temporary File Storage
-const upload = multer({ dest: 'tmp/' }); // Temporary storage before Cloudinary upload
+const upload = multer({ dest: 'tmp/' });
 
 // Cloudinary Configuration
 cloudinary.config({
@@ -122,7 +130,7 @@ passport.use(
         }
         const token = jwt.sign(
           { 
-            userId: user._id.toString(), // FIXED: Ensure userId is string to avoid type mismatches
+            userId: user._id.toString(),
             username: user.username, 
             email: user.email,
             profilePicture: user.profilePicture 
@@ -148,7 +156,6 @@ let cachedIceServers = null;
 let iceServersExpiry = null;
 let isFetchingIceServers = false;
 
-// Fast fallback ICE servers (optimized for speed)
 const fastFallbackIceServers = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
@@ -189,7 +196,7 @@ const fetchIceServers = async () => {
     }
 
     cachedIceServers = iceServers;
-    iceServersExpiry = Date.now() + 12 * 60 * 60 * 1000; // 12 hours cache
+    iceServersExpiry = Date.now() + 12 * 60 * 60 * 1000;
     info('Cached optimized ICE servers:', iceServers.map(s => s.urls));
     return iceServers;
   } catch (error) {
@@ -200,7 +207,6 @@ const fetchIceServers = async () => {
   }
 };
 
-// Optimized ICE Servers Endpoint
 app.get('/ice-servers', async (req, res) => {
   try {
     if (cachedIceServers && iceServersExpiry && Date.now() < iceServersExpiry) {
@@ -314,14 +320,16 @@ app.post('/api/meeting-session/:roomId/chat', authenticate, async (req, res) => 
   }
 });
 
-// AI Lock Endpoint - FIXED: Trust token userId, no strict body mismatch check; use token's userId primarily
+// AI Lock Endpoint with Redis
+const LOCK_TIMEOUT = 300000; // 5 minutes
+const AI_LOCK_KEY = (roomId) => `ai-lock:${roomId}`;
+
 app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
   try {
     const { roomId } = req.params;
-    const { username } = req.body; // Optional from body
-    const userId = req.user.userId.toString(); // From token, ensure string
-
-    info(`AI Lock attempt for room ${roomId} by userId: ${userId} (from token)`); // Debug log
+    const userId = req.user.userId.toString();
+    const username = req.body.username || req.user.username;
+    info(`AI Lock attempt for room ${roomId} by userId: ${userId} (username: ${username})`);
 
     let session = await MeetingSession.findOne({ roomId });
     if (!session) {
@@ -329,51 +337,80 @@ app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
       await session.save();
     }
 
-    // Check if already locked by someone else
-    if (session.aiState?.isLocked && session.aiState.lockedBy !== userId) {
+    // Check Redis lock
+    const lockAcquired = await redisClient.set(AI_LOCK_KEY(roomId), userId, {
+      NX: true, // Only set if not exists
+      PX: LOCK_TIMEOUT // Expire after 5 minutes
+    });
+
+    if (!lockAcquired) {
+      info(`AI already locked for room ${roomId}`);
       return res.status(409).json({ error: 'AI Bot is already in use by another user' });
     }
 
-    // Set lock state (merge with existing aiState)
+    // Check MongoDB session lock
+    if (session.aiState?.isLocked && session.aiState.lockedBy !== userId) {
+      await redisClient.del(AI_LOCK_KEY(roomId)); // Release Redis lock to stay consistent
+      info(`MongoDB lock mismatch for room ${roomId}: lockedBy=${session.aiState.lockedBy}, userId=${userId}`);
+      return res.status(409).json({ error: 'AI Bot is already in use by another user' });
+    }
+
+    // Set lock state
     session.aiState = {
       ...(session.aiState || {}),
       isLocked: true,
       lockedBy: userId,
-      lockedByUsername: username || req.user.username,
+      lockedByUsername: username,
       lockedAt: new Date(),
       isProcessing: true
     };
     await session.save();
 
-    info(`AI locked for room ${roomId} by ${req.user.username || username}`);
-
-    // Broadcast to room
-    io.to(roomId).emit('ai-bot-locked', { userId, username: req.user.username || username, roomId });
+    info(`AI locked for room ${roomId} by ${username}`);
+    io.to(roomId).emit('ai-bot-locked', { userId, username, roomId });
 
     res.json({ success: true, message: 'AI bot locked' });
   } catch (error) {
     logError('Error locking AI:', error);
+    await redisClient.del(AI_LOCK_KEY(req.params.roomId)); // Release on error
     res.status(500).json({ error: 'Failed to lock AI' });
   }
 });
 
-// AI Unlock Endpoint - FIXED: Trust token userId, no strict body mismatch check
+// AI Unlock Endpoint with Redis
 app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
   try {
     const { roomId } = req.params;
-    const userId = req.user.userId.toString(); // From token, ensure string
-
-    info(`AI Unlock attempt for room ${roomId} by userId: ${userId} (from token)`); // Debug log
+    const userId = req.user.userId.toString();
+    info(`AI Unlock attempt for room ${roomId} by userId: ${userId}`);
 
     let session = await MeetingSession.findOne({ roomId });
     if (!session) {
+      info(`Session not found for room ${roomId}`);
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    // Verify user is the locker
-    if (session.aiState?.lockedBy !== userId) {
-      return res.status(403).json({ error: 'Not authorized to unlock AI' });
+    // Check if AI is locked
+    if (!session.aiState?.isLocked) {
+      info(`AI not locked for room ${roomId}`);
+      return res.status(400).json({ error: 'AI is not locked' });
     }
+
+    // Verify user is the locker
+    if (session.aiState.lockedBy !== userId) {
+      info(`Lock mismatch for room ${roomId}: lockedBy=${session.aiState.lockedBy}, userId=${userId}`);
+      return res.status(403).json({ error: 'Not authorized to unlock AI - lock mismatch' });
+    }
+
+    // Verify Redis lock
+    const lockValue = await redisClient.get(AI_LOCK_KEY(roomId));
+    if (lockValue !== userId) {
+      info(`Redis lock mismatch for room ${roomId}: lockValue=${lockValue}, userId=${userId}`);
+      return res.status(403).json({ error: 'Not authorized to unlock AI - Redis lock mismatch' });
+    }
+
+    // Release Redis lock
+    await redisClient.del(AI_LOCK_KEY(roomId));
 
     // Clear lock state
     session.aiState = {
@@ -387,8 +424,6 @@ app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
     await session.save();
 
     info(`AI unlocked for room ${roomId} by ${userId}`);
-
-    // Broadcast to room
     io.to(roomId).emit('ai-bot-unlocked', { roomId });
 
     res.json({ success: true, message: 'AI bot unlocked' });
@@ -398,6 +433,41 @@ app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
   }
 });
 
+// Auto-release Expired Locks
+setInterval(async () => {
+  try {
+    const keys = await redisClient.keys('ai-lock:*');
+    for (const key of keys) {
+      const roomId = key.split(':')[1];
+      const lockValue = await redisClient.get(key);
+      if (lockValue) {
+        // If lock exists, TTL is handled by Redis PX (5 minutes)
+        // Optionally, check MongoDB consistency
+        const session = await MeetingSession.findOne({ roomId });
+        if (session && session.aiState?.isLocked && session.aiState.lockedBy === lockValue) {
+          const lockTime = new Date(session.aiState.lockedAt).getTime();
+          if (Date.now() - lockTime > LOCK_TIMEOUT) {
+            info(`Auto-releasing expired lock for room ${roomId}`);
+            session.aiState = {
+              ...(session.aiState || {}),
+              isLocked: false,
+              lockedBy: null,
+              lockedByUsername: null,
+              lockedAt: null,
+              isProcessing: false
+            };
+            await session.save();
+            await redisClient.del(key);
+            io.to(roomId).emit('ai-bot-unlocked', { roomId });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    logError('Error in lock cleanup:', error);
+  }
+}, 60000); // Run every minute
+
 // File Upload Endpoints with Cloudinary
 app.post('/upload/image', authenticate, upload.single('file'), async (req, res) => {
   try {
@@ -406,12 +476,11 @@ app.post('/upload/image', authenticate, upload.single('file'), async (req, res) 
       resource_type: 'image',
       folder: 'genaizoom/images',
     });
-    // Cleanup temp file
     fs.unlinkSync(req.file.path);
     res.json({ url: result.secure_url });
   } catch (err) {
     logError('Cloudinary image upload error', err);
-    if (req.file) fs.unlinkSync(req.file.path); // Cleanup on error
+    if (req.file) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: 'Image upload failed' });
   }
 });
@@ -420,15 +489,14 @@ app.post('/upload/audio', authenticate, upload.single('file'), async (req, res) 
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const result = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: 'video', // Cloudinary uses 'video' for audio
+      resource_type: 'video',
       folder: 'genaizoom/audio',
     });
-    // Cleanup temp file
     fs.unlinkSync(req.file.path);
     res.json({ url: result.secure_url });
   } catch (err) {
     logError('Cloudinary audio upload error', err);
-    if (req.file) fs.unlinkSync(req.file.path); // Cleanup on error
+    if (req.file) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: 'Audio upload failed' });
   }
 });
@@ -450,7 +518,7 @@ io.use((socket, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.user = { 
-      userId: decoded.userId.toString(), // FIXED: Ensure string for consistency
+      userId: decoded.userId.toString(),
       username: decoded.username, 
       email: decoded.email,
       profilePicture: decoded.profilePicture 
@@ -482,18 +550,15 @@ io.on('connection', (socket) => {
     socketToRoom[socket.id] = roomId;
     socketIdToUsername[socket.id] = username;
     
-    // Update meeting session - safer approach without array filters on upsert
     try {
       let session = await MeetingSession.findOne({ roomId });
       if (!session) {
         session = new MeetingSession({ roomId });
-        session.activeParticipants = []; // Ensure array exists
+        session.activeParticipants = [];
       }
 
-      // Find existing participant
       const participantIndex = session.activeParticipants.findIndex(p => p.userId.toString() === userId.toString());
       if (participantIndex === -1) {
-        // Add new participant
         session.activeParticipants.push({
           userId,
           username,
@@ -502,7 +567,6 @@ io.on('connection', (socket) => {
           isActive: true
         });
       } else {
-        // Update existing
         session.activeParticipants[participantIndex] = {
           ...session.activeParticipants[participantIndex],
           socketId: socket.id,
@@ -523,7 +587,6 @@ io.on('connection', (socket) => {
       roomHosts.set(roomId, socket.id);
     }
     
-    // Get other users from the room with profilePicture
     const otherUsers = [];
     room.forEach((id) => {
       if (id !== socket.id) {
@@ -538,7 +601,6 @@ io.on('connection', (socket) => {
       }
     });
     
-    // Always get the existing session data for new users
     let sessionData = null;
     try {
       const session = await MeetingSession.findOne({ roomId });
@@ -547,7 +609,7 @@ io.on('connection', (socket) => {
           uploadedFiles: session.uploadedFiles,
           aiState: session.aiState,
           sharedMedia: session.sharedMedia,
-          chatMessages: session.chatMessages.slice(-50), // Last 50 messages
+          chatMessages: session.chatMessages.slice(-50),
         };
       }
     } catch (err) {
@@ -556,7 +618,6 @@ io.on('connection', (socket) => {
     
     info(`User ${username} (${socket.id}) ${isReconnect ? 'reconnected to' : 'joined'} room ${roomId} with ${otherUsers.length} other users`);
     
-    // Send session data if available
     if (sessionData) {
       socket.emit('session-restored', sessionData);
     }
@@ -630,7 +691,6 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Persist chat message to meeting session
     try {
       await MeetingSession.findOneAndUpdate(
         { roomId },
@@ -690,7 +750,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Added missing handlers for media toggles
   socket.on('toggle-video', ({ enabled }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
@@ -712,7 +771,6 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting ai-image-uploaded from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
-      // Persist to meeting session
       try {
         await MeetingSession.findOneAndUpdate(
           { roomId },
@@ -743,7 +801,6 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting ai-audio-uploaded from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
-      // Persist to meeting session
       try {
         await MeetingSession.findOneAndUpdate(
           { roomId },
@@ -774,7 +831,6 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting ai-start-processing from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
-      // Persist AI state to meeting session
       try {
         await MeetingSession.findOneAndUpdate(
           { roomId },
@@ -784,7 +840,7 @@ io.on('connection', (socket) => {
               'aiState.currentUploader': userId,
               'aiState.uploaderUsername': username,
               'aiState.startedAt': new Date(),
-              'aiState.output': '' // Clear previous output
+              'aiState.output': ''
             }
           },
           { upsert: true }
@@ -802,7 +858,6 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting ai-finish-processing from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
-      // Persist AI completion state to meeting session
       try {
         await MeetingSession.findOneAndUpdate(
           { roomId },
@@ -829,7 +884,6 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting ai-bot-locked from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
-      // Persist bot locked state to meeting session
       try {
         await MeetingSession.findOneAndUpdate(
           { roomId },
@@ -855,7 +909,6 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting ai-bot-unlocked from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
-      // Persist bot unlocked state to meeting session
       try {
         await MeetingSession.findOneAndUpdate(
           { roomId },
@@ -891,7 +944,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // New synchronized media sharing events
   socket.on('upload-notification', ({ username }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
@@ -905,7 +957,6 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting shared-media-display from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
-      // Persist shared media state to meeting session
       try {
         MeetingSession.findOneAndUpdate(
           { roomId },
@@ -933,7 +984,6 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting shared-media-removal from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
-      // Clear shared media state from meeting session
       try {
         MeetingSession.findOneAndUpdate(
           { roomId },
@@ -969,7 +1019,6 @@ io.on('connection', (socket) => {
     if (roomId) {
       info(`Broadcasting shared-ai-result from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
-      // Persist AI result to meeting session
       try {
         MeetingSession.findOneAndUpdate(
           { roomId },
@@ -990,7 +1039,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Media display flow
   socket.on('media-display', () => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
@@ -1027,7 +1075,6 @@ io.on('connection', (socket) => {
     info(`${disconnectedUser} (${socket.id}) disconnected from room ${roomId || 'none'}`);
     
     if (roomId) {
-      // Mark as inactive - safer manual update
       try {
         let session = await MeetingSession.findOne({ roomId });
         if (session) {
@@ -1037,12 +1084,30 @@ io.on('connection', (socket) => {
             session.activeParticipants[participantIndex].lastSeen = new Date();
             await session.save();
           }
+
+          // Release AI lock if user was the locker
+          if (session.aiState?.isLocked && session.aiState.lockedBy === socket.user.userId.toString()) {
+            const lockValue = await redisClient.get(AI_LOCK_KEY(roomId));
+            if (lockValue === socket.user.userId.toString()) {
+              info(`Releasing AI lock for room ${roomId} due to user ${disconnectedUser} disconnect`);
+              await redisClient.del(AI_LOCK_KEY(roomId));
+              session.aiState = {
+                ...(session.aiState || {}),
+                isLocked: false,
+                lockedBy: null,
+                lockedByUsername: null,
+                lockedAt: null,
+                isProcessing: false
+              };
+              await session.save();
+              io.to(roomId).emit('ai-bot-unlocked', { roomId });
+            }
+          }
         }
       } catch (err) {
-        logError('Error updating participant status on disconnect:', err);
+        logError('Error updating participant or AI lock on disconnect:', err);
       }
       
-      // Timeout logic for user-left emit (unchanged)
       setTimeout(async () => {
         try {
           const session = await MeetingSession.findOne({ roomId });
@@ -1058,8 +1123,10 @@ io.on('connection', (socket) => {
                 if (activeParticipants.length === 0) {
                   try {
                     Meeting.updateOne({ roomId, endTime: { $exists: false } }, { endTime: new Date() });
+                    await MeetingSession.deleteOne({ roomId });
+                    info(`Room ${roomId} is empty. Deleted MeetingSession.`);
                   } catch (err) {
-                    logError('Error ending meeting', err);
+                    logError('Error ending meeting or deleting session', err);
                   }
                 }
               }
@@ -1083,7 +1150,6 @@ io.on('connection', (socket) => {
 
     if (roomId) {
       try {
-        // Mark user inactive in session - manual update
         let session = await MeetingSession.findOne({ roomId });
         if (session) {
           const participantIndex = session.activeParticipants.findIndex(p => p.socketId === socket.id);
@@ -1092,16 +1158,33 @@ io.on('connection', (socket) => {
             session.activeParticipants[participantIndex].lastSeen = new Date();
             await session.save();
           }
+
+          // Release AI lock if user was the locker
+          if (session.aiState?.isLocked && session.aiState.lockedBy === socket.user.userId.toString()) {
+            const lockValue = await redisClient.get(AI_LOCK_KEY(roomId));
+            if (lockValue === socket.user.userId.toString()) {
+              info(`Releasing AI lock for room ${roomId} due to user ${disconnectedUser} leaving`);
+              await redisClient.del(AI_LOCK_KEY(roomId));
+              session.aiState = {
+                ...(session.aiState || {}),
+                isLocked: false,
+                lockedBy: null,
+                lockedByUsername: null,
+                lockedAt: null,
+                isProcessing: false
+              };
+              await session.save();
+              io.to(roomId).emit('ai-bot-unlocked', { roomId });
+            }
+          }
         }
       } catch (err) {
-        logError('Error updating participant status on leave-room:', err);
+        logError('Error updating participant or AI lock on leave-room:', err);
       }
 
-      // Leave the socket room immediately and notify others
       socket.leave(roomId);
       socket.to(roomId).emit('user-left', { userId: socket.id, username });
 
-      // If room becomes empty, clear MeetingSession immediately
       const room = io.sockets.adapter.rooms.get(roomId);
       const roomSize = room ? room.size : 0;
       if (roomSize === 0) {

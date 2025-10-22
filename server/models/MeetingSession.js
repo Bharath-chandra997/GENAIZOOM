@@ -22,6 +22,10 @@ const MeetingSessionSchema = new mongoose.Schema({
     },
   ],
   aiState: {
+    isLocked: { type: Boolean, default: false }, // Added for lock state
+    lockedBy: { type: String }, // Changed to String for userId consistency
+    lockedByUsername: String,
+    lockedAt: Date,
     isProcessing: { type: Boolean, default: false },
     output: { type: String, default: '' },
     completedAt: { type: Date },
@@ -48,8 +52,13 @@ const MeetingSessionSchema = new mongoose.Schema({
   },
 });
 
+// Update AI state
 MeetingSessionSchema.methods.updateAIState = function (data) {
   if (!this.aiState) this.aiState = {};
+  this.aiState.isLocked = data.isLocked ?? this.aiState.isLocked;
+  this.aiState.lockedBy = data.lockedBy ?? this.aiState.lockedBy;
+  this.aiState.lockedByUsername = data.lockedByUsername ?? this.aiState.lockedByUsername;
+  this.aiState.lockedAt = data.lockedAt ?? this.aiState.lockedAt;
   this.aiState.isProcessing = data.isProcessing ?? this.aiState.isProcessing;
   this.aiState.output = data.output ?? this.aiState.output;
   this.aiState.completedAt = data.completedAt ?? this.aiState.completedAt;
@@ -58,6 +67,38 @@ MeetingSessionSchema.methods.updateAIState = function (data) {
   this.markModified('aiState');
 };
 
+// Lock AI for a user
+MeetingSessionSchema.methods.lockAI = function (userId, username) {
+  if (!this.aiState) this.aiState = {};
+  if (this.aiState.isLocked && this.aiState.lockedBy !== userId) {
+    throw new Error('AI is already locked by another user');
+  }
+  this.aiState.isLocked = true;
+  this.aiState.lockedBy = userId; // String
+  this.aiState.lockedByUsername = username;
+  this.aiState.lockedAt = new Date();
+  this.aiState.isProcessing = true;
+  this.markModified('aiState');
+};
+
+// Unlock AI for a user
+MeetingSessionSchema.methods.unlockAI = function (userId) {
+  if (!this.aiState) this.aiState = {};
+  if (!this.aiState.isLocked) {
+    throw new Error('AI is not locked');
+  }
+  if (this.aiState.lockedBy !== userId) {
+    throw new Error('Not authorized to unlock AI');
+  }
+  this.aiState.isLocked = false;
+  this.aiState.lockedBy = null;
+  this.aiState.lockedByUsername = null;
+  this.aiState.lockedAt = null;
+  this.aiState.isProcessing = false;
+  this.markModified('aiState');
+};
+
+// Add participant
 MeetingSessionSchema.methods.addParticipant = function (userId, username, socketId) {
   const existing = this.activeParticipants.find(p => p.userId.toString() === userId.toString());
   if (existing) {
@@ -76,11 +117,13 @@ MeetingSessionSchema.methods.addParticipant = function (userId, username, socket
   this.markModified('activeParticipants');
 };
 
+// Add uploaded file
 MeetingSessionSchema.methods.addUploadedFile = function (fileData) {
   this.uploadedFiles.push(fileData);
   this.markModified('uploadedFiles');
 };
 
+// Add chat message
 MeetingSessionSchema.methods.addChatMessage = function (messageData) {
   this.chatMessages.push(messageData);
   this.markModified('chatMessages');

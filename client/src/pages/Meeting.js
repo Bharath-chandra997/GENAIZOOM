@@ -150,7 +150,7 @@ const Meeting = () => {
   const signalingStates = useRef(new Map());
   const pendingOffers = useRef(new Map());
   const pendingAnswers = useRef(new Map());
-  const pendingIceCandidates = useRef(new Map());  // New ref for queuing ICE candidates
+  const pendingIceCandidates = useRef(new Map()); // Added for queuing ICE candidates
 
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
@@ -372,7 +372,7 @@ const Meeting = () => {
         socketRef.current?.emit('ai-finish-processing', { response: prediction });
         socketRef.current?.emit('shared-ai-result', { response: prediction, username: user.username });
 
-        // Update meeting session
+        // Update meeting session with retry logic
         const sessionPayload = {
           isProcessing: false,
           output: prediction,
@@ -383,13 +383,34 @@ const Meeting = () => {
         console.log('Sending meeting session update:', {
           url: `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
           payload: sessionPayload,
-          headers: { Authorization: `Bearer ${user.token}` },
+          headers: { Authorization: `Bearer ${user.token.slice(0, 10)}...` },
         });
-        await axios.post(
-          `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
-          sessionPayload,
-          { headers: { Authorization: `Bearer ${user.token}` } }
-        );
+        const maxRetries = 3;
+        let retryCount = 0;
+        let sessionUpdateSuccess = false;
+        while (retryCount < maxRetries && !sessionUpdateSuccess) {
+          try {
+            console.log(`Attempt ${retryCount + 1} for meeting session update`);
+            await axios.post(
+              `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
+              sessionPayload,
+              { headers: { Authorization: `Bearer ${user.token}` } }
+            );
+            sessionUpdateSuccess = true;
+            console.log('Meeting session updated successfully');
+          } catch (err) {
+            console.error('Session update attempt failed:', {
+              attempt: retryCount + 1,
+              error: err.message,
+              status: err.response?.status,
+              data: err.response?.data,
+              roomId,
+            });
+            retryCount++;
+            if (retryCount === maxRetries) throw err;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
 
         toast.success('AI processing completed!', { position: 'bottom-center' });
       } catch (error) {
@@ -777,6 +798,7 @@ const Meeting = () => {
       signalingStates.current.delete(userId);
       pendingOffers.current.delete(userId);
       pendingAnswers.current.delete(userId);
+      pendingIceCandidates.current.delete(userId); // Clear queued candidates
     }
     setParticipants((prev) => prev.filter((p) => p.userId !== userId));
   }, []);
@@ -1045,7 +1067,39 @@ const Meeting = () => {
         socket.off('shared-media-removal', handleSharedMediaRemoval);
       };
     },
-    [roomId, user.username, user.userId, user.profilePicture, createPeerConnection, handleIceCandidate, handleToggleVideo, handleToggleAudio, handlePinParticipant, handleUnpinParticipant, handleSessionRestored, handleAIStartProcessing, handleAIFinishProcessing, handleAIImageUploaded, handleAIAudioUploaded, handleAIBotLocked, handleAIBotUnlocked, handleSharedAIResult, handleSharedMediaDisplay, handleSharedMediaRemoval, handleOffer, handleAnswer, handleUserLeft, handleChatMessage, handleScreenShareStart, handleScreenShareStop, handleError, handleDrawingStart, handleDrawingMove, handleDrawShape, handleClearCanvas]
+    [
+      roomId,
+      user.username,
+      user.userId,
+      user.profilePicture,
+      createPeerConnection,
+      handleIceCandidate,
+      handleToggleVideo,
+      handleToggleAudio,
+      handlePinParticipant,
+      handleUnpinParticipant,
+      handleSessionRestored,
+      handleAIStartProcessing,
+      handleAIFinishProcessing,
+      handleAIImageUploaded,
+      handleAIAudioUploaded,
+      handleAIBotLocked,
+      handleAIBotUnlocked,
+      handleSharedAIResult,
+      handleSharedMediaDisplay,
+      handleSharedMediaRemoval,
+      handleOffer,
+      handleAnswer,
+      handleUserLeft,
+      handleChatMessage,
+      handleScreenShareStart,
+      handleScreenShareStop,
+      handleError,
+      handleDrawingStart,
+      handleDrawingMove,
+      handleDrawShape,
+      handleClearCanvas,
+    ]
   );
 
   useEffect(() => {
@@ -1082,15 +1136,16 @@ const Meeting = () => {
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
         console.log('Optimized local stream initialized:', stream);
+        console.log('Connecting to Socket.IO with token:', user.token.slice(0, 10) + '...');
         socketRef.current = io(SERVER_URL, {
           auth: { token: user.token },
           transports: ['websocket'],
           reconnection: true,
-          reconnectionAttempts: 10, // Increased from 3
-          reconnectionDelay: 1000, // Start with 1s
-          reconnectionDelayMax: 5000, // Max 5s
-          timeout: 10000, // Increased from 5000
-          forceNew: false, // Allow reusing connections
+          reconnectionAttempts: 10,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          timeout: 10000,
+          forceNew: false,
         });
         socketCleanup = setupSocketListeners(socketRef.current);
         socketRef.current.on('connect_error', (error) => {
@@ -1124,7 +1179,7 @@ const Meeting = () => {
       signalingStates.current.clear();
       pendingOffers.current.clear();
       pendingAnswers.current.clear();
-      pendingIceCandidates.current.clear(); // Clear queued ICE candidates
+      pendingIceCandidates.current.clear();
       if (aiAnimationRef.current) cancelAnimationFrame(aiAnimationRef.current);
       if (socketRef.current) {
         socketCleanup();
@@ -1314,7 +1369,7 @@ const Meeting = () => {
           <div
             className="pro-sidebar-overlay"
             onClick={() => {
-              if (isParticipantsOpen) setIsParticipantsOpen(false);
+              if (isParticipantsOpen) setIsParticipants(false);
               if (isAIPopupOpen) setIsAIPopupOpen(false);
             }}
           >
@@ -1332,7 +1387,7 @@ const Meeting = () => {
                   onCloseChat={() => setIsChatOpen(false)}
                   participants={allParticipants}
                   aiParticipant={aiParticipant}
-                  onCloseParticipants={() => setIsParticipantsOpen(false)}
+                  onCloseParticipants={() => setIsParticipants(false)}
                   roomId={roomId}
                   getUserAvatar={getUserAvatar}
                   AIAvatar={AIAvatar}
@@ -1367,7 +1422,7 @@ const Meeting = () => {
         isChatOpen={isChatOpen}
         setIsChatOpen={setIsChatOpen}
         isParticipantsOpen={isParticipantsOpen}
-        setIsParticipantsOpen={setIsParticipantsOpen}
+        setIsParticipantsOpen={setIsParticipants} // Fixed from setIsParticipantsOpen
         isAIPopupOpen={isAIPopupOpen}
         setIsAIPopupOpen={setIsAIPopupOpen}
         handleExitRoom={handleExitRoom}

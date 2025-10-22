@@ -78,7 +78,7 @@ const AIAvatar = ({ size = 40 }) => {
         position: 'relative',
       }}
     >
-      Robot
+      AI
       <div
         style={{
           position: 'absolute',
@@ -116,6 +116,7 @@ const Meeting = () => {
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [currentUploader, setCurrentUploader] = useState(null);
 
   const [aiParticipant] = useState({
     userId: 'ai-assistant',
@@ -172,7 +173,7 @@ const Meeting = () => {
 
   const displayParticipants = participantsWithAI;
   const totalGridPages = useMemo(
-    () => Math.max(1, Math.ceil(displayParticipants.length / 4)),
+    () => Math.max(1, Math.ceil(displayParticipants.length / 3)),
     [displayParticipants.length]
   );
 
@@ -278,14 +279,11 @@ const Meeting = () => {
 
   const handleAIRequest = useCallback(
     async (imageFile, audioFile) => {
-      let isLocked = false;
       setIsAIProcessing(true);
       try {
         console.log('Starting AI request for user:', user.username, {
           image: imageFile?.name,
           audio: audioFile?.name,
-          endpoint: VQA_API_URL,
-          token: user.token.substring(0, 20) + '...',
         });
 
         const lockResponse = await axios.post(
@@ -300,7 +298,7 @@ const Meeting = () => {
           }
         );
         if (lockResponse.data.success) {
-          isLocked = true;
+          setCurrentUploader(user.userId);
           console.log('AI locked successfully');
         } else {
           throw new Error(lockResponse.data.error || 'Lock failed');
@@ -323,11 +321,6 @@ const Meeting = () => {
         ) {
           throw new Error('Invalid audio file. Must be MP3/WAV and less than 100 MB.');
         }
-
-        console.log('Uploading files:', {
-          image: { name: imageFile.name, type: imageFile.type, size: imageFile.size },
-          audio: { name: audioFile.name, type: audioFile.type, size: audioFile.size },
-        });
 
         const upload = async (formData, type) => {
           console.log(`Uploading ${type}:`, {
@@ -361,6 +354,7 @@ const Meeting = () => {
           imageUrl,
           audioUrl,
           username: user.username,
+          userId: user.userId,
         });
         setAiUploadedImage(imageUrl);
         setAiUploadedAudio(audioUrl);
@@ -386,6 +380,7 @@ const Meeting = () => {
         socketRef.current?.emit('shared-ai-result', {
           response: prediction,
           username: user.username,
+          userId: user.userId,
         });
 
         await axios.post(
@@ -394,34 +389,19 @@ const Meeting = () => {
             isProcessing: false,
             output: prediction,
             completedAt: new Date().toISOString(),
-            currentUploader: null,
-            uploaderUsername: null,
+            currentUploader: user.userId,
+            uploaderUsername: user.username,
           },
-          {
-            headers: { Authorization: `Bearer ${user.token}` },
-            timeout: 5000,
-          }
+          { headers: { Authorization: `Bearer ${user.token}` } }
         );
 
         toast.success('AI processing completed!', { position: 'bottom-center' });
-
-        await axios.post(
-          `${SERVER_URL}/api/ai/unlock/${roomId}`,
-          { userId: user.userId },
-          {
-            headers: { Authorization: `Bearer ${user.token}` },
-            timeout: 5000,
-          }
-        );
-        console.log('AI unlocked on success');
       } catch (error) {
         console.error('AI request error:', {
           message: error.message,
           status: error.response?.status,
           data: error.response?.data,
           code: error.code,
-          stack: error.stack,
-          url: VQA_API_URL,
         });
 
         let errorMessage = error.message;
@@ -433,25 +413,22 @@ const Meeting = () => {
           else if (status === 400) errorMessage = 'Invalid file format or missing files.';
           else if (status === 403) errorMessage = 'Not authorized to access AI.';
           else errorMessage = data?.error || data?.detail || error.message;
-        } else if (error.code === 'ERR_NETWORK') {
-          errorMessage = 'Network error: Unable to reach AI server. Please try again.';
+        } else if (error.code === 'ECONNABORTED') {
+          errorMessage = 'AI request timed out. Files kept — retry "Process with AI".';
         }
         toast.error(errorMessage, { position: 'bottom-center' });
 
-        if (isLocked) {
-          try {
-            await axios.post(
-              `${SERVER_URL}/api/ai/unlock/${roomId}`,
-              { userId: user.userId },
-              {
-                headers: { Authorization: `Bearer ${user.token}` },
-                timeout: 5000,
-              }
-            );
-            console.log('AI unlocked on error');
-          } catch (unlockError) {
-            console.warn('Failed to unlock AI:', unlockError.message);
-          }
+        // Unlock AI on error
+        try {
+          await axios.post(
+            `${SERVER_URL}/api/ai/unlock/${roomId}`,
+            { userId: user.userId },
+            { headers: { Authorization: `Bearer ${user.token}` } }
+          );
+          setCurrentUploader(null);
+          console.log('AI unlocked on error');
+        } catch (e) {
+          console.warn('Unlock failed on error:', e.message);
         }
       } finally {
         setIsAIProcessing(false);
@@ -461,40 +438,59 @@ const Meeting = () => {
   );
 
   const handleAIComplete = useCallback(async () => {
+    if (currentUploader !== user.userId) {
+      toast.error('Only the uploader can unlock the AI.', { position: 'bottom-center' });
+      return;
+    }
     setAiResponse('');
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
-    socketRef.current?.emit('shared-media-removal', { username: user.username });
+    setCurrentUploader(null);
+    socketRef.current?.emit('shared-media-removal', { username: user.username, userId: user.userId });
 
     try {
       await axios.post(
         `${SERVER_URL}/api/ai/unlock/${roomId}`,
         { userId: user.userId },
+        { headers: { Authorization: `Bearer ${user.token}` } }
+      );
+      await axios.post(
+        `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
         {
-          headers: { Authorization: `Bearer ${user.token}` },
-          timeout: 5000,
-        }
+          isProcessing: false,
+          output: '',
+          completedAt: null,
+          currentUploader: null,
+          uploaderUsername: null,
+        },
+        { headers: { Authorization: `Bearer ${user.token}` } }
       );
       console.log('AI unlocked on manual complete');
+      toast.info('AI session completed and unlocked', { position: 'bottom-center' });
     } catch (e) {
       console.warn('Manual unlock failed (non-critical):', e.message);
+      toast.error('Failed to unlock AI.', { position: 'bottom-center' });
     }
-    toast.info('AI session completed', { position: 'bottom-center' });
-  }, [roomId, user]);
+  }, [roomId, user, currentUploader]);
 
-  const handleSharedAIResult = useCallback(({ response, username }) => {
+  const handleSharedAIResult = useCallback(({ response, username, userId }) => {
     setAiResponse(response);
+    setCurrentUploader(userId);
     toast.info(`${username} shared an AI result`, { position: 'bottom-center' });
   }, []);
 
-  const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username }) => {
+  const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username, userId }) => {
     if (imageUrl) setAiUploadedImage(imageUrl);
     if (audioUrl) setAiUploadedAudio(audioUrl);
+    setCurrentUploader(userId);
+    toast.info(`${username} shared media`, { position: 'bottom-center' });
   }, []);
 
-  const handleSharedMediaRemoval = useCallback(() => {
+  const handleSharedMediaRemoval = useCallback(({ username, userId }) => {
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
+    setCurrentUploader(null);
+    toast.info(`${username} cleared shared media`, { position: 'bottom-center' });
   }, []);
 
   const getIceServers = useCallback(async () => {
@@ -664,7 +660,31 @@ const Meeting = () => {
     }
   }, []);
 
+  const handleUserJoined = useCallback(({ userId, username, isHost, profilePicture }) => {
+    if (userId === socketRef.current?.id) return;
+    setParticipants((prev) => {
+      if (prev.some((p) => p.userId === userId)) return prev;
+      return [
+        ...prev,
+        {
+          userId,
+          username,
+          stream: null,
+          isLocal: false,
+          isHost,
+          videoEnabled: true,
+          audioEnabled: true,
+          isScreenSharing: false,
+          socketId: userId,
+          profilePicture,
+        },
+      ];
+    });
+    toast.info(`${username} joined the meeting`, { position: 'bottom-center' });
+  }, []);
+
   const handleUserLeft = useCallback(({ userId }) => {
+    const username = getUsernameById(userId);
     const pc = peerConnections.current.get(userId);
     if (pc) pc.close();
     peerConnections.current.delete(userId);
@@ -673,7 +693,8 @@ const Meeting = () => {
     signalingStates.current.delete(userId);
     pendingIceCandidates.current.delete(userId);
     setParticipants((prev) => prev.filter((p) => p.userId !== userId));
-  }, []);
+    toast.info(`${username} left the meeting`, { position: 'bottom-center' });
+  }, [getUsernameById]);
 
   const setupSocketListeners = useCallback(
     (socket) => {
@@ -712,6 +733,7 @@ const Meeting = () => {
             if (sessionData?.chatMessages) setMessages(sessionData.chatMessages);
             if (sessionData?.aiState) {
               setAiResponse(sessionData.aiState.output || '');
+              setCurrentUploader(sessionData.aiState.currentUploader || null);
               if (sessionData.uploadedFiles) {
                 const img = sessionData.uploadedFiles.find((f) => f.type === 'image');
                 const aud = sessionData.uploadedFiles.find((f) => f.type === 'audio');
@@ -725,45 +747,7 @@ const Meeting = () => {
       };
 
       socket.on('connect', onConnect);
-      socket.on('user-joined', async ({ userId, username, isHost, profilePicture }) => {
-        if (userId === socket.id) return;
-        setParticipants((prev) => {
-          if (prev.some((p) => p.userId === userId)) return prev;
-          return [
-            ...prev,
-            {
-              userId,
-              username,
-              stream: null,
-              isLocal: false,
-              isHost,
-              videoEnabled: true,
-              audioEnabled: true,
-              isScreenSharing: false,
-              socketId: userId,
-              profilePicture,
-            },
-          ];
-        });
-
-        try {
-          const pc = await createPeerConnection(userId);
-          const state = signalingStates.current.get(userId);
-          if (state === 'new' || state === 'stable') {
-            if (localStreamRef.current) {
-              localStreamRef.current.getTracks().forEach((track) =>
-                pc.addTrack(track, localStreamRef.current)
-              );
-            }
-            signalingStates.current.set(userId, 'have-local-offer');
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            socket.emit('offer', { to: userId, offer, username: user.username });
-          }
-        } catch (e) {
-          console.error('User-joined handler error:', e);
-        }
-      });
+      socket.on('user-joined', handleUserJoined);
       socket.on('offer', handleOffer);
       socket.on('answer', handleAnswer);
       socket.on('ice-candidate', handleIceCandidate);
@@ -823,6 +807,7 @@ const Meeting = () => {
       handleOffer,
       handleAnswer,
       handleIceCandidate,
+      handleUserJoined,
       handleUserLeft,
       handleSharedAIResult,
       handleSharedMediaDisplay,
@@ -1139,6 +1124,7 @@ const Meeting = () => {
                   aiUploadedAudio={aiUploadedAudio}
                   user={user}
                   isAIProcessing={isAIProcessing}
+                  currentUploader={currentUploader}
                 />
               </div>
             )}

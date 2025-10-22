@@ -32,7 +32,7 @@ app = FastAPI(title="SynergySphere VQA Proxy API")
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://genaizoom123.onrender.com", "http://localhost:3000"],
+    allow_origins=["https://genaizoom123.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -31,10 +31,10 @@ app = FastAPI(title="SynergySphere VQA Proxy API")
 
 # FIXED: Enhanced CORS - Add frontend origin explicitly
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://genaizoom123.onrender.com", "http://localhost:3000"],  # Frontend URL
+    CORSMiddleware, # Frontend URL
     allow_credentials=True,
     allow_methods=["*"],
+    allow_origins=["*"],
     allow_headers=["*"],
 )
 

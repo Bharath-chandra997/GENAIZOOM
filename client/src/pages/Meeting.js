@@ -109,8 +109,6 @@ const Meeting = () => {
   const [currentTool] = useState('pen');
   const [currentBrushSize] = useState(5);
   const [gridPage, setGridPage] = useState(0);
-  const [aiBotInUse, setAiBotInUse] = useState(false);
-  const [currentAIUser, setCurrentAIUser] = useState(null);
   const [aiResponse, setAiResponse] = useState('');
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
@@ -150,7 +148,7 @@ const Meeting = () => {
   const signalingStates = useRef(new Map());
   const pendingOffers = useRef(new Map());
   const pendingAnswers = useRef(new Map());
-  const pendingIceCandidates = useRef(new Map()); // Added for queuing ICE candidates
+  const pendingIceCandidates = useRef(new Map());
 
   const isMirroringBrowser = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream, []);
 
@@ -237,13 +235,8 @@ const Meeting = () => {
       ctx.textBaseline = 'middle';
       ctx.fillText('AI Assistant', canvas.width / 2, canvas.height / 2 - 10);
       ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.fillStyle = aiBotInUse ? 'rgba(239, 68, 68, 0.7)' : 'rgba(96, 165, 250, 0.7)';
-      ctx.fillText(aiBotInUse ? 'In use by ' + currentAIUser : 'Ready to help', canvas.width / 2, canvas.height / 2 + 15);
-      ctx.beginPath();
-      ctx.arc(canvas.width / 2, canvas.height / 2, 25 + Math.sin(time * 2) * 3, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(96, 165, 250, ${0.5 + Math.sin(time) * 0.3})`;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.fillStyle = 'rgba(96, 165, 250, 0.7)';
+      ctx.fillText('Ready to help', canvas.width / 2, canvas.height / 2 + 15);
       aiAnimationRef.current = requestAnimationFrame(animate);
     };
 
@@ -262,7 +255,7 @@ const Meeting = () => {
       if (aiAnimationRef.current) cancelAnimationFrame(aiAnimationRef.current);
       window.removeEventListener('resize', resizeCanvas);
     };
-  }, [aiBotInUse, currentAIUser]);
+  }, []);
 
   useEffect(() => {
     const cleanup = initializeAiAnimation();
@@ -271,149 +264,99 @@ const Meeting = () => {
 
   const handleAIRequest = useCallback(
     async (imageFile, audioFile) => {
-      if (aiBotInUse) {
-        toast.error('AI Bot is currently in use by another user', { position: 'bottom-center' });
-        return;
-      }
-
-      // Validate files
-      const validImageTypes = ['image/jpeg', 'image/png'];
-      const validAudioTypes = ['audio/mpeg', 'audio/wav'];
-      const maxFileSize = 100 * 1024 * 1024; // 100MB
-
-      if (imageFile && (!validImageTypes.includes(imageFile.type) || imageFile.size > maxFileSize)) {
-        toast.error('Invalid image file. Must be JPEG/PNG and less than 100MB.', { position: 'bottom-center' });
-        return;
-      }
-      if (audioFile && (!validAudioTypes.includes(audioFile.type) || audioFile.size > maxFileSize)) {
-        toast.error('Invalid audio file. Must be MP3/WAV and less than 100MB.', { position: 'bottom-center' });
-        return;
-      }
-      if (!imageFile) {
-        toast.error('Image file is required.', { position: 'bottom-center' });
-        return;
-      }
-      if (!audioFile) {
-        toast.error('Audio file is required.', { position: 'bottom-center' });
-        return;
-      }
-
-      setAiBotInUse(true);
-      setCurrentAIUser(user.username);
-      socketRef.current?.emit('ai-start-processing', { userId: user.userId, username: user.username, roomId });
-
-      let imageUrl = null;
-      let audioUrl = null;
-
       try {
-        // Upload files to Node.js server
-        if (imageFile) {
-          const imageFormData = new FormData();
-          imageFormData.append('file', imageFile);
-          console.log('Uploading image:', { filename: imageFile.name, size: imageFile.size, type: imageFile.type });
-          const imageResponse = await axios.post(`${SERVER_URL}/upload/image`, imageFormData, {
-            headers: {
-              Authorization: `Bearer ${user.token}`,
-              'Content-Type': 'multipart/form-data',
-            },
-          });
-          imageUrl = imageResponse.data.url;
-          socketRef.current?.emit('ai-image-uploaded', {
-            url: imageUrl,
-            userId: user.userId,
-            username: user.username,
-            filename: imageFile.name,
-            size: imageFile.size,
-          });
-          setAiUploadedImage(imageUrl);
+        console.log('Starting AI request for user:', user.username, { image: imageFile?.name, audio: audioFile?.name });
+
+        // Lock AI bot
+        const lockResponse = await axios.post(
+          `${SERVER_URL}/api/ai/lock/${roomId}`,
+          { userId: user.userId, username: user.username },
+          { headers: { Authorization: `Bearer ${user.token}` } }
+        );
+        if (!lockResponse.data.success) {
+          throw new Error(lockResponse.data.message || 'AI Bot is in use');
         }
 
-        if (audioFile) {
-          const audioFormData = new FormData();
-          audioFormData.append('file', audioFile);
-          console.log('Uploading audio:', { filename: audioFile.name, size: audioFile.size, type: audioFile.type });
-          const audioResponse = await axios.post(`${SERVER_URL}/upload/audio`, audioFormData, {
-            headers: {
-              Authorization: `Bearer ${user.token}`,
-              'Content-Type': 'multipart/form-data',
-            },
-          });
-          audioUrl = audioResponse.data.url;
-          socketRef.current?.emit('ai-audio-uploaded', {
-            url: audioUrl,
-            userId: user.userId,
-            username: user.username,
-            filename: audioFile.name,
-            size: audioFile.size,
-          });
-          setAiUploadedAudio(audioUrl);
+        // Validate files
+        const validImageTypes = ['image/jpeg', 'image/png'];
+        const validAudioTypes = ['audio/mpeg', 'audio/wav'];
+        const maxFileSize = 100 * 1024 * 1024; // 100MB
+        if (!imageFile || !validImageTypes.includes(imageFile.type) || imageFile.size > maxFileSize) {
+          throw new Error('Invalid image file. Must be JPEG/PNG and less than 100MB.');
+        }
+        if (!audioFile || !validAudioTypes.includes(audioFile.type) || audioFile.size > maxFileSize) {
+          throw new Error('Invalid audio file. Must be MP3/WAV and less than 100MB.');
         }
 
-        // Send files to FastAPI server
+        // Upload files
+        const imageFormData = new FormData();
+        imageFormData.append('file', imageFile);
+        console.log('Uploading image:', { filename: imageFile.name, size: imageFile.size });
+        const imageResponse = await axios.post(`${SERVER_URL}/upload/image`, imageFormData, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        const imageUrl = imageResponse.data.url;
+        console.log('Image uploaded:', imageUrl);
+
+        const audioFormData = new FormData();
+        audioFormData.append('file', audioFile);
+        console.log('Uploading audio:', { filename: audioFile.name, size: audioFile.size });
+        const audioResponse = await axios.post(`${SERVER_URL}/upload/audio`, audioFormData, {
+          headers: {
+            Authorization: `Bearer ${user.token}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        const audioUrl = audioResponse.data.url;
+        console.log('Audio uploaded:', audioUrl);
+
+        // Notify others
+        socketRef.current?.emit('shared-media-display', {
+          imageUrl,
+          audioUrl,
+          username: user.username,
+        });
+        setAiUploadedImage(imageUrl);
+        setAiUploadedAudio(audioUrl);
+
+        // Send to FastAPI
         const formData = new FormData();
         formData.append('image', imageFile);
         formData.append('audio', audioFile);
-        console.log('VQA request FormData:');
-        for (let pair of formData.entries()) {
-          console.log(`${pair[0]}: ${pair[1]}`);
-        }
-
+        console.log('Sending to FastAPI:', VQA_API_URL);
         const response = await axios.post(VQA_API_URL, formData, {
           headers: {
             Authorization: `Bearer ${user.token}`,
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 120000, // Increased to 120s for slow models
+          timeout: 120000,
         });
+        console.log('FastAPI response:', response.data);
 
         const prediction = response.data.prediction;
         if (!prediction) {
           throw new Error('No prediction received from AI model');
         }
         setAiResponse(prediction);
-
-        socketRef.current?.emit('ai-finish-processing', { response: prediction });
         socketRef.current?.emit('shared-ai-result', { response: prediction, username: user.username });
+        console.log('AI response set:', prediction);
 
-        // Update meeting session with retry logic
-        const sessionPayload = {
-          isProcessing: false,
-          output: prediction,
-          completedAt: new Date().toISOString(),
-          currentUploader: null,
-          uploaderUsername: null,
-        };
-        console.log('Sending meeting session update:', {
-          url: `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
-          payload: sessionPayload,
-          headers: { Authorization: `Bearer ${user.token.slice(0, 10)}...` },
-        });
-        const maxRetries = 3;
-        let retryCount = 0;
-        let sessionUpdateSuccess = false;
-        while (retryCount < maxRetries && !sessionUpdateSuccess) {
-          try {
-            console.log(`Attempt ${retryCount + 1} for meeting session update`);
-            await axios.post(
-              `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
-              sessionPayload,
-              { headers: { Authorization: `Bearer ${user.token}` } }
-            );
-            sessionUpdateSuccess = true;
-            console.log('Meeting session updated successfully');
-          } catch (err) {
-            console.error('Session update attempt failed:', {
-              attempt: retryCount + 1,
-              error: err.message,
-              status: err.response?.status,
-              data: err.response?.data,
-              roomId,
-            });
-            retryCount++;
-            if (retryCount === maxRetries) throw err;
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
+        // Update meeting session
+        await axios.post(
+          `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
+          {
+            isProcessing: false,
+            output: prediction,
+            completedAt: new Date().toISOString(),
+            currentUploader: null,
+            uploaderUsername: null,
+          },
+          { headers: { Authorization: `Bearer ${user.token}` } }
+        );
+        console.log('Meeting session updated');
 
         toast.success('AI processing completed!', { position: 'bottom-center' });
       } catch (error) {
@@ -421,183 +364,54 @@ const Meeting = () => {
           message: error.message,
           status: error.response?.status,
           data: error.response?.data,
-          code: error.code,
-          stack: error.stack,
         });
-        let errorMessage = 'Failed to process AI request.';
-        if (error.response?.status === 503) {
-          errorMessage = 'AI service is currently unavailable. Please try again later.';
-        } else if (error.response?.status === 401) {
-          errorMessage = 'Authentication failed. Please log in again.';
-        } else if (error.response?.status === 400) {
-          errorMessage = 'Invalid file format or missing files.';
-        } else if (error.code === 'ECONNABORTED') {
-          errorMessage = 'AI request timed out. Please check your network.';
-        } else if (error.response?.data?.detail) {
-          errorMessage = error.response.data.detail;
-        }
+        const errorMessage =
+          error.response?.status === 503 ? 'AI service unavailable. Try again later.' :
+          error.response?.status === 401 ? 'Authentication failed. Please log in again.' :
+          error.response?.status === 400 ? 'Invalid file format or missing files.' :
+          error.code === 'ECONNABORTED' ? 'AI request timed out.' :
+          error.response?.data?.detail || error.message || 'Failed to process AI request.';
         toast.error(errorMessage, { position: 'bottom-center' });
-
-        setAiBotInUse(false);
-        setCurrentAIUser(null);
-        setAiUploadedImage(null);
-        setAiUploadedAudio(null);
-        socketRef.current?.emit('ai-bot-unlocked', { roomId });
+      } finally {
+        // Unlock AI bot
+        await axios.post(`${SERVER_URL}/api/ai/unlock/${roomId}`, { userId: user.userId }, {
+          headers: { Authorization: `Bearer ${user.token}` },
+        });
       }
     },
-    [aiBotInUse, user, roomId]
+    [user, roomId]
   );
 
-  const handleAIComplete = useCallback(() => {
-    setAiBotInUse(false);
-    setCurrentAIUser(null);
+  const handleAIComplete = useCallback(async () => {
     setAiResponse('');
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
-    socketRef.current?.emit('ai-bot-unlocked', { roomId });
     socketRef.current?.emit('shared-media-removal', { username: user.username });
-  }, [roomId, user.username]);
-
-  const handleAIStartProcessing = useCallback(({ userId, username }) => {
-    setAiBotInUse(true);
-    setCurrentAIUser(username);
-    toast.info(`${username} started AI processing`, { position: 'bottom-center' });
-  }, []);
-
-  const handleAIFinishProcessing = useCallback(({ response }) => {
-    setAiResponse(response);
-  }, []);
-
-  const handleAIImageUploaded = useCallback(({ url, userId, username }) => {
-    setAiUploadedImage(url);
-    toast.info(`${username} uploaded an image for AI processing`, { position: 'bottom-center' });
-  }, []);
-
-  const handleAIAudioUploaded = useCallback(({ url, userId, username }) => {
-    setAiUploadedAudio(url);
-    toast.info(`${username} uploaded an audio file for AI processing`, { position: 'bottom-center' });
-  }, []);
-
-  const handleAIBotLocked = useCallback(({ userId, username }) => {
-    setAiBotInUse(true);
-    setCurrentAIUser(username);
-  }, []);
-
-  const handleAIBotUnlocked = useCallback(() => {
-    setAiBotInUse(false);
-    setCurrentAIUser(null);
-    setAiResponse('');
-    setAiUploadedImage(null);
-    setAiUploadedAudio(null);
-  }, []);
+    await axios.post(`${SERVER_URL}/api/ai/unlock/${roomId}`, { userId: user.userId }, {
+      headers: { Authorization: `Bearer ${user.token}` },
+    });
+    toast.info('AI session completed', { position: 'bottom-center' });
+  }, [roomId, user]);
 
   const handleSharedAIResult = useCallback(({ response, username }) => {
+    console.log('Received shared AI result:', { response, username });
     setAiResponse(response);
     toast.info(`${username} shared an AI result`, { position: 'bottom-center' });
   }, []);
 
   const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username }) => {
+    console.log('Received shared media:', { imageUrl, audioUrl, username });
     if (imageUrl) setAiUploadedImage(imageUrl);
     if (audioUrl) setAiUploadedAudio(audioUrl);
   }, []);
 
   const handleSharedMediaRemoval = useCallback(() => {
+    console.log('Removing shared media');
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
   }, []);
 
-  const handleToolbarMouseMove = useCallback((e) => {
-    if (dragInfo.current.isDragging) {
-      setToolbarPosition({
-        x: e.clientX - dragInfo.current.offsetX,
-        y: e.clientY - dragInfo.current.offsetY,
-      });
-    }
-  }, []);
-
-  const handleToolbarMouseUp = useCallback(() => {
-    dragInfo.current.isDragging = false;
-    window.removeEventListener('mousemove', handleToolbarMouseMove);
-    window.removeEventListener('mouseup', handleToolbarMouseUp);
-  }, [handleToolbarMouseMove]);
-
-  const handleMouseDown = useCallback((e) => {
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
-    if (currentTool === 'pen' || currentTool === 'eraser') {
-      const myColor = getColorForId(socketRef.current?.id);
-      const payload = { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize };
-      socketRef.current?.emit('drawing-start', payload);
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = myColor;
-      ctx.lineWidth = currentBrushSize;
-      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-    }
-  }, [currentTool, currentBrushSize]);
-
-  const handleMouseMove = useCallback((e) => {
-    if (!drawingStateRef.current.isDrawing || !e.buttons) return;
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    if (currentTool === 'pen' || currentTool === 'eraser') {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      socketRef.current?.emit('drawing-move', { x: x / canvas.width, y: y / canvas.height });
-      const ctx = canvas.getContext('2d');
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
-  }, [currentTool]);
-
-  const handleMouseUp = useCallback((e) => {
-    if (!drawingStateRef.current.isDrawing) return;
-    const canvas = annotationCanvasRef.current;
-    if (!canvas) return;
-    if (currentTool === 'rectangle' || currentTool === 'circle') {
-      const rect = canvas.getBoundingClientRect();
-      const { startX, startY } = drawingStateRef.current;
-      const endX = e.clientX - rect.left;
-      const endY = e.clientY - rect.top;
-      const myColor = getColorForId(socketRef.current?.id);
-      const payload = {
-        tool: currentTool,
-        startX: startX / canvas.width,
-        startY: startY / canvas.height,
-        endX: endX / canvas.width,
-        endY: endY / canvas.height,
-        color: myColor,
-        size: currentBrushSize,
-      };
-      socketRef.current?.emit('draw-shape', payload);
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = myColor;
-      ctx.lineWidth = currentBrushSize;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.beginPath();
-      if (currentTool === 'rectangle') ctx.rect(startX, startY, endX - startX, endY - startY);
-      else if (currentTool === 'circle') {
-        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
-      }
-      ctx.stroke();
-    }
-    drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
-  }, [currentTool, currentBrushSize]);
-
   const getIceServers = useCallback(async () => {
-    const now = Date.now();
-    const cacheExpiry = 5 * 60 * 1000;
-    if (iceServersCache.current && now - lastIceFetch.current < cacheExpiry) {
-      return iceServersCache.current;
-    }
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -608,27 +422,11 @@ const Meeting = () => {
       clearTimeout(timeoutId);
       console.log('ICE Servers fetched:', data.length, 'servers');
       iceServersCache.current = data;
-      lastIceFetch.current = now;
+      lastIceFetch.current = Date.now();
       return data;
     } catch (error) {
-      console.warn('ICE servers fetch failed, using fallback:', error.message);
-      const fallbackServers = [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        {
-          urls: 'turn:openrelay.metered.ca:80',
-          username: 'openrelayproject',
-          credential: 'openrelayprojectsecret',
-        },
-        {
-          urls: 'turns:openrelay.metered.ca:443',
-          username: 'openrelayproject',
-          credential: 'openrelayprojectsecret',
-        },
-      ];
-      iceServersCache.current = fallbackServers;
-      lastIceFetch.current = now;
-      return fallbackServers;
+      console.error('ICE servers fetch failed:', error.message);
+      throw new Error('Failed to fetch ICE servers');
     }
   }, []);
 
@@ -742,7 +540,6 @@ const Meeting = () => {
           }
           signalingStates.current.set(from, 'have-remote-offer');
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          // Apply queued ICE candidates
           const queuedCandidates = pendingIceCandidates.current.get(from) || [];
           for (const candidate of queuedCandidates) {
             await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
@@ -758,10 +555,10 @@ const Meeting = () => {
         }
       } catch (err) {
         console.error('Error in offer handler:', err);
-        toast.error(`Failed to process offer from ${username}.`, { position: 'bottom-center' });
+        toast.error(`Failed to process offer from ${username}.`);
       }
     },
-    [createPeerConnection, socketRef, localStreamRef, signalingStates]
+    [createPeerConnection]
   );
 
   const handleAnswer = useCallback(
@@ -771,7 +568,6 @@ const Meeting = () => {
       if (pc && signalingStates.current.get(from) === 'have-local-offer') {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer));
-          // Apply queued ICE candidates
           const queuedCandidates = pendingIceCandidates.current.get(from) || [];
           for (const candidate of queuedCandidates) {
             await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
@@ -801,7 +597,7 @@ const Meeting = () => {
       signalingStates.current.delete(userId);
       pendingOffers.current.delete(userId);
       pendingAnswers.current.delete(userId);
-      pendingIceCandidates.current.delete(userId); // Clear queued candidates
+      pendingIceCandidates.current.delete(userId);
     }
     setParticipants((prev) => prev.filter((p) => p.userId !== userId));
   }, []);
@@ -909,9 +705,7 @@ const Meeting = () => {
     console.log('Session restored:', data);
     if (data.chatMessages) setMessages(data.chatMessages);
     if (data.aiState) {
-      setAiBotInUse(data.aiState.isProcessing || !!data.aiState.currentUploader);
-      setCurrentAIUser(data.aiState.uploaderUsername);
-      setAiResponse(data.aiState.output);
+      setAiResponse(data.aiState.output || '');
       if (data.uploadedFiles) {
         const lastImage = data.uploadedFiles.find(f => f.type === 'image');
         const lastAudio = data.uploadedFiles.find(f => f.type === 'audio');
@@ -955,15 +749,13 @@ const Meeting = () => {
           setParticipants([localParticipant, ...remoteParticipants]);
           if (sessionData?.chatMessages) setMessages(sessionData.chatMessages);
           if (sessionData?.aiState) {
-            setAiBotInUse(sessionData.aiState.isProcessing || !!sessionData.aiState.currentUploader);
-            setCurrentAIUser(sessionData.aiState.uploaderUsername);
-            setAiResponse(sessionData.aiState.output);
-          }
-          if (sessionData?.uploadedFiles) {
-            const lastImage = sessionData.uploadedFiles.find(f => f.type === 'image');
-            const lastAudio = sessionData.uploadedFiles.find(f => f.type === 'audio');
-            setAiUploadedImage(lastImage?.url || null);
-            setAiUploadedAudio(lastAudio?.url || null);
+            setAiResponse(sessionData.aiState.output || '');
+            if (sessionData.uploadedFiles) {
+              const lastImage = sessionData.uploadedFiles.find(f => f.type === 'image');
+              const lastAudio = sessionData.uploadedFiles.find(f => f.type === 'audio');
+              setAiUploadedImage(lastImage?.url || null);
+              setAiUploadedAudio(lastAudio?.url || null);
+            }
           }
           setIsLoading(false);
         });
@@ -1029,12 +821,6 @@ const Meeting = () => {
       socket.on('pin-participant', handlePinParticipant);
       socket.on('unpin-participant', handleUnpinParticipant);
       socket.on('session-restored', handleSessionRestored);
-      socket.on('ai-start-processing', handleAIStartProcessing);
-      socket.on('ai-finish-processing', handleAIFinishProcessing);
-      socket.on('ai-image-uploaded', handleAIImageUploaded);
-      socket.on('ai-audio-uploaded', handleAIAudioUploaded);
-      socket.on('ai-bot-locked', handleAIBotLocked);
-      socket.on('ai-bot-unlocked', handleAIBotUnlocked);
       socket.on('shared-ai-result', handleSharedAIResult);
       socket.on('shared-media-display', handleSharedMediaDisplay);
       socket.on('shared-media-removal', handleSharedMediaRemoval);
@@ -1059,12 +845,6 @@ const Meeting = () => {
         socket.off('pin-participant', handlePinParticipant);
         socket.off('unpin-participant', handleUnpinParticipant);
         socket.off('session-restored', handleSessionRestored);
-        socket.off('ai-start-processing', handleAIStartProcessing);
-        socket.off('ai-finish-processing', handleAIFinishProcessing);
-        socket.off('ai-image-uploaded', handleAIImageUploaded);
-        socket.off('ai-audio-uploaded', handleAIAudioUploaded);
-        socket.off('ai-bot-locked', handleAIBotLocked);
-        socket.off('ai-bot-unlocked', handleAIBotUnlocked);
         socket.off('shared-ai-result', handleSharedAIResult);
         socket.off('shared-media-display', handleSharedMediaDisplay);
         socket.off('shared-media-removal', handleSharedMediaRemoval);
@@ -1082,12 +862,6 @@ const Meeting = () => {
       handlePinParticipant,
       handleUnpinParticipant,
       handleSessionRestored,
-      handleAIStartProcessing,
-      handleAIFinishProcessing,
-      handleAIImageUploaded,
-      handleAIAudioUploaded,
-      handleAIBotLocked,
-      handleAIBotUnlocked,
       handleSharedAIResult,
       handleSharedMediaDisplay,
       handleSharedMediaRemoval,
@@ -1138,8 +912,8 @@ const Meeting = () => {
         const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
-        console.log('Optimized local stream initialized:', stream);
-        console.log('Connecting to Socket.IO with token:', user.token.slice(0, 10) + '...');
+        console.log('Local stream initialized:', stream);
+        console.log('Connecting to Socket.IO with token:', user.token.slice(0, 10) + ' ...');
         socketRef.current = io(SERVER_URL, {
           auth: { token: user.token },
           transports: ['websocket'],
@@ -1156,7 +930,7 @@ const Meeting = () => {
           toast.error(`Connection failed: ${error.message}. Retrying...`, { position: 'bottom-center' });
         });
         socketRef.current.on('reconnect_failed', () => {
-          console.error('Socket.IO reconnection failed after max attempts');
+          console.error('Socket.IO reconnection failed');
           toast.error('Failed to reconnect to server. Please refresh the page.', { position: 'bottom-center' });
         });
         if (mounted) setIsLoading(false);
@@ -1289,9 +1063,91 @@ const Meeting = () => {
       offsetX: e.clientX - rect.left,
       offsetY: e.clientY - rect.top,
     };
-    window.addEventListener('mousemove', handleToolbarMouseMove);
-    window.addEventListener('mouseup', handleToolbarMouseUp);
+    window.addEventListener('mousemove', (e) => {
+      if (dragInfo.current.isDragging) {
+        setToolbarPosition({
+          x: e.clientX - dragInfo.current.offsetX,
+          y: e.clientY - dragInfo.current.offsetY,
+        });
+      }
+    });
+    window.addEventListener('mouseup', () => {
+      dragInfo.current.isDragging = false;
+      window.removeEventListener('mousemove', handleToolbarMouseDown);
+      window.removeEventListener('mouseup', handleToolbarMouseDown);
+    });
   };
+
+  const handleMouseDown = useCallback((e) => {
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    drawingStateRef.current = { isDrawing: true, startX: x, startY: y };
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+      const myColor = getColorForId(socketRef.current?.id);
+      const payload = { x: x / canvas.width, y: y / canvas.height, color: myColor, tool: currentTool, size: currentBrushSize };
+      socketRef.current?.emit('drawing-start', payload);
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = myColor;
+      ctx.lineWidth = currentBrushSize;
+      ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+  }, [currentTool, currentBrushSize]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!drawingStateRef.current.isDrawing || !e.buttons) return;
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    if (currentTool === 'pen' || currentTool === 'eraser') {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      socketRef.current?.emit('drawing-move', { x: x / canvas.width, y: y / canvas.height });
+      const ctx = canvas.getContext('2d');
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+  }, [currentTool]);
+
+  const handleMouseUp = useCallback((e) => {
+    if (!drawingStateRef.current.isDrawing) return;
+    const canvas = annotationCanvasRef.current;
+    if (!canvas) return;
+    if (currentTool === 'rectangle' || currentTool === 'circle') {
+      const rect = canvas.getBoundingClientRect();
+      const { startX, startY } = drawingStateRef.current;
+      const endX = e.clientX - rect.left;
+      const endY = e.clientY - rect.top;
+      const myColor = getColorForId(socketRef.current?.id);
+      const payload = {
+        tool: currentTool,
+        startX: startX / canvas.width,
+        startY: startY / canvas.height,
+        endX: endX / canvas.width,
+        endY: endY / canvas.height,
+        color: myColor,
+        size: currentBrushSize,
+      };
+      socketRef.current?.emit('draw-shape', payload);
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = myColor;
+      ctx.lineWidth = currentBrushSize;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.beginPath();
+      if (currentTool === 'rectangle') ctx.rect(startX, startY, endX - startX, endY - startY);
+      else if (currentTool === 'circle') {
+        const radius = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+        ctx.arc(startX, startY, radius, 0, 2 * Math.PI);
+      }
+      ctx.stroke();
+    }
+    drawingStateRef.current = { isDrawing: false, startX: 0, startY: 0 };
+  }, [currentTool, currentBrushSize]);
 
   const handleExitRoom = () => {
     try {
@@ -1334,8 +1190,6 @@ const Meeting = () => {
             handleExitRoom={handleExitRoom}
             aiCanvasRef={aiCanvasRef}
             setGridPage={setGridPage}
-            aiBotInUse={aiBotInUse}
-            currentAIUser={currentAIUser}
             aiResponse={aiResponse}
             aiUploadedImage={aiUploadedImage}
             aiUploadedAudio={aiUploadedAudio}
@@ -1403,8 +1257,6 @@ const Meeting = () => {
                   onClose={() => setIsAIPopupOpen(false)}
                   onAIRequest={handleAIRequest}
                   onAIComplete={handleAIComplete}
-                  aiBotInUse={aiBotInUse}
-                  currentAIUser={currentAIUser}
                   aiResponse={aiResponse}
                   aiUploadedImage={aiUploadedImage}
                   aiUploadedAudio={aiUploadedAudio}
@@ -1440,4 +1292,4 @@ const Meeting = () => {
 };
 
 export { getUserAvatar, AIAvatar };
-export default Meeting;8.7sExpert
+export default Meeting;

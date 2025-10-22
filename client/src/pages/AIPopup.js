@@ -95,7 +95,7 @@ const AIPopup = ({
             </div>
 
             {/* Upload Section */}
-            {!aiBotInUse && (
+            {!aiBotInUse && !aiResponse && (
               <div className="pro-ai-upload-section">
                 <div className="pro-ai-upload-area">
                   <h4>Upload Image</h4>
@@ -134,7 +134,7 @@ const AIPopup = ({
             )}
 
             {/* Submit Button - Always visible when not in use */}
-            {!aiBotInUse && (
+            {!aiBotInUse && !aiResponse && (
               <div className="pro-ai-submit-bar">
                 <button 
                   onClick={handleSubmit}
@@ -147,7 +147,7 @@ const AIPopup = ({
             )}
 
             {/* Response Section */}
-            {aiBotInUse && aiResponse && (
+            {aiResponse && (
               <div className="pro-ai-response-section">
                 <h4>AI Response</h4>
                 <div className="pro-ai-response-content">

@@ -264,6 +264,7 @@ const Meeting = () => {
 
   const handleAIRequest = useCallback(
     async (imageFile, audioFile) => {
+      let lockUnlocked = false; // Flag to avoid double unlock
       try {
         console.log('Starting AI request for user:', user.username, { image: imageFile?.name, audio: audioFile?.name });
 
@@ -274,7 +275,7 @@ const Meeting = () => {
           { headers: { Authorization: `Bearer ${user.token}` } }
         );
         if (!lockResponse.data.success) {
-          throw new Error(lockResponse.data.message || 'AI Bot is in use');
+          throw new Error(lockResponse.data.error || 'AI Bot is in use');
         }
 
         // Validate files
@@ -367,16 +368,26 @@ const Meeting = () => {
         });
         const errorMessage =
           error.response?.status === 503 ? 'AI service unavailable. Try again later.' :
+          error.response?.status === 409 ? 'AI Bot is already in use by another participant.' :
           error.response?.status === 401 ? 'Authentication failed. Please log in again.' :
           error.response?.status === 400 ? 'Invalid file format or missing files.' :
+          error.response?.status === 403 ? 'Not authorized to access AI.' :
           error.code === 'ECONNABORTED' ? 'AI request timed out.' :
-          error.response?.data?.detail || error.message || 'Failed to process AI request.';
+          error.response?.data?.detail || error.response?.data?.error || error.message || 'Failed to process AI request.';
         toast.error(errorMessage, { position: 'bottom-center' });
       } finally {
-        // Unlock AI bot
-        await axios.post(`${SERVER_URL}/api/ai/unlock/${roomId}`, { userId: user.userId }, {
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
+        // Unlock AI bot only if not already unlocked
+        if (!lockUnlocked) {
+          try {
+            await axios.post(`${SERVER_URL}/api/ai/unlock/${roomId}`, { userId: user.userId }, {
+              headers: { Authorization: `Bearer ${user.token}` },
+            });
+          } catch (unlockError) {
+            console.warn('Unlock failed (non-critical):', unlockError.message);
+            // Don't toast on unlock failure to avoid noise
+          }
+          lockUnlocked = true;
+        }
       }
     },
     [user, roomId]
@@ -387,9 +398,13 @@ const Meeting = () => {
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
     socketRef.current?.emit('shared-media-removal', { username: user.username });
-    await axios.post(`${SERVER_URL}/api/ai/unlock/${roomId}`, { userId: user.userId }, {
-      headers: { Authorization: `Bearer ${user.token}` },
-    });
+    try {
+      await axios.post(`${SERVER_URL}/api/ai/unlock/${roomId}`, { userId: user.userId }, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+    } catch (error) {
+      console.warn('Manual unlock failed:', error.message);
+    }
     toast.info('AI session completed', { position: 'bottom-center' });
   }, [roomId, user]);
 

@@ -317,6 +317,80 @@ app.post('/api/meeting-session/:roomId/chat', authenticate, async (req, res) => 
   }
 });
 
+// AI Lock Endpoint
+app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { userId, username } = req.body; // Expect these from frontend
+
+    let session = await MeetingSession.findOne({ roomId });
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Check if already locked by someone else
+    if (session.aiState?.isLocked && session.aiState.lockedBy !== userId) {
+      return res.status(409).json({ error: 'AI Bot is already in use by another user' });
+    }
+
+    // Set lock state
+    session.aiState = {
+      ...session.aiState,
+      isLocked: true,
+      lockedBy: userId,
+      lockedByUsername: username,
+      lockedAt: new Date(),
+      isProcessing: true // Tie to processing
+    };
+    await session.save();
+
+    // Broadcast via socket if needed (optional, but syncs room)
+    io.to(roomId).emit('ai-bot-locked', { userId, username, roomId });
+
+    res.json({ success: true, message: 'AI bot locked' });
+  } catch (error) {
+    logError('Error locking AI:', error);
+    res.status(500).json({ error: 'Failed to lock AI' });
+  }
+});
+
+// AI Unlock Endpoint
+app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { userId } = req.body; // Optional, but can verify if needed
+
+    let session = await MeetingSession.findOne({ roomId });
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Optional: Verify the user is the locker
+    if (session.aiState?.lockedBy !== userId) {
+      return res.status(403).json({ error: 'Not authorized to unlock AI' });
+    }
+
+    // Clear lock state
+    session.aiState = {
+      ...session.aiState,
+      isLocked: false,
+      lockedBy: null,
+      lockedByUsername: null,
+      lockedAt: null,
+      isProcessing: false
+    };
+    await session.save();
+
+    // Broadcast via socket
+    io.to(roomId).emit('ai-bot-unlocked', { roomId });
+
+    res.json({ success: true, message: 'AI bot unlocked' });
+  } catch (error) {
+    logError('Error unlocking AI:', error);
+    res.status(500).json({ error: 'Failed to unlock AI' });
+  }
+});
+
 // File Upload Endpoints with Cloudinary
 app.post('/upload/image', authenticate, upload.single('file'), async (req, res) => {
   try {

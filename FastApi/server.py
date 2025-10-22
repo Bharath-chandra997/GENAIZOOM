@@ -94,15 +94,19 @@ async def predict(
             detail="Gradio client is not connected to the Hugging Face Space."
         )
 
-    # Validate file types
+    # Validate file types and sizes
     valid_image_types = ['image/jpeg', 'image/png']
     valid_audio_types = ['audio/mpeg', 'audio/wav']
+    max_file_size = 100 * 1024 * 1024  # 100 MB
     if image.content_type not in valid_image_types:
         logger.error(f"Invalid image format: {image.content_type}")
         raise HTTPException(status_code=400, detail="Invalid image format. Only JPEG/PNG allowed.")
     if audio.content_type not in valid_audio_types:
         logger.error(f"Invalid audio format: {audio.content_type}")
         raise HTTPException(status_code=400, detail="Invalid audio format. Only MP3/WAV allowed.")
+    if image.size > max_file_size or audio.size > max_file_size:
+        logger.error(f"File too large: image={image.size} bytes, audio={audio.size} bytes")
+        raise HTTPException(status_code=400, detail="Files must be less than 100 MB.")
 
     # Generate unique filenames
     image_path = os.path.join(UPLOAD_FOLDER, f"{uuid.uuid4()}_{image.filename}")
@@ -123,7 +127,15 @@ async def predict(
 
         logger.info("🤖 Calling Hugging Face model...")
         
-        # Use params matching Colab success
+        # Test Gradio client connectivity
+        try:
+            client_info = client.view_api()
+            logger.info(f"Gradio API info: {client_info}")
+        except Exception as e:
+            logger.error(f"Failed to fetch Gradio API info: {str(e)}")
+            raise HTTPException(status_code=503, detail=f"Gradio client error: {str(e)}")
+
+        # Call Gradio predict
         result = client.predict(
             image_input=file(image_path),
             audio_input=file(audio_path),

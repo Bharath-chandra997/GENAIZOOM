@@ -382,7 +382,6 @@ const Meeting = () => {
             Authorization: `Bearer ${user.token}`,
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 120000,
         });
         console.log('FastAPI response:', response.data);
 

@@ -21,7 +21,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 client = None
 try:
     logger.info(f"Connecting to Hugging Face Space: {HF_SPACE_NAME}...")
-    client = Client(HF_SPACE_NAME)  # FIXED: Removed max_wait (not supported in your gradio_client version)
+    client = Client(HF_SPACE_NAME)
     logger.info("✅ Connection to Hugging Face Space successful!")
 except Exception as e:
     logger.error(f"❌ Failed to connect to Hugging Face Space: {e}")
@@ -29,10 +29,10 @@ except Exception as e:
 # --- FASTAPI APP SETUP ---
 app = FastAPI(title="SynergySphere VQA Proxy API")
 
-# Enable CORS
+# FIXED: Enhanced CORS - Add frontend origin explicitly
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://genaizoom123.onrender.com"],
+    allow_origins=["https://genaizoom123.onrender.com", "http://localhost:3000"],  # Frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,10 +44,13 @@ security = HTTPBearer()
 async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
     try:
+        # FIXED: Log token issues
+        logger.info(f"Verifying token for /predict...")
         payload = jwt.decode(token, os.getenv('JWT_SECRET'), algorithms=['HS256'])
+        logger.info(f"Token verified for user: {payload.get('username', 'unknown')}")
         return payload
     except jwt.PyJWTError as e:
-        logger.error(f"JWT verification failed: {e}")
+        logger.error(f"JWT verification failed: {e} (check JWT_SECRET env var)")
         raise HTTPException(status_code=401, detail='Invalid or expired token')
 
 # --- API ROUTES ---
@@ -62,6 +65,7 @@ async def predict(
     Proxy endpoint for the VQA model.
     """
     if not client:
+        logger.error("Gradio client not available for prediction")
         raise HTTPException(
             status_code=503,
             detail="Gradio client is not connected to the Hugging Face Space."
@@ -81,6 +85,7 @@ async def predict(
 
     try:
         # Save uploaded files
+        logger.info(f"Saving files: image={image.filename} ({image.content_type}), audio={audio.filename} ({audio.content_type})")
         with open(image_path, "wb") as f:
             content = await image.read()
             f.write(content)
@@ -90,7 +95,7 @@ async def predict(
 
         logger.info(f"Submitting prediction job for image: {image_path}, audio: {audio_path}")
         
-        # Use original params (matches your Colab success)
+        # Use params matching Colab success
         result = client.predict(
             image_input=file(image_path),
             audio_input=file(audio_path),
@@ -99,6 +104,7 @@ async def predict(
 
         logger.info(f"Received prediction: {result}")
         if not result:
+            logger.error("Empty result from Gradio")
             raise HTTPException(status_code=500, detail="Empty prediction from model")
 
         return JSONResponse(content={"prediction": result})

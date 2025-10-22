@@ -1,5 +1,4 @@
 import React from 'react';
-import './MeetingControls.css';
 
 const MeetingControls = ({
   isAudioMuted,

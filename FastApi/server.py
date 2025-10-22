@@ -29,13 +29,16 @@ except Exception as e:
 # --- FASTAPI APP SETUP ---
 app = FastAPI(title="SynergySphere VQA Proxy API")
 
-# FIXED: Enhanced CORS - Add frontend origin explicitly
+# **FIXED: CORRECTED CORS CONFIGURATION** - Removed duplicate allow_origins parameter
 app.add_middleware(
-    CORSMiddleware, # Frontend URL
+    CORSMiddleware,
+    allow_origins=[
+        "https://genaizoom123.onrender.com",  # Frontend production
+        "http://localhost:3000"                # Frontend development
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_origins=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "*"]
 )
 
 # --- JWT AUTHENTICATION ---
@@ -55,6 +58,19 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
 
 # --- API ROUTES ---
 
+@app.get("/")
+async def health_check():
+    if client:
+        return {"status": "✅ Proxy server is running and connected to Hugging Face Space."}
+    else:
+        return JSONResponse(content={"status": "❌ Proxy server is running but FAILED to connect."}, status_code=503)
+
+@app.get("/ping")
+async def ping():
+    """Wake-up endpoint for keep-alive"""
+    logger.info("Ping received - Server is awake")
+    return {"status": "Server is awake"}
+
 @app.post("/predict")
 async def predict(
     image: UploadFile = File(...),
@@ -64,6 +80,10 @@ async def predict(
     """
     Proxy endpoint for the VQA model.
     """
+    logger.info(f"🚀 Predict request from user: {user.get('username')}")
+    logger.info(f"📁 Image: {image.filename} ({image.content_type}, {image.size} bytes)")
+    logger.info(f"🎵 Audio: {audio.filename} ({audio.content_type}, {audio.size} bytes)")
+    
     if not client:
         logger.error("Gradio client not available for prediction")
         raise HTTPException(
@@ -75,8 +95,10 @@ async def predict(
     valid_image_types = ['image/jpeg', 'image/png']
     valid_audio_types = ['audio/mpeg', 'audio/wav']
     if image.content_type not in valid_image_types:
+        logger.error(f"Invalid image format: {image.content_type}")
         raise HTTPException(status_code=400, detail="Invalid image format. Only JPEG/PNG allowed.")
     if audio.content_type not in valid_audio_types:
+        logger.error(f"Invalid audio format: {audio.content_type}")
         raise HTTPException(status_code=400, detail="Invalid audio format. Only MP3/WAV allowed.")
 
     # Generate unique filenames
@@ -85,15 +107,18 @@ async def predict(
 
     try:
         # Save uploaded files
-        logger.info(f"Saving files: image={image.filename} ({image.content_type}), audio={audio.filename} ({audio.content_type})")
+        logger.info("💾 Saving uploaded files...")
         with open(image_path, "wb") as f:
             content = await image.read()
             f.write(content)
+            logger.info(f"✅ Image saved: {image_path} ({len(content)} bytes)")
+        
         with open(audio_path, "wb") as f:
             content = await audio.read()
             f.write(content)
+            logger.info(f"✅ Audio saved: {audio_path} ({len(content)} bytes)")
 
-        logger.info(f"Submitting prediction job for image: {image_path}, audio: {audio_path}")
+        logger.info("🤖 Calling Hugging Face model...")
         
         # Use params matching Colab success
         result = client.predict(
@@ -102,7 +127,7 @@ async def predict(
             api_name="/predict"
         )
 
-        logger.info(f"Received prediction: {result}")
+        logger.info(f"🎯 Prediction result: {result}")
         if not result:
             logger.error("Empty result from Gradio")
             raise HTTPException(status_code=500, detail="Empty prediction from model")
@@ -110,9 +135,10 @@ async def predict(
         return JSONResponse(content={"prediction": result})
 
     except Exception as e:
-        logger.error(f"An error occurred during prediction: {e}", exc_info=True)
+        logger.error(f"❌ Prediction error: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"An internal error occurred: {str(e)}"
+            status_code=500, 
+            detail=f"An internal error occurred: {str(e)}"
         )
     finally:
         # Clean up temporary files
@@ -120,16 +146,10 @@ async def predict(
             if os.path.exists(path):
                 try:
                     os.remove(path)
+                    logger.info(f"🗑️ Cleaned up: {path}")
                 except Exception as e:
                     logger.error(f"Failed to remove {path}: {e}")
-        logger.info("Temporary files cleaned up.")
-
-@app.get("/")
-async def health_check():
-    if client:
-        return {"status": "✅ Proxy server is running and connected to Hugging Face Space."}
-    else:
-        return JSONResponse(content={"status": "❌ Proxy server is running but FAILED to connect."}, status_code=503)
+        logger.info("✅ Temporary files cleaned up.")
 
 if __name__ == "__main__":
     import uvicorn

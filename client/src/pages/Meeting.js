@@ -264,7 +264,7 @@ const Meeting = () => {
 
   const handleAIRequest = useCallback(
     async (imageFile, audioFile) => {
-      let lockUnlocked = false; // Flag to avoid double unlock
+      let isLocked = false; // Flag to track if lock succeeded
       try {
         console.log('Starting AI request for user:', user.username, { image: imageFile?.name, audio: audioFile?.name });
 
@@ -272,10 +272,16 @@ const Meeting = () => {
         const lockResponse = await axios.post(
           `${SERVER_URL}/api/ai/lock/${roomId}`,
           { userId: user.userId, username: user.username },
-          { headers: { Authorization: `Bearer ${user.token}` } }
+          { 
+            headers: { Authorization: `Bearer ${user.token}`, 'Content-Type': 'application/json' },
+            timeout: 5000 // Quick timeout for lock
+          }
         );
-        if (!lockResponse.data.success) {
-          throw new Error(lockResponse.data.error || 'AI Bot is in use');
+        if (lockResponse.data.success) {
+          isLocked = true;
+          console.log('AI locked successfully');
+        } else {
+          throw new Error(lockResponse.data.error || 'Lock failed');
         }
 
         // Validate files
@@ -298,6 +304,7 @@ const Meeting = () => {
             Authorization: `Bearer ${user.token}`,
             'Content-Type': 'multipart/form-data',
           },
+          timeout: 30000,
         });
         const imageUrl = imageResponse.data.url;
         console.log('Image uploaded:', imageUrl);
@@ -310,6 +317,7 @@ const Meeting = () => {
             Authorization: `Bearer ${user.token}`,
             'Content-Type': 'multipart/form-data',
           },
+          timeout: 30000,
         });
         const audioUrl = audioResponse.data.url;
         console.log('Audio uploaded:', audioUrl);
@@ -366,27 +374,31 @@ const Meeting = () => {
           status: error.response?.status,
           data: error.response?.data,
         });
-        const errorMessage =
-          error.response?.status === 503 ? 'AI service unavailable. Try again later.' :
-          error.response?.status === 409 ? 'AI Bot is already in use by another participant.' :
-          error.response?.status === 401 ? 'Authentication failed. Please log in again.' :
-          error.response?.status === 400 ? 'Invalid file format or missing files.' :
-          error.response?.status === 403 ? 'Not authorized to access AI.' :
-          error.code === 'ECONNABORTED' ? 'AI request timed out.' :
-          error.response?.data?.detail || error.response?.data?.error || error.message || 'Failed to process AI request.';
+        let errorMessage = error.message;
+        if (error.response) {
+          const { status, data } = error.response;
+          if (status === 409) errorMessage = 'AI Bot is already in use by another participant.';
+          else if (status === 503) errorMessage = 'AI service unavailable. Try again later.';
+          else if (status === 401) errorMessage = 'Authentication failed. Please log in again.';
+          else if (status === 400) errorMessage = 'Invalid file format or missing files.';
+          else if (status === 403) errorMessage = 'Not authorized to access AI.';
+          else if (error.code === 'ECONNABORTED') errorMessage = 'AI request timed out.';
+          else errorMessage = data?.error || data?.detail || error.message;
+        }
         toast.error(errorMessage, { position: 'bottom-center' });
       } finally {
-        // Unlock AI bot only if not already unlocked
-        if (!lockUnlocked) {
+        // Unlock AI bot only if locked
+        if (isLocked) {
           try {
             await axios.post(`${SERVER_URL}/api/ai/unlock/${roomId}`, { userId: user.userId }, {
               headers: { Authorization: `Bearer ${user.token}` },
+              timeout: 5000,
             });
+            console.log('AI unlocked successfully');
           } catch (unlockError) {
             console.warn('Unlock failed (non-critical):', unlockError.message);
-            // Don't toast on unlock failure to avoid noise
+            // No toast to avoid noise
           }
-          lockUnlocked = true;
         }
       }
     },
@@ -403,7 +415,7 @@ const Meeting = () => {
         headers: { Authorization: `Bearer ${user.token}` },
       });
     } catch (error) {
-      console.warn('Manual unlock failed:', error.message);
+      console.warn('Manual unlock failed (non-critical):', error.message);
     }
     toast.info('AI session completed', { position: 'bottom-center' });
   }, [roomId, user]);

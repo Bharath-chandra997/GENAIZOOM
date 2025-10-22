@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken');
 const twilio = require('twilio');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
+const fs = require('fs'); // For temp file cleanup
 require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const meetingRoutes = require('./routes/meetings');
@@ -45,7 +46,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: ['https://genaizoom123.onrender.com', 'https://genaizoomserver-0yn4.onrender.com'],
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   },
   maxHttpBufferSize: 1e8, // 100MB buffer as fallback
@@ -65,18 +66,19 @@ cloudinary.config({
 app.use(helmet());
 app.use(cors({
   origin: ['https://genaizoom123.onrender.com', 'https://genaizoomserver-0yn4.onrender.com'],
-  methods: ['GET', 'POST', 'PUT'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
 }));
 app.use(express.json());
 app.use(passport.initialize());
 
-// JWT Authentication Middleware for Uploads
+// JWT Authentication Middleware
 const authenticate = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
-    jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded; // Attach decoded user to req
     next();
   } catch (err) {
     logError('JWT auth error', err);
@@ -163,7 +165,6 @@ const fastFallbackIceServers = [
 ];
 
 const fetchIceServers = async () => {
-  // Prevent concurrent fetches
   if (isFetchingIceServers) {
     return cachedIceServers || fastFallbackIceServers;
   }
@@ -172,7 +173,6 @@ const fetchIceServers = async () => {
     isFetchingIceServers = true;
     let iceServers = [...fastFallbackIceServers];
 
-    // Try to get Twilio servers with timeout
     if (twilioClient) {
       try {
         const tokenPromise = twilioClient.tokens.create();
@@ -200,25 +200,22 @@ const fetchIceServers = async () => {
   }
 };
 
-// Optimized ICE Servers Endpoint with immediate response
+// Optimized ICE Servers Endpoint
 app.get('/ice-servers', async (req, res) => {
   try {
-    // Always serve cached servers immediately for faster response
     if (cachedIceServers && iceServersExpiry && Date.now() < iceServersExpiry) {
       res.json(cachedIceServers);
       return;
     }
 
-    // If no cache, serve fallback immediately and refresh in background
     res.json(fastFallbackIceServers);
     
-    // Refresh cache in background if needed
     if (!isFetchingIceServers) {
       fetchIceServers().catch(err => logError('Background ICE server refresh failed', err));
     }
   } catch (error) {
     logError('ICE servers endpoint error', error);
-    res.json(fastFallbackIceServers); // Always return fallback
+    res.json(fastFallbackIceServers);
   }
 });
 
@@ -321,11 +318,17 @@ app.post('/api/meeting-session/:roomId/chat', authenticate, async (req, res) => 
 app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
   try {
     const { roomId } = req.params;
-    const { userId, username } = req.body; // Expect these from frontend
+    const { userId, username } = req.body;
+    const decodedUserId = req.user.userId; // From JWT
+
+    if (userId !== decodedUserId.toString()) {
+      return res.status(403).json({ error: 'User ID mismatch' });
+    }
 
     let session = await MeetingSession.findOne({ roomId });
     if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
+      session = new MeetingSession({ roomId });
+      await session.save();
     }
 
     // Check if already locked by someone else
@@ -333,18 +336,20 @@ app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
       return res.status(409).json({ error: 'AI Bot is already in use by another user' });
     }
 
-    // Set lock state
+    // Set lock state (merge with existing aiState)
     session.aiState = {
-      ...session.aiState,
+      ...(session.aiState || {}),
       isLocked: true,
       lockedBy: userId,
       lockedByUsername: username,
       lockedAt: new Date(),
-      isProcessing: true // Tie to processing
+      isProcessing: true
     };
     await session.save();
 
-    // Broadcast via socket if needed (optional, but syncs room)
+    info(`AI locked for room ${roomId} by ${username}`);
+
+    // Broadcast to room
     io.to(roomId).emit('ai-bot-locked', { userId, username, roomId });
 
     res.json({ success: true, message: 'AI bot locked' });
@@ -358,21 +363,26 @@ app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
 app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
   try {
     const { roomId } = req.params;
-    const { userId } = req.body; // Optional, but can verify if needed
+    const { userId } = req.body;
+    const decodedUserId = req.user.userId;
+
+    if (userId !== decodedUserId.toString()) {
+      return res.status(403).json({ error: 'User ID mismatch' });
+    }
 
     let session = await MeetingSession.findOne({ roomId });
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    // Optional: Verify the user is the locker
+    // Verify user is the locker (optional, for security)
     if (session.aiState?.lockedBy !== userId) {
       return res.status(403).json({ error: 'Not authorized to unlock AI' });
     }
 
     // Clear lock state
     session.aiState = {
-      ...session.aiState,
+      ...(session.aiState || {}),
       isLocked: false,
       lockedBy: null,
       lockedByUsername: null,
@@ -381,7 +391,9 @@ app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
     };
     await session.save();
 
-    // Broadcast via socket
+    info(`AI unlocked for room ${roomId} by ${userId}`);
+
+    // Broadcast to room
     io.to(roomId).emit('ai-bot-unlocked', { roomId });
 
     res.json({ success: true, message: 'AI bot unlocked' });
@@ -399,9 +411,12 @@ app.post('/upload/image', authenticate, upload.single('file'), async (req, res) 
       resource_type: 'image',
       folder: 'genaizoom/images',
     });
+    // Cleanup temp file
+    fs.unlinkSync(req.file.path);
     res.json({ url: result.secure_url });
   } catch (err) {
     logError('Cloudinary image upload error', err);
+    if (req.file) fs.unlinkSync(req.file.path); // Cleanup on error
     res.status(500).json({ error: 'Image upload failed' });
   }
 });
@@ -413,9 +428,12 @@ app.post('/upload/audio', authenticate, upload.single('file'), async (req, res) 
       resource_type: 'video', // Cloudinary uses 'video' for audio
       folder: 'genaizoom/audio',
     });
+    // Cleanup temp file
+    fs.unlinkSync(req.file.path);
     res.json({ url: result.secure_url });
   } catch (err) {
     logError('Cloudinary audio upload error', err);
+    if (req.file) fs.unlinkSync(req.file.path); // Cleanup on error
     res.status(500).json({ error: 'Audio upload failed' });
   }
 });
@@ -469,23 +487,37 @@ io.on('connection', (socket) => {
     socketToRoom[socket.id] = roomId;
     socketIdToUsername[socket.id] = username;
     
-    // Update meeting session
+    // Update meeting session - safer approach without array filters on upsert
     try {
-      await MeetingSession.findOneAndUpdate(
-        { roomId },
-        { 
-          $set: { 
-            [`activeParticipants.$[elem].socketId`]: socket.id,
-            [`activeParticipants.$[elem].lastSeen`]: new Date(),
-            [`activeParticipants.$[elem].isActive`]: true
-          }
-        },
-        { 
-          arrayFilters: [{ 'elem.userId': userId }],
-          upsert: true,
-          new: true
-        }
-      );
+      let session = await MeetingSession.findOne({ roomId });
+      if (!session) {
+        session = new MeetingSession({ roomId });
+        session.activeParticipants = []; // Ensure array exists
+      }
+
+      // Find existing participant
+      const participantIndex = session.activeParticipants.findIndex(p => p.userId.toString() === userId.toString());
+      if (participantIndex === -1) {
+        // Add new participant
+        session.activeParticipants.push({
+          userId,
+          username,
+          socketId: socket.id,
+          lastSeen: new Date(),
+          isActive: true
+        });
+      } else {
+        // Update existing
+        session.activeParticipants[participantIndex] = {
+          ...session.activeParticipants[participantIndex],
+          socketId: socket.id,
+          lastSeen: new Date(),
+          isActive: true
+        };
+      }
+
+      await session.save();
+      info(`Updated participant ${username} in session for room ${roomId}`);
     } catch (err) {
       logError('Error updating meeting session:', err);
     }
@@ -1000,40 +1032,33 @@ io.on('connection', (socket) => {
     info(`${disconnectedUser} (${socket.id}) disconnected from room ${roomId || 'none'}`);
     
     if (roomId) {
-      // Don't immediately remove the user - they might be reconnecting
-      // Just mark them as inactive in the session
+      // Mark as inactive - safer manual update
       try {
-        await MeetingSession.findOneAndUpdate(
-          { roomId },
-          { 
-            $set: { 
-              [`activeParticipants.$[elem].isActive`]: false,
-              [`activeParticipants.$[elem].lastSeen`]: new Date()
-            }
-          },
-          { 
-            arrayFilters: [{ 'elem.socketId': socket.id }]
+        let session = await MeetingSession.findOne({ roomId });
+        if (session) {
+          const participantIndex = session.activeParticipants.findIndex(p => p.socketId === socket.id);
+          if (participantIndex !== -1) {
+            session.activeParticipants[participantIndex].isActive = false;
+            session.activeParticipants[participantIndex].lastSeen = new Date();
+            await session.save();
           }
-        );
+        }
       } catch (err) {
         logError('Error updating participant status on disconnect:', err);
       }
       
-      // Only emit user-left if they're not reconnecting within a reasonable time
-      // We'll use a timeout to handle this
+      // Timeout logic for user-left emit (unchanged)
       setTimeout(async () => {
         try {
           const session = await MeetingSession.findOne({ roomId });
           if (session) {
             const participant = session.activeParticipants.find(p => p.socketId === socket.id);
             if (participant && !participant.isActive) {
-              // Check if they've been inactive for more than 30 seconds
               const now = new Date();
               if (now - participant.lastSeen > 30000) {
                 const username = socketIdToUsername[socket.id] || 'Unknown User';
                 socket.to(roomId).emit('user-left', { userId: socket.id, username });
                 
-                // Clean up the session if no active participants
                 const activeParticipants = session.activeParticipants.filter(p => p.isActive);
                 if (activeParticipants.length === 0) {
                   try {
@@ -1048,7 +1073,7 @@ io.on('connection', (socket) => {
         } catch (err) {
           logError('Error checking participant status after disconnect timeout:', err);
         }
-      }, 30000); // 30 second timeout
+      }, 30000);
     }
     
     delete socketToRoom[socket.id];
@@ -1063,17 +1088,16 @@ io.on('connection', (socket) => {
 
     if (roomId) {
       try {
-        // Mark user inactive in session
-        await MeetingSession.findOneAndUpdate(
-          { roomId },
-          { 
-            $set: { 
-              [`activeParticipants.$[elem].isActive`]: false,
-              [`activeParticipants.$[elem].lastSeen`]: new Date()
-            }
-          },
-          { arrayFilters: [{ 'elem.socketId': socket.id }] }
-        );
+        // Mark user inactive in session - manual update
+        let session = await MeetingSession.findOne({ roomId });
+        if (session) {
+          const participantIndex = session.activeParticipants.findIndex(p => p.socketId === socket.id);
+          if (participantIndex !== -1) {
+            session.activeParticipants[participantIndex].isActive = false;
+            session.activeParticipants[participantIndex].lastSeen = new Date();
+            await session.save();
+          }
+        }
       } catch (err) {
         logError('Error updating participant status on leave-room:', err);
       }
@@ -1105,6 +1129,12 @@ io.on('connection', (socket) => {
 app.use((err, req, res, next) => {
   logError(`Server error: ${err.message}`, err);
   res.status(500).json({ error: 'Internal server error' });
+});
+
+// 404 Handler with Logging
+app.use((req, res) => {
+  logError(`404: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ error: 'Route not found' });
 });
 
 // Server Start

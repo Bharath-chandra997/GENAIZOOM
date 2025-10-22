@@ -20,11 +20,8 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import './Meeting.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
-const VQA_API_URL = 'https://genaizoom-1.onrender.com/predict'; // FastAPI/Flask service
+const VQA_API_URL = 'https://genaizoom-1.onrender.com/predict';
 
-/* -------------------------------------------------
-   Helper UI components
-------------------------------------------------- */
 const getColorForId = (id) => {
   if (!id) return '#FFFFFF';
   let hash = 0;
@@ -98,15 +95,11 @@ const AIAvatar = ({ size = 40 }) => {
   );
 };
 
-/* -------------------------------------------------
-   Main Meeting Component
-------------------------------------------------- */
 const Meeting = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  /* ---------- Core UI State ---------- */
   const [participants, setParticipants] = useState([]);
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -122,9 +115,8 @@ const Meeting = () => {
   const [aiResponse, setAiResponse] = useState('');
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
-  const [isAIProcessing, setIsAIProcessing] = useState(false); // UI spinner
+  const [isAIProcessing, setIsAIProcessing] = useState(false);
 
-  /* ---------- AI Participant (static) ---------- */
   const [aiParticipant] = useState({
     userId: 'ai-assistant',
     username: 'AI Assistant',
@@ -140,7 +132,6 @@ const Meeting = () => {
     profilePicture: null,
   });
 
-  /* ---------- Refs ---------- */
   const socketRef = useRef(null);
   const localStreamRef = useRef(null);
   const localCameraTrackRef = useRef(null);
@@ -154,19 +145,16 @@ const Meeting = () => {
   const signalingStates = useRef(new Map());
   const pendingIceCandidates = useRef(new Map());
 
-  /* ---------- Memoized Helpers ---------- */
   const isMirroringBrowser = useMemo(
     () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream,
     []
   );
 
   const allParticipants = useMemo(() => [...participants], [participants]);
-
   const participantsWithAI = useMemo(
     () => [aiParticipant, ...participants],
     [aiParticipant, participants]
   );
-
   const realParticipantsCount = useMemo(() => participants.length, [participants]);
 
   const defaultMainParticipant = useMemo(() => {
@@ -200,9 +188,6 @@ const Meeting = () => {
     [allParticipants, user.username]
   );
 
-  /* -------------------------------------------------
-     AI Animation (canvas background for AI tile)
-  ------------------------------------------------- */
   const initializeAiAnimation = useCallback(() => {
     const canvas = aiCanvasRef.current;
     if (!canvas) return;
@@ -291,9 +276,6 @@ const Meeting = () => {
     return cleanup;
   }, [initializeAiAnimation]);
 
-  /* -------------------------------------------------
-     AI Request – Full wait, no early unlock, spinner
-  ------------------------------------------------- */
   const handleAIRequest = useCallback(
     async (imageFile, audioFile) => {
       let isLocked = false;
@@ -304,7 +286,6 @@ const Meeting = () => {
           audio: audioFile?.name,
         });
 
-        // ---- 1. Lock AI bot ----
         const lockResponse = await axios.post(
           `${SERVER_URL}/api/ai/lock/${roomId}`,
           { userId: user.userId, username: user.username },
@@ -323,10 +304,9 @@ const Meeting = () => {
           throw new Error(lockResponse.data.error || 'Lock failed');
         }
 
-        // ---- 2. Validate files ----
         const validImageTypes = ['image/jpeg', 'image/png'];
         const validAudioTypes = ['audio/mpeg', 'audio/wav'];
-        const maxFileSize = 100 * 1024 * 1024; // 100 MB
+        const maxFileSize = 100 * 1024 * 1024;
         if (
           !imageFile ||
           !validImageTypes.includes(imageFile.type) ||
@@ -342,7 +322,6 @@ const Meeting = () => {
           throw new Error('Invalid audio file. Must be MP3/WAV and less than 100 MB.');
         }
 
-        // ---- 3. Upload to Cloudinary (Express) ----
         const upload = async (formData, type) => {
           console.log(`Uploading ${type}:`, {
             filename: formData.get('file').name,
@@ -371,7 +350,6 @@ const Meeting = () => {
         audioForm.append('file', audioFile);
         const audioUrl = await upload(audioForm, 'audio');
 
-        // Notify other participants
         socketRef.current?.emit('shared-media-display', {
           imageUrl,
           audioUrl,
@@ -380,7 +358,6 @@ const Meeting = () => {
         setAiUploadedImage(imageUrl);
         setAiUploadedAudio(audioUrl);
 
-        // ---- 4. Call FastAPI (full 120 s timeout) ----
         const formData = new FormData();
         formData.append('image', imageFile);
         formData.append('audio', audioFile);
@@ -392,11 +369,7 @@ const Meeting = () => {
           },
           timeout: 120000,
         });
-        console.log('FastAPI full response:', {
-          status: response.status,
-          data: response.data,
-          headers: response.headers,
-        });
+        console.log('FastAPI response:', response.data);
 
         const prediction = response.data.prediction;
         if (!prediction || prediction.trim() === '') {
@@ -408,9 +381,7 @@ const Meeting = () => {
           response: prediction,
           username: user.username,
         });
-        console.log('AI response set:', prediction);
 
-        // ---- 5. Update meeting session (unlock via state) ----
         await axios.post(
           `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
           {
@@ -422,11 +393,9 @@ const Meeting = () => {
           },
           { headers: { Authorization: `Bearer ${user.token}` } }
         );
-        console.log('Meeting session updated');
 
         toast.success('AI processing completed!', { position: 'bottom-center' });
 
-        // ---- 6. Unlock only on success ----
         await axios.post(
           `${SERVER_URL}/api/ai/unlock/${roomId}`,
           { userId: user.userId },
@@ -454,10 +423,9 @@ const Meeting = () => {
           else if (status === 403) errorMessage = 'Not authorized to access AI.';
           else errorMessage = data?.error || data?.detail || error.message;
         } else if (error.code === 'ECONNABORTED') {
-          errorMessage = 'AI request timed out (HF queue slow). Files kept—retry "Process with AI".';
+          errorMessage = 'AI request timed out. Files kept — retry "Process with AI".';
         }
         toast.error(errorMessage, { position: 'bottom-center' });
-        // No unlock – user can retry without re-uploading
       } finally {
         setIsAIProcessing(false);
       }
@@ -499,9 +467,6 @@ const Meeting = () => {
     setAiUploadedAudio(null);
   }, []);
 
-  /* -------------------------------------------------
-     ICE Servers
-  ------------------------------------------------- */
   const getIceServers = useCallback(async () => {
     const now = Date.now();
     if (iceServersCache.current && now - lastIceFetch.current < 5 * 60 * 1000) {
@@ -524,9 +489,6 @@ const Meeting = () => {
     }
   }, []);
 
-  /* -------------------------------------------------
-     Peer Connection Management
-  ------------------------------------------------- */
   const handleIceCandidate = useCallback(({ from, candidate }) => {
     const pc = peerConnections.current.get(from);
     if (!pc) return;
@@ -584,7 +546,6 @@ const Meeting = () => {
       };
 
       pc.onconnectionstatechange = () => {
-        console.log('PC state:', pc.connectionState, 'for', remoteSocketId);
         if (pc.connectionState === 'connected') {
           clearTimeout(timeout);
           connectionTimeouts.current.delete(remoteSocketId);
@@ -630,9 +591,9 @@ const Meeting = () => {
         const state = signalingStates.current.get(from);
         if (state === 'new' || state === 'stable') {
           if (localStreamRef.current) {
-            localStreamRef.current
- polycrystalline              .getTracks()
-              .forEach((track) => pc.addTrack(track, localStreamRef.current));
+            localStreamRef.current.getTracks().forEach((track) =>
+              pc.addTrack(track, localStreamRef.current)
+            );
           }
           signalingStates.current.set(from, 'have-remote-offer');
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -675,10 +636,8 @@ const Meeting = () => {
 
   const handleUserLeft = useCallback(({ userId }) => {
     const pc = peerConnections.current.get(userId);
-    if (pc) {
-      pc.close();
-      peerConnections.current.delete(userId);
-    }
+    if (pc) pc.close();
+    peerConnections.current.delete(userId);
     connectionTimeouts.current.get(userId)?.clearTimeout();
     connectionTimeouts.current.delete(userId);
     signalingStates.current.delete(userId);
@@ -686,13 +645,9 @@ const Meeting = () => {
     setParticipants((prev) => prev.filter((p) => p.userId !== userId));
   }, []);
 
-  /* -------------------------------------------------
-     Socket Listeners
-  ------------------------------------------------- */
   const setupSocketListeners = useCallback(
     (socket) => {
       const onConnect = () => {
-        console.log('Socket connected:', socket.id);
         socket.emit(
           'join-room',
           { roomId, username: user.username, isReconnect: false },
@@ -765,9 +720,9 @@ const Meeting = () => {
           const state = signalingStates.current.get(userId);
           if (state === 'new' || state === 'stable') {
             if (localStreamRef.current) {
-              localStreamRef.current
-                .getTracks()
-                .forEach((track) => pc.addTrack(track, localStreamRef.current));
+              localStreamRef.current.getTracks().forEach((track) =>
+                pc.addTrack(track, localStreamRef.current)
+              );
             }
             signalingStates.current.set(userId, 'have-local-offer');
             const offer = await pc.createOffer();
@@ -847,9 +802,6 @@ const Meeting = () => {
     ]
   );
 
-  /* -------------------------------------------------
-     Init / Cleanup
-  ------------------------------------------------- */
   useEffect(() => {
     let mounted = true;
     let socketCleanup = () => {};
@@ -922,9 +874,6 @@ const Meeting = () => {
     };
   }, [user, navigate, roomId, setupSocketListeners]);
 
-  /* -------------------------------------------------
-     Media Controls
-  ------------------------------------------------- */
   const toggleAudio = () => {
     const track = localStreamRef.current?.getAudioTracks()[0];
     if (track) {
@@ -985,7 +934,6 @@ const Meeting = () => {
 
   const handleScreenShare = async () => {
     if (isSharingScreen) {
-      // stop screen share
       await replaceTrack(localCameraTrackRef.current, false);
       setIsSharingScreen(false);
       screenStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -1028,9 +976,6 @@ const Meeting = () => {
     });
   };
 
-  /* -------------------------------------------------
-     Render
-  ------------------------------------------------- */
   if (isLoading) {
     return (
       <div className="pro-meeting-page flex items-center justify-center">
@@ -1088,7 +1033,6 @@ const Meeting = () => {
           />
         </div>
 
-        {/* Chat Sidebar */}
         {isChatOpen && (
           <div className="pro-chat-sidebar-overlay" onClick={() => setIsChatOpen(false)}>
             <div className="pro-chat-sidebar" onClick={(e) => e.stopPropagation()}>
@@ -1111,7 +1055,6 @@ const Meeting = () => {
           </div>
         )}
 
-        {/* Participants / AI Popup */}
         {(isParticipantsOpen || isAIPopupOpen) && (
           <div
             className="pro-sidebar-overlay"
@@ -1185,7 +1128,6 @@ const Meeting = () => {
         }}
       />
 
-      {/* Hidden canvas for AI animation */}
       <canvas
         ref={aiCanvasRef}
         style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }}

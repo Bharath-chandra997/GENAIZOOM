@@ -112,6 +112,7 @@ const Meeting = () => {
   const [aiResponse, setAiResponse] = useState('');
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
+  const [isAIProcessing, setIsAIProcessing] = useState(false); // NEW: Loading state for AI request
 
   // AI Participant state
   const [aiParticipant] = useState({
@@ -265,6 +266,7 @@ const Meeting = () => {
   const handleAIRequest = useCallback(
     async (imageFile, audioFile) => {
       let isLocked = false; // Flag to track if lock succeeded
+      setIsAIProcessing(true); // NEW: Start loading
       try {
         console.log('Starting AI request for user:', user.username, { image: imageFile?.name, audio: audioFile?.name });
 
@@ -331,7 +333,7 @@ const Meeting = () => {
         setAiUploadedImage(imageUrl);
         setAiUploadedAudio(audioUrl);
 
-        // Send to FastAPI
+        // Send to FastAPI - Wait here for response
         const formData = new FormData();
         formData.append('image', imageFile);
         formData.append('audio', audioFile);
@@ -386,20 +388,10 @@ const Meeting = () => {
           else errorMessage = data?.error || data?.detail || error.message;
         }
         toast.error(errorMessage, { position: 'bottom-center' });
+        // NEW: Do not unlock on error - let user retry or manually complete
       } finally {
-        // Unlock AI bot only if locked
-        if (isLocked) {
-          try {
-            await axios.post(`${SERVER_URL}/api/ai/unlock/${roomId}`, { userId: user.userId }, {
-              headers: { Authorization: `Bearer ${user.token}` },
-              timeout: 5000,
-            });
-            console.log('AI unlocked successfully');
-          } catch (unlockError) {
-            console.warn('Unlock failed (non-critical):', unlockError.message);
-            // No toast to avoid noise
-          }
-        }
+        setIsAIProcessing(false); // NEW: Always stop loading
+        // REMOVED: Unlock logic from here - only unlock on success or manual complete
       }
     },
     [user, roomId]
@@ -414,6 +406,7 @@ const Meeting = () => {
       await axios.post(`${SERVER_URL}/api/ai/unlock/${roomId}`, { userId: user.userId }, {
         headers: { Authorization: `Bearer ${user.token}` },
       });
+      console.log('AI unlocked on manual complete');
     } catch (error) {
       console.warn('Manual unlock failed (non-critical):', error.message);
     }
@@ -1288,6 +1281,7 @@ const Meeting = () => {
                   aiUploadedImage={aiUploadedImage}
                   aiUploadedAudio={aiUploadedAudio}
                   user={user}
+                  isAIProcessing={isAIProcessing} // NEW: Pass loading state to AIPopup
                 />
               </div>
             )}

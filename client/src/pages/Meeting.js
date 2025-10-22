@@ -99,7 +99,7 @@ const Meeting = () => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isParticipantsOpen, setIsParticipants] = useState(false);
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isAIPopupOpen, setIsAIPopupOpen] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -363,10 +363,13 @@ const Meeting = () => {
             Authorization: `Bearer ${user.token}`,
             'Content-Type': 'multipart/form-data',
           },
-          timeout: 60000,
+          timeout: 120000, // Increased to 120s for slow models
         });
 
         const prediction = response.data.prediction;
+        if (!prediction) {
+          throw new Error('No prediction received from AI model');
+        }
         setAiResponse(prediction);
 
         socketRef.current?.emit('ai-finish-processing', { response: prediction });
@@ -1369,7 +1372,7 @@ const Meeting = () => {
           <div
             className="pro-sidebar-overlay"
             onClick={() => {
-              if (isParticipantsOpen) setIsParticipants(false);
+              if (isParticipantsOpen) setIsParticipantsOpen(false);
               if (isAIPopupOpen) setIsAIPopupOpen(false);
             }}
           >
@@ -1387,7 +1390,7 @@ const Meeting = () => {
                   onCloseChat={() => setIsChatOpen(false)}
                   participants={allParticipants}
                   aiParticipant={aiParticipant}
-                  onCloseParticipants={() => setIsParticipants(false)}
+                  onCloseParticipants={() => setIsParticipantsOpen(false)}
                   roomId={roomId}
                   getUserAvatar={getUserAvatar}
                   AIAvatar={AIAvatar}
@@ -1422,7 +1425,7 @@ const Meeting = () => {
         isChatOpen={isChatOpen}
         setIsChatOpen={setIsChatOpen}
         isParticipantsOpen={isParticipantsOpen}
-        setIsParticipantsOpen={setIsParticipants} // Fixed from setIsParticipantsOpen
+        setIsParticipantsOpen={setIsParticipantsOpen}
         isAIPopupOpen={isAIPopupOpen}
         setIsAIPopupOpen={setIsAIPopupOpen}
         handleExitRoom={handleExitRoom}
@@ -1437,4 +1440,4 @@ const Meeting = () => {
 };
 
 export { getUserAvatar, AIAvatar };
-export default Meeting;
+export default Meeting;8.7sExpert

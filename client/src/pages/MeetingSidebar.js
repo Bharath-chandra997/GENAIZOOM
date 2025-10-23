@@ -15,7 +15,8 @@ const MeetingSidebar = ({
   aiParticipant,
   getUserAvatar,
   AIAvatar,
-  onPinParticipant
+  onPinParticipant,
+  onCopyInvite
 }) => {
   return (
     <div
@@ -42,6 +43,7 @@ const MeetingSidebar = ({
           getUserAvatar={getUserAvatar}
           AIAvatar={AIAvatar}
           onPinParticipant={onPinParticipant}
+          onCopyInvite={onCopyInvite}
         />
       )}
     </div>

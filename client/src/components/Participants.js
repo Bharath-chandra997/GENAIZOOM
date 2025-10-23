@@ -14,6 +14,7 @@ const Participants = ({
   roomId,
   getUserAvatar,
   AIAvatar,
+  onCopyInvite,
 }) => {
   // Combine real participants with AI if it exists
   const allDisplayParticipants = aiParticipant 
@@ -114,7 +115,11 @@ const Participants = ({
 
         {/* Footer */}
         <div className="pro-participants__footer">
-          <button className="pro-participants__invite">
+          <button 
+            className="pro-participants__invite"
+            onClick={onCopyInvite}
+            title="Copy meeting link to clipboard"
+          >
             Invite Participant
           </button>
         </div>

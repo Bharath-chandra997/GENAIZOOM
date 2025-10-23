@@ -342,11 +342,12 @@
 .pro-video-grid {
   display: grid;
   gap: 16px;
-  width: 95vw;
-  height: 98%;
+  width: 100%;
+  height: 100%;
   place-items: stretch;
-  grid-template-columns: repeat(2, minmax(360px, 1fr));
-  grid-template-rows: repeat(2, minmax(280px, 1fr)); /* Increased height */
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1fr;
+  min-height: 400px;
 }
 
 /* Ensure exactly 4 frames, with responsive sizing */
@@ -550,17 +551,38 @@
   transform: scale(1.2);
 }
 
-/* Touch/Swipe Support for Grid */
+/* Horizontal Scroll Support for Grid */
 .pro-mainarea-grid {
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  position: relative;
 }
 
 .pro-mainarea-grid::-webkit-scrollbar {
   display: none;
+}
+
+/* Horizontal scroll container for video grid */
+.pro-video-grid-container {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  transition: transform 0.3s ease;
+}
+
+.pro-video-grid-page {
+  display: grid;
+  gap: 16px;
+  width: 100vw;
+  height: 100%;
+  place-items: stretch;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1fr;
+  min-height: 400px;
+  flex-shrink: 0;
 }
 
 /* Screen Share View */
@@ -1073,6 +1095,41 @@
   cursor: not-allowed;
 }
 
+.pro-pagination-btn--left,
+.pro-pagination-btn--right {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(42, 47, 58, 0.9);
+  color: #e5e7eb;
+  border: 0;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: bold;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pro-pagination-btn--left {
+  left: 20px;
+}
+
+.pro-pagination-btn--right {
+  right: 20px;
+}
+
+.pro-pagination-btn--left:hover,
+.pro-pagination-btn--right:hover {
+  background: rgba(59, 130, 246, 0.9);
+  transform: translateY(-50%) scale(1.1);
+}
+
 /* Chat Sidebar Styles */
 .pro-chat-sidebar-overlay {
   position: fixed;
@@ -1344,4 +1401,35 @@
 
 .pro-participants-card--ai .pro-participants-card__name {
   color: #34d399;
+}
+
+/* AI Reset Button */
+.pro-ai-reset-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.pro-ai-reset-btn:hover {
+  background: rgba(220, 38, 38, 0.9);
+  transform: scale(1.1);
+}
+
+.pro-ai-reset-btn:active {
+  transform: scale(0.95);
 }

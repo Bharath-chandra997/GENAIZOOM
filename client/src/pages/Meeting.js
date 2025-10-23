@@ -172,7 +172,7 @@ const Meeting = () => {
 
   const displayParticipants = participantsWithAI;
   const totalGridPages = useMemo(
-    () => Math.max(1, Math.ceil(displayParticipants.length / 4)),
+    () => Math.max(1, Math.ceil(displayParticipants.length / 3)),
     [displayParticipants.length]
   );
 
@@ -1073,6 +1073,12 @@ const Meeting = () => {
             AIAvatar={AIAvatar}
             onPinParticipant={(uid) => socketRef.current?.emit('pin-participant', { userId: uid })}
             onUnpinParticipant={() => socketRef.current?.emit('unpin-participant')}
+            onAIReset={() => {
+              setAiResponse('');
+              setAiUploadedImage(null);
+              setAiUploadedAudio(null);
+              socketRef.current?.emit('shared-media-removal', { username: user.username });
+            }}
           />
         </div>
 
@@ -1125,6 +1131,12 @@ const Meeting = () => {
                   getUserAvatar={getUserAvatar}
                   AIAvatar={AIAvatar}
                   onPinParticipant={(uid) => socketRef.current?.emit('pin-participant', { userId: uid })}
+                  onCopyInvite={() => {
+                    const link = `${window.location.origin}/join/${roomId}`;
+                    navigator.clipboard.writeText(link).then(() => {
+                      toast.success('Meeting link copied!', { position: 'bottom-center' });
+                    });
+                  }}
                 />
               </div>
             )}

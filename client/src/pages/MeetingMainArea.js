@@ -30,6 +30,7 @@ const MeetingMainArea = ({
   AIAvatar,
   onPinParticipant,
   onUnpinParticipant,
+  onAIReset,
 }) => {
   const [localPinnedParticipant, setLocalPinnedParticipant] = useState(pinnedParticipantId);
   const annotationCanvasRef = useRef(null);
@@ -53,8 +54,8 @@ const MeetingMainArea = ({
 
   // Get participants for current grid page
   const getCurrentPageParticipants = () => {
-    const startIndex = gridPage * 4;
-    const endIndex = startIndex + 4;
+    const startIndex = gridPage * 3; // Changed from 4 to 3
+    const endIndex = startIndex + 3; // Changed from 4 to 3
     return participants.slice(startIndex, endIndex);
   };
 
@@ -102,6 +103,16 @@ const MeetingMainArea = ({
               <canvas ref={aiCanvasRef} className="pro-ai-canvas" />
               {(aiUploadedImage || aiUploadedAudio || aiResponse) && (
                 <div className="pro-ai-content-display">
+                  <button
+                    className="pro-ai-reset-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAIReset && onAIReset();
+                    }}
+                    title="Clear AI results"
+                  >
+                    ×
+                  </button>
                   {aiUploadedImage && (
                     <img src={aiUploadedImage} alt="AI processed content" className="pro-ai-uploaded-image" />
                   )}
@@ -185,16 +196,22 @@ const MeetingMainArea = ({
     const participantCount = currentParticipants.length;
 
     return (
-      <div className={`pro-video-grid pro-video-grid--${participantCount}`}>
-        {currentParticipants.map((participant, index) => (
-          <div
-            key={participant.userId}
-            className={`pro-video-grid-item pro-video-grid-item--${index + 1}`}
-            style={{ gridArea: participantCount === 3 && index === 2 ? 'video3' : undefined }}
-          >
-            {renderParticipantVideo(participant, index)}
-          </div>
-        ))}
+      <div className="pro-video-grid-container" style={{ transform: `translateX(-${gridPage * 100}%)` }}>
+        {Array.from({ length: totalGridPages }, (_, pageIndex) => {
+          const pageParticipants = participants.slice(pageIndex * 3, (pageIndex + 1) * 3);
+          return (
+            <div key={pageIndex} className="pro-video-grid-page">
+              {pageParticipants.map((participant, index) => (
+                <div
+                  key={participant.userId}
+                  className={`pro-video-grid-item pro-video-grid-item--${index + 1}`}
+                >
+                  {renderParticipantVideo(participant, index)}
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -208,9 +225,10 @@ const MeetingMainArea = ({
         <button
           onClick={() => handleSwipe(-1)}
           disabled={gridPage === 0}
-          className="pro-pagination-btn"
+          className="pro-pagination-btn pro-pagination-btn--left"
+          title="Previous page"
         >
-          ← Previous
+          ←
         </button>
 
         <div className="pro-grid-dots">
@@ -227,9 +245,10 @@ const MeetingMainArea = ({
         <button
           onClick={() => handleSwipe(1)}
           disabled={gridPage === totalGridPages - 1}
-          className="pro-pagination-btn"
+          className="pro-pagination-btn pro-pagination-btn--right"
+          title="Next page"
         >
-          Next →
+          →
         </button>
       </div>
     );

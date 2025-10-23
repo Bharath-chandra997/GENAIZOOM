@@ -86,21 +86,21 @@ const Home = () => {
       description: 'Plan a meeting for later',
       icon: '📅',
       action: () => navigate('/schedule'),
-      color: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
+      color: 'bg-blue-500 hover:bg-blue-600 border-blue-500 text-white hover:text-white',
     },
     {
       title: 'Meeting History',
       description: 'View past meetings',
       icon: '📋',
       action: () => navigate('/history'),
-      color: 'bg-green-50 hover:bg-green-100 border-green-200',
+      color: 'bg-green-500 hover:bg-green-600 border-green-500 text-white hover:text-white',
     },
     {
       title: 'Profile Settings',
       description: 'Update your profile',
       icon: '⚙️',
       action: () => navigate('/profile'),
-      color: 'bg-purple-50 hover:bg-purple-100 border-purple-200',
+      color: 'bg-purple-500 hover:bg-purple-600 border-purple-500 text-white hover:text-white',
     },
   ];
 
@@ -179,13 +179,13 @@ const Home = () => {
                 <button
                   key={index}
                   onClick={action.action}
-                  className={`p-6 rounded-xl border-2 ${action.color} transition-all duration-200 btn-hover text-left group`}
+                  className={`p-6 rounded-xl border-2 ${action.color} transition-all duration-200 btn-hover text-left group shadow-lg hover:shadow-xl`}
                 >
                   <div className="flex items-start space-x-4">
                     <div className="text-2xl group-hover:animate-bounce-gentle">{action.icon}</div>
                     <div>
-                      <h4 className="font-semibold text-gray-900 mb-1">{action.title}</h4>
-                      <p className="text-sm text-gray-600">{action.description}</p>
+                      <h4 className="font-semibold mb-1">{action.title}</h4>
+                      <p className="text-sm opacity-90">{action.description}</p>
                     </div>
                   </div>
                 </button>

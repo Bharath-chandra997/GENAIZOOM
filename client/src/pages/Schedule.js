@@ -104,7 +104,7 @@ const Schedule = () => {
                   id="title"
                   value={formData.title}
                   onChange={handleChange}
-                  className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200"
+                  className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200 text-gray-900 placeholder-gray-500"
                   placeholder="Enter meeting title"
                   required
                 />
@@ -119,7 +119,7 @@ const Schedule = () => {
                   id="date"
                   value={formData.date}
                   onChange={handleChange}
-                  className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200"
+                  className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200 text-gray-900"
                   required
                 />
               </div>
@@ -133,7 +133,7 @@ const Schedule = () => {
                   id="time"
                   value={formData.time}
                   onChange={handleChange}
-                  className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200"
+                  className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200 text-gray-900"
                   required
                 />
               </div>
@@ -146,7 +146,7 @@ const Schedule = () => {
                   id="duration"
                   value={formData.duration}
                   onChange={handleChange}
-                  className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200"
+                  className="mt-1 w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200 text-gray-900"
                 >
                   <option value="30">30 minutes</option>
                   <option value="60">1 hour</option>

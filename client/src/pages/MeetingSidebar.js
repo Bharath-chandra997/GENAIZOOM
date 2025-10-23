@@ -2,7 +2,21 @@ import React from 'react';
 import Chat from '../components/Chat';
 import Participants from '../components/Participants';
 
-const MeetingSidebar = ({ isChatOpen, isParticipantsOpen, messages, user, onSendMessage, onCloseChat, participants, onCloseParticipants, roomId }) => {
+const MeetingSidebar = ({ 
+  isChatOpen, 
+  isParticipantsOpen, 
+  messages, 
+  user, 
+  onSendMessage, 
+  onCloseChat, 
+  participants, 
+  onCloseParticipants, 
+  roomId,
+  aiParticipant,
+  getUserAvatar,
+  AIAvatar,
+  onPinParticipant
+}) => {
   return (
     <div
       className={`pro-sidebar ${isChatOpen || isParticipantsOpen ? 'w-[450px]' : 'w-0'}`}
@@ -21,9 +35,13 @@ const MeetingSidebar = ({ isChatOpen, isParticipantsOpen, messages, user, onSend
       {isParticipantsOpen && (
         <Participants
           participants={participants}
+          aiParticipant={aiParticipant}
           currentUser={user}
           onClose={onCloseParticipants}
           roomId={roomId}
+          getUserAvatar={getUserAvatar}
+          AIAvatar={AIAvatar}
+          onPinParticipant={onPinParticipant}
         />
       )}
     </div>

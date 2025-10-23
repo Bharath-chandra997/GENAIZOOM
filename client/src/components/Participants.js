@@ -21,8 +21,8 @@ const Participants = ({
     : participants;
 
   return (
-    <div className="pro-participants-container">
-      <div className="pro-participants-sidebar">
+    <div className="pro-participants-popup">
+      <div className="pro-participants-popup-content">
         {/* Header */}
         <div className="pro-participants__header">
           <h3 className="pro-participants__title">

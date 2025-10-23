@@ -159,7 +159,7 @@ const Home = () => {
                     value={joinRoomId}
                     onChange={(e) => setJoinRoomId(e.target.value)}
                     placeholder="Enter Meeting ID"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200 text-gray-900 placeholder-gray-500"
                   />
                   <button
                     type="submit"
@@ -233,7 +233,7 @@ const Home = () => {
                     value={meetingTitle}
                     onChange={(e) => setMeetingTitle(e.target.value)}
                     placeholder="Enter meeting title"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200 text-gray-900 placeholder-gray-500"
                   />
                 </div>
                 <div className="flex space-x-3">

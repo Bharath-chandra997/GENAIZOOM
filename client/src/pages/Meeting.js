@@ -1124,6 +1124,7 @@ const Meeting = () => {
                   roomId={roomId}
                   getUserAvatar={getUserAvatar}
                   AIAvatar={AIAvatar}
+                  onPinParticipant={(uid) => socketRef.current?.emit('pin-participant', { userId: uid })}
                 />
               </div>
             )}

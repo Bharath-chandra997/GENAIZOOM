@@ -573,3 +573,20 @@
   width: 100%;
   height: 100%;
 }
+
+/* Popup version for use within MeetingSidebar */
+.pro-participants-popup {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #0f1115;
+}
+
+.pro-participants-popup-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #0f1115;
+}

@@ -15,6 +15,9 @@ const Home = () => {
   const [joinRoomId, setJoinRoomId] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [meetingTitle, setMeetingTitle] = useState('');
+  const [scheduledMeetings, setScheduledMeetings] = useState([]);
+  const [isStartModalOpen, setIsStartModalOpen] = useState(false);
+  const [selectedMeeting, setSelectedMeeting] = useState(null);
 
   useEffect(() => {
     if (isLoading) return; // Wait for auth to initialize
@@ -22,8 +25,64 @@ const Home = () => {
       console.log('Home: Redirecting to login, isAuthenticated:', isAuthenticated, 'user:', user);
       toast.error('Please log in to access the home page');
       navigate('/login');
+    } else {
+      fetchScheduledMeetings();
     }
   }, [isLoading, isAuthenticated, user, navigate]);
+
+  const fetchScheduledMeetings = async () => {
+    if (!user?.token) return;
+    try {
+      const response = await axios.get(`${SERVER_URL}/api/meetings/scheduled`, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      setScheduledMeetings(response.data.meetings);
+    } catch (error) {
+      console.error('Error fetching scheduled meetings:', error);
+    }
+  };
+
+  const formatTimeRemaining = (scheduledStart) => {
+    const now = new Date();
+    const startTime = new Date(scheduledStart);
+    const diff = startTime - now;
+    
+    if (diff <= 0) return 'Ready to start';
+    
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  };
+
+  const handleStartMeeting = (meeting) => {
+    setSelectedMeeting(meeting);
+    setIsStartModalOpen(true);
+  };
+
+  const confirmStartMeeting = () => {
+    if (selectedMeeting) {
+      navigate(`/meeting/${selectedMeeting.roomId}`);
+    }
+  };
+
+  const cancelMeeting = async (meeting) => {
+    try {
+      await axios.delete(`${SERVER_URL}/api/meetings/scheduled/${meeting.roomId}`, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      toast.success('Meeting canceled successfully');
+      fetchScheduledMeetings();
+    } catch (error) {
+      console.error('Error canceling meeting:', error);
+      toast.error('Failed to cancel meeting');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -172,6 +231,59 @@ const Home = () => {
             </div>
           </div>
 
+          {/* Scheduled Meetings */}
+          {scheduledMeetings.length > 0 && (
+            <div className="mb-12">
+              <h3 className="text-2xl font-bold text-gray-900 text-center mb-8">Scheduled Meetings</h3>
+              <div className="grid gap-4">
+                {scheduledMeetings.map((meeting) => {
+                  const timeRemaining = formatTimeRemaining(meeting.scheduledStart);
+                  const isReady = timeRemaining === 'Ready to start';
+                  
+                  return (
+                    <div key={meeting.roomId} className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-2">{meeting.title}</h4>
+                          <div className="flex items-center space-x-4 text-sm text-gray-600">
+                            <span>📅 {new Date(meeting.scheduledStart).toLocaleDateString()}</span>
+                            <span>🕒 {new Date(meeting.scheduledStart).toLocaleTimeString()}</span>
+                            <span>⏱️ {meeting.duration} minutes</span>
+                          </div>
+                          <div className="mt-2">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                              isReady 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {isReady ? '🚀 Ready to start' : `⏰ ${timeRemaining} remaining`}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3 ml-4">
+                          {isReady && (
+                            <button
+                              onClick={() => handleStartMeeting(meeting)}
+                              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-200 transition-all duration-200 btn-hover"
+                            >
+                              Start Meeting
+                            </button>
+                          )}
+                          <button
+                            onClick={() => cancelMeeting(meeting)}
+                            className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200 transition-all duration-200 btn-hover"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="mb-12">
             <h3 className="text-2xl font-bold text-gray-900 text-center mb-8">Quick Actions</h3>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -255,6 +367,41 @@ const Home = () => {
                     onClick={() => {
                       setIsModalOpen(false);
                       setMeetingTitle('');
+                    }}
+                    className="flex-1 bg-gray-300 text-gray-700 py-3 px-4 rounded-xl font-semibold hover:bg-gray-400 focus:outline-none focus:ring-4 focus:ring-gray-200 transition-all duration-200 btn-hover"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Start Meeting Modal */}
+          {isStartModalOpen && selectedMeeting && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Start Meeting</h2>
+                <div className="mb-6">
+                  <p className="text-gray-600 mb-2">Ready to start your scheduled meeting:</p>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-900">{selectedMeeting.title}</h3>
+                    <p className="text-sm text-gray-600">
+                      Scheduled for {new Date(selectedMeeting.scheduledStart).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={confirmStartMeeting}
+                    className="flex-1 bg-green-600 text-white py-3 px-4 rounded-xl font-semibold hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-200 transition-all duration-200 btn-hover"
+                  >
+                    Start Meeting
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsStartModalOpen(false);
+                      setSelectedMeeting(null);
                     }}
                     className="flex-1 bg-gray-300 text-gray-700 py-3 px-4 rounded-xl font-semibold hover:bg-gray-400 focus:outline-none focus:ring-4 focus:ring-gray-200 transition-all duration-200 btn-hover"
                   >

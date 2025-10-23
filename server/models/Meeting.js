@@ -16,7 +16,7 @@ const meetingSchema = new mongoose.Schema({
   participants: [participantSchema],
   maxParticipants: { type: Number, default: 15 },
   isActive: { type: Boolean, default: true },
-  createdAt: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now, expires: '24h' },
   endedAt: { type: Date },
   settings: {
     waitingRoomEnabled: { type: Boolean, default: false },

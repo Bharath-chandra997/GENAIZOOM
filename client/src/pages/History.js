@@ -82,7 +82,7 @@ const History = () => {
   };
 
   const handleRejoinMeeting = (roomId) => {
-    navigate(`/join/${roomId}`);
+    navigate(`/meeting/${roomId}`);
   };
 
   if (loading && meetings.length === 0) {

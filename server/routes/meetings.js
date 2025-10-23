@@ -383,4 +383,62 @@ router.post('/schedule', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/meetings/scheduled
+// @desc    Get user's scheduled meetings
+// @access  Private
+router.get('/scheduled', auth, async (req, res) => {
+  try {
+    info(`Fetching scheduled meetings for userId: ${req.user.userId}, IP: ${req.ip}`);
+
+    const scheduledMeetings = await Meeting.find({
+      createdBy: req.user.userId,
+      isScheduled: true,
+      isActive: true
+    })
+    .sort({ scheduledStart: 1 })
+    .select('roomId title scheduledStart duration createdAt');
+
+    res.json({
+      success: true,
+      meetings: scheduledMeetings
+    });
+
+  } catch (error) {
+    logError(`Get scheduled meetings failed for userId: ${req.user?.userId || 'unknown'}, IP: ${req.ip}`, error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   DELETE /api/meetings/scheduled/:roomId
+// @desc    Cancel a scheduled meeting
+// @access  Private
+router.delete('/scheduled/:roomId', auth, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    info(`Canceling scheduled meeting for userId: ${req.user.userId}, roomId: ${roomId}, IP: ${req.ip}`);
+
+    const meeting = await Meeting.findOne({
+      roomId,
+      createdBy: req.user.userId,
+      isScheduled: true
+    });
+
+    if (!meeting) {
+      return res.status(404).json({ error: 'Scheduled meeting not found' });
+    }
+
+    await Meeting.findByIdAndDelete(meeting._id);
+    info(`Scheduled meeting canceled: roomId: ${roomId}, IP: ${req.ip}`);
+
+    res.json({
+      success: true,
+      message: 'Meeting canceled successfully'
+    });
+
+  } catch (error) {
+    logError(`Cancel scheduled meeting failed for userId: ${req.user?.userId || 'unknown'}, roomId: ${req.params.roomId}, IP: ${req.ip}`, error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

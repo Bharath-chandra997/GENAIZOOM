@@ -14,6 +14,7 @@ const fs = require('fs');
 require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const meetingRoutes = require('./routes/meetings');
+const feedbackRoutes = require('./routes/feedback');
 const { info, logError } = require('./utils/logger');
 const User = require('./models/User');
 const Meeting = require('./models/Meeting');
@@ -434,6 +435,7 @@ fetchIceServers().then(() => info('Initial ICE servers fetched'));
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/meetings', meetingRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Socket.IO Authentication
 io.use((socket, next) => {

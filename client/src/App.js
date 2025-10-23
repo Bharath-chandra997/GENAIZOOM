@@ -10,6 +10,8 @@ import Schedule from './pages/Schedule';
 import Profile from './pages/Profile';
 import AuthCallback from './pages/AuthCallback';
 import Meeting from './pages/Meeting';
+import Feedback from './pages/Feedback';
+import UserGuide from './pages/UserGuide';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const App = () => {
@@ -56,6 +58,22 @@ const App = () => {
           element={
             <ProtectedRoute>
               <Profile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/feedback"
+          element={
+            <ProtectedRoute>
+              <Feedback />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/guide"
+          element={
+            <ProtectedRoute>
+              <UserGuide />
             </ProtectedRoute>
           }
         />

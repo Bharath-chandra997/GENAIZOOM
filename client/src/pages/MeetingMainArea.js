@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import './MeetingMainArea.css';
 
 const MeetingMainArea = ({
@@ -61,11 +62,23 @@ const MeetingMainArea = ({
 
   // Handle video element reference
   const setVideoRef = (participant, element) => {
-    if (element && participant.stream) {
+    if (element) {
       videoRefs.current.set(participant.userId, element);
-      element.srcObject = participant.stream;
+      if (participant.stream) {
+        element.srcObject = participant.stream;
+      }
     }
   };
+
+  // Update video streams when participants change
+  useEffect(() => {
+    participants.forEach(participant => {
+      const videoElement = videoRefs.current.get(participant.userId);
+      if (videoElement && participant.stream && videoElement.srcObject !== participant.stream) {
+        videoElement.srcObject = participant.stream;
+      }
+    });
+  }, [participants]);
 
   // Render participant video frame
   const renderParticipantVideo = (participant, index) => {
@@ -81,7 +94,7 @@ const MeetingMainArea = ({
     }
 
     return (
-      <div
+      <motion.div
         key={participant.userId || `participant-${index}`}
         className={`pro-video-frame ${
           isPinned ? 'pro-video-frame--pinned' : ''
@@ -89,6 +102,13 @@ const MeetingMainArea = ({
           isScreenSharing ? 'pro-video-frame--screen-share' : ''
         }`}
         onClick={() => !isAI && handlePinParticipant(participant.userId)}
+        layout
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.8 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
       >
         <div className="pro-video-container">
           {hasVideo && !isAI ? (
@@ -96,7 +116,9 @@ const MeetingMainArea = ({
               ref={(video) => setVideoRef(participant, video)}
               autoPlay
               muted={participant.isLocal}
+              playsInline
               className={videoClass}
+              key={`video-${participant.userId}-${participant.stream ? 'stream' : 'no-stream'}`}
             />
           ) : isAI ? (
             <div className="pro-ai-visualization">
@@ -163,7 +185,7 @@ const MeetingMainArea = ({
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   };
 
@@ -178,89 +200,128 @@ const MeetingMainArea = ({
       <div className="pro-screenshare-view">
         <div className="pro-screenshare-main">{renderParticipantVideo(screenSharer, 0)}</div>
         {otherParticipants.length > 0 && (
-          <div className="pro-screenshare-participants">
+          <motion.div 
+            className="pro-screenshare-participants"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
             {otherParticipants.slice(0, 4).map((participant, index) => (
-              <div key={participant.userId} className="pro-screenshare-participant">
+              <motion.div 
+                key={participant.userId} 
+                className="pro-screenshare-participant"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3, delay: index * 0.1 }}
+              >
                 {renderParticipantVideo(participant, index)}
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
     );
   };
 
-  // Render grid view
-  const renderGridView = () => {
-    const currentParticipants = getCurrentPageParticipants();
-    const participantCount = currentParticipants.length;
-
-    return (
-      <div className="pro-video-grid-container" style={{ transform: `translateX(-${gridPage * 100}%)` }}>
-        {Array.from({ length: totalGridPages }, (_, pageIndex) => {
-          const pageParticipants = participants.slice(pageIndex * 3, (pageIndex + 1) * 3);
-          return (
-            <div key={pageIndex} className="pro-video-grid-page">
-              {pageParticipants.map((participant, index) => (
-                <div
-                  key={participant.userId}
-                  className={`pro-video-grid-item pro-video-grid-item--${index + 1}`}
-                >
-                  {renderParticipantVideo(participant, index)}
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-    );
+  // Get responsive grid layout based on participant count
+  const getGridLayout = (participantCount) => {
+    if (participantCount === 1) {
+      return {
+        gridTemplateColumns: '1fr',
+        gridTemplateRows: '1fr',
+        maxWidth: '600px',
+        maxHeight: '400px'
+      };
+    } else if (participantCount === 2) {
+      return {
+        gridTemplateColumns: '1fr 1fr',
+        gridTemplateRows: '1fr',
+        maxWidth: '800px',
+        maxHeight: '400px'
+      };
+    } else if (participantCount === 3) {
+      return {
+        gridTemplateColumns: '1fr 1fr',
+        gridTemplateRows: '1fr 1fr',
+        gridTemplateAreas: '"video1 video2" "video3 video3"',
+        maxWidth: '800px',
+        maxHeight: '600px'
+      };
+    } else if (participantCount === 4) {
+      return {
+        gridTemplateColumns: '1fr 1fr',
+        gridTemplateRows: '1fr 1fr',
+        maxWidth: '800px',
+        maxHeight: '600px'
+      };
+    } else {
+      // 5+ participants - use a responsive grid
+      const cols = Math.ceil(Math.sqrt(participantCount));
+      const rows = Math.ceil(participantCount / cols);
+      return {
+        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+        gridTemplateRows: `repeat(${rows}, 1fr)`,
+        maxWidth: '100%',
+        maxHeight: '100%'
+      };
+    }
   };
 
-  // Render pagination controls
-  const renderPagination = () => {
-    if (totalGridPages <= 1) return null;
+  // Render responsive grid view
+  const renderGridView = () => {
+    const participantCount = participants.length;
+    const gridLayout = getGridLayout(participantCount);
 
     return (
-      <div className="pro-grid-pagination">
-        <button
-          onClick={() => handleSwipe(-1)}
-          disabled={gridPage === 0}
-          className="pro-pagination-btn pro-pagination-btn--left"
-          title="Previous page"
-        >
-          ←
-        </button>
-
-        <div className="pro-grid-dots">
-          {Array.from({ length: totalGridPages }, (_, i) => (
-            <button
-              key={i}
-              onClick={() => setGridPage(i)}
-              className={`pro-grid-dot ${gridPage === i ? 'pro-grid-dot--active' : ''}`}
-              title={`Page ${i + 1}`}
-            />
+      <motion.div 
+        className="pro-video-grid-responsive"
+        style={gridLayout}
+        layout
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      >
+        <AnimatePresence mode="popLayout">
+          {participants.map((participant, index) => (
+            <motion.div
+              key={participant.userId}
+              layout
+              initial={{ opacity: 0, scale: 0.8, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: -20 }}
+              transition={{ 
+                duration: 0.4, 
+                delay: index * 0.1,
+                ease: "easeOut"
+              }}
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              className="pro-video-grid-item-responsive"
+              style={participantCount === 3 && index === 2 ? { gridArea: 'video3' } : {}}
+            >
+              {renderParticipantVideo(participant, index)}
+            </motion.div>
           ))}
-        </div>
-
-        <button
-          onClick={() => handleSwipe(1)}
-          disabled={gridPage === totalGridPages - 1}
-          className="pro-pagination-btn pro-pagination-btn--right"
-          title="Next page"
-        >
-          →
-        </button>
-      </div>
+        </AnimatePresence>
+      </motion.div>
     );
   };
 
   return (
-    <div className="pro-mainarea">
-      <div className="pro-mainarea-grid">
+    <motion.div 
+      className="pro-mainarea"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      <motion.div 
+        className="pro-mainarea-grid"
+        layout
+        transition={{ duration: 0.3 }}
+      >
         {isSomeoneScreenSharing ? renderScreenShareView() : renderGridView()}
-        {renderPagination()}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 

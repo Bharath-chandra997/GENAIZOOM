@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 import LoadingSpinner from '../components/LoadingSpinner';
-import Navbar from '../components/Navbar'; // Adjust path if necessary
+import Navbar from '../components/Navbar';
+import { motion } from 'framer-motion';
 
 const SERVER_URL = "https://genaizoomserver-0yn4.onrender.com";
 
@@ -58,15 +59,14 @@ const Schedule = () => {
         `${SERVER_URL}/api/meetings/schedule`,
         {
           title: formData.title,
-          startTime,
+          scheduledStart: startTime,
           duration: parseInt(formData.duration),
-          hostEmail: user.email,
         },
         { headers: { Authorization: `Bearer ${user.token}` } }
       );
 
       toast.success('Meeting scheduled successfully!');
-      navigate(`/meeting/${response.data.meeting.roomId}`);
+      navigate('/home');
     } catch (error) {
       console.error('Schedule meeting error:', error);
       const message = error.response?.data?.error || 'Failed to schedule meeting. Please try again.';
@@ -86,13 +86,23 @@ const Schedule = () => {
       <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md mx-auto">
-          <div className="text-center mb-8 animate-fade-in">
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-8"
+          >
             <h1 className="text-3xl font-bold text-gray-900">Schedule a Meeting</h1>
             <p className="text-gray-600 mt-2">
               Plan your meeting with up to 15 participants
             </p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 animate-slide-up">
+          </motion.div>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8"
+          >
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="title" className="block text-sm font-medium text-gray-700">
@@ -154,9 +164,11 @@ const Schedule = () => {
                   <option value="120">2 hours</option>
                 </select>
               </div>
-              <button
+              <motion.button
                 type="submit"
                 disabled={loading}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 className="w-full bg-blue-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 btn-hover"
               >
                 {loading ? (
@@ -167,9 +179,9 @@ const Schedule = () => {
                 ) : (
                   'Schedule Meeting'
                 )}
-              </button>
+              </motion.button>
             </form>
-          </div>
+          </motion.div>
         </div>
       </div>
     </>

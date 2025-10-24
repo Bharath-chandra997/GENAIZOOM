@@ -8,6 +8,7 @@
     "browserify-zlib": "^0.2.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
+    "framer-motion": "^12.23.24",
     "jwt-decode": "^4.0.0",
     "path-browserify": "^1.0.1",
     "peerjs": "^1.4.7",

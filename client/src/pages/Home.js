@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import axios from 'axios';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Navbar from '../components/Navbar';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
@@ -232,57 +233,81 @@ const Home = () => {
           </div>
 
           {/* Scheduled Meetings */}
-          {scheduledMeetings.length > 0 && (
-            <div className="mb-12">
-              <h3 className="text-2xl font-bold text-gray-900 text-center mb-8">Scheduled Meetings</h3>
-              <div className="grid gap-4">
-                {scheduledMeetings.map((meeting) => {
-                  const timeRemaining = formatTimeRemaining(meeting.scheduledStart);
-                  const isReady = timeRemaining === 'Ready to start';
-                  
-                  return (
-                    <div key={meeting.roomId} className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <h4 className="text-lg font-semibold text-gray-900 mb-2">{meeting.title}</h4>
-                          <div className="flex items-center space-x-4 text-sm text-gray-600">
-                            <span>📅 {new Date(meeting.scheduledStart).toLocaleDateString()}</span>
-                            <span>🕒 {new Date(meeting.scheduledStart).toLocaleTimeString()}</span>
-                            <span>⏱️ {meeting.duration} minutes</span>
+          <AnimatePresence>
+            {scheduledMeetings.length > 0 && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.5 }}
+                className="mb-12"
+              >
+                <h3 className="text-2xl font-bold text-gray-900 text-center mb-8">Scheduled Meetings</h3>
+                <div className="grid gap-4">
+                  {scheduledMeetings.map((meeting, index) => {
+                    const timeRemaining = formatTimeRemaining(meeting.scheduledStart);
+                    const isReady = timeRemaining === 'Ready to start';
+                    
+                    return (
+                      <motion.div 
+                        key={meeting.roomId}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3, delay: index * 0.1 }}
+                        whileHover={{ scale: 1.02 }}
+                        className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-200"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h4 className="text-lg font-semibold text-gray-900 mb-2">{meeting.title}</h4>
+                            <div className="flex items-center space-x-4 text-sm text-gray-600">
+                              <span>📅 {new Date(meeting.scheduledStart).toLocaleDateString()}</span>
+                              <span>🕒 {new Date(meeting.scheduledStart).toLocaleTimeString()}</span>
+                              <span>⏱️ {meeting.duration} minutes</span>
+                            </div>
+                            <div className="mt-2">
+                              <motion.span 
+                                animate={isReady ? { scale: [1, 1.1, 1] } : {}}
+                                transition={{ duration: 2, repeat: Infinity }}
+                                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                                  isReady 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                {isReady ? '🚀 Ready to start' : `⏰ ${timeRemaining} remaining`}
+                              </motion.span>
+                            </div>
                           </div>
-                          <div className="mt-2">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                              isReady 
-                                ? 'bg-green-100 text-green-800' 
-                                : 'bg-blue-100 text-blue-800'
-                            }`}>
-                              {isReady ? '🚀 Ready to start' : `⏰ ${timeRemaining} remaining`}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3 ml-4">
-                          {isReady && (
-                            <button
-                              onClick={() => handleStartMeeting(meeting)}
-                              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-200 transition-all duration-200 btn-hover"
+                          <div className="flex items-center space-x-3 ml-4">
+                            {isReady && (
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => handleStartMeeting(meeting)}
+                                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-200 transition-all duration-200 btn-hover"
+                              >
+                                Start Meeting
+                              </motion.button>
+                            )}
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => cancelMeeting(meeting)}
+                              className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200 transition-all duration-200 btn-hover"
                             >
-                              Start Meeting
-                            </button>
-                          )}
-                          <button
-                            onClick={() => cancelMeeting(meeting)}
-                            className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200 transition-all duration-200 btn-hover"
-                          >
-                            Cancel
-                          </button>
+                              Cancel
+                            </motion.button>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="mb-12">
             <h3 className="text-2xl font-bold text-gray-900 text-center mb-8">Quick Actions</h3>

@@ -22,15 +22,16 @@
   background: #0f1115;
 }
 
-/* Video Grid Styles - Larger grid */
-.pro-video-grid {
+/* Responsive Video Grid Styles */
+.pro-video-grid-responsive {
   display: grid;
   gap: 16px;
-  width: 95vw; /* Increased to nearly full viewport width */
-  height: 95%; /* Increased to use more vertical space */
+  width: 100%;
+  height: 100%;
   place-items: stretch;
-  grid-template-columns: repeat(2, minmax(360px, 1fr)); /* Larger minimum size */
-  grid-template-rows: repeat(2, minmax(200px, 1fr)); /* Larger minimum row height */
+  justify-content: center;
+  align-items: center;
+  margin: 0 auto;
 }
 
 /* Grid layouts for different participant counts - Adjusted for larger view */
@@ -57,13 +58,18 @@
   grid-template-rows: 1fr 1fr;
 }
 
-.pro-video-grid-item {
+.pro-video-grid-item-responsive {
   width: 100%;
   height: 100%;
+  min-height: 200px;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
 }
 
-.pro-video-grid-item--3 {
-  grid-area: video3;
+.pro-video-grid-item-responsive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
 }
 
 /* Video Frame Styles - No shadow, larger responsive */
@@ -437,11 +443,37 @@
 }
 
 /* Responsive Design */
+@media (max-width: 1200px) {
+  .pro-video-grid-responsive {
+    gap: 14px;
+  }
+  
+  .pro-video-grid-item-responsive {
+    min-height: 200px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .pro-video-grid-responsive {
+    gap: 12px;
+  }
+  
+  .pro-video-grid-item-responsive {
+    min-height: 180px;
+  }
+}
+
 @media (max-width: 768px) {
-  .pro-video-grid {
+  .pro-mainarea-grid {
+    padding: 12px;
+  }
+  
+  .pro-video-grid-responsive {
     gap: 8px;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: repeat(2, minmax(160px, 1fr));
+  }
+  
+  .pro-video-grid-item-responsive {
+    min-height: 160px;
   }
   
   .pro-screenshare-participants {
@@ -453,16 +485,31 @@
   }
 }
 
+@media (max-width: 640px) {
+  .pro-mainarea-grid {
+    padding: 10px;
+  }
+  
+  .pro-video-grid-responsive {
+    gap: 8px;
+  }
+  
+  .pro-video-grid-item-responsive {
+    min-height: 150px;
+  }
+}
+
 @media (max-width: 480px) {
   .pro-mainarea-grid {
     padding: 8px;
   }
   
-  .pro-video-grid--3,
-  .pro-video-grid--4 {
-    grid-template-columns: 1fr;
-    grid-template-rows: repeat(auto-fit, minmax(140px, 1fr));
-    grid-template-areas: none;
+  .pro-video-grid-responsive {
+    gap: 6px;
+  }
+  
+  .pro-video-grid-item-responsive {
+    min-height: 140px;
   }
   
   .pro-participant-info {
@@ -474,5 +521,23 @@
   
   .pro-participant-name {
     font-size: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .pro-mainarea-grid {
+    padding: 6px;
+  }
+  
+  .pro-video-grid-responsive {
+    gap: 4px;
+  }
+  
+  .pro-video-grid-item-responsive {
+    min-height: 120px;
+  }
+  
+  .pro-participant-name {
+    font-size: 11px;
   }
 }

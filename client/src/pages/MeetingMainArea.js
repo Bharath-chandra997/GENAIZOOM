@@ -278,7 +278,7 @@ const MeetingMainArea = ({
     );
   };
 
-  // Get responsive grid layout based on participant count - exactly 3 frames per screen
+  // Get responsive grid layout based on participant count - AI first, then users
   const getGridLayout = (participantCount) => {
     // Always show maximum 3 participants per grid
     if (participantCount <= 0) {
@@ -297,8 +297,13 @@ const MeetingMainArea = ({
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
       };
+    } else if (participantCount === 3) {
+      return {
+        gridTemplateColumns: '1fr 1fr 1fr',
+        gridTemplateRows: '1fr',
+      };
     } else {
-      // For 3 participants, use 3 columns
+      // For 4+ participants, use 3 columns with pagination
       return {
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
@@ -310,22 +315,22 @@ const MeetingMainArea = ({
   const renderGridView = () => {
     const currentPageParticipants = getCurrentPageParticipants();
     
-    // Sort participants: real users first, AI last (on the right)
+    // Sort participants: AI first (on the left), then real users
     const sortedParticipants = [...currentPageParticipants].sort((a, b) => {
-      if (a.userId === 'ai-assistant') return 1; // AI goes last
-      if (b.userId === 'ai-assistant') return -1;
+      if (a.userId === 'ai-assistant') return -1; // AI goes first
+      if (b.userId === 'ai-assistant') return 1;
       return 0;
     });
     
-    // Count only REAL participants (exclude AI from layout count)
-    const realParticipantCount = sortedParticipants.filter(p => p.userId !== 'ai-assistant').length;
-    const gridLayout = getGridLayout(realParticipantCount);
+    // Count total participants including AI for layout
+    const totalParticipantCount = sortedParticipants.length;
+    const gridLayout = getGridLayout(totalParticipantCount);
 
-    console.log('Grid layout for', realParticipantCount, 'participants:', gridLayout);
+    console.log('Grid layout for', totalParticipantCount, 'participants:', gridLayout);
     
     return (
       <motion.div 
-        className={`pro-video-grid-responsive pro-video-grid--${realParticipantCount}`}
+        className={`pro-video-grid-responsive pro-video-grid--${totalParticipantCount}`}
         style={{
           ...gridLayout,
           display: 'grid',

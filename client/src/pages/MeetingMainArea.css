@@ -25,12 +25,13 @@
 
 /* Responsive Video Grid Styles */
 .pro-video-grid-responsive {
-  display: grid;
+  display: grid !important;
   gap: 16px;
   width: 100%;
   height: 100%;
   place-items: stretch;
   align-items: stretch;
+  grid-auto-flow: row;
 }
 
 /* Grid layouts for different participant counts - Horizontal frames side by side */
@@ -42,21 +43,26 @@
 }
 
 .pro-video-grid--2 {
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr;
+  grid-template-columns: 1fr 1fr !important;
+  grid-template-rows: 1fr !important;
   width: 100%;
+  height: 100%;
+  grid-auto-flow: row;
 }
 
 .pro-video-grid--3 {
-  grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: 1fr;
+  grid-template-columns: 1fr 1fr 1fr !important;
+  grid-template-rows: 1fr !important;
   width: 100%;
+  height: 100%;
+  grid-auto-flow: row;
 }
 
 .pro-video-grid-item-responsive {
   width: 100%;
   height: 100%;
-  min-height: 400px;
+  min-height: 300px;
+  max-height: 100%;
   border-radius: 12px;
   overflow: hidden;
   transition: all 0.3s ease;

@@ -321,10 +321,17 @@ const MeetingMainArea = ({
     const realParticipantCount = sortedParticipants.filter(p => p.userId !== 'ai-assistant').length;
     const gridLayout = getGridLayout(realParticipantCount);
 
+    console.log('Grid layout for', realParticipantCount, 'participants:', gridLayout);
+    
     return (
       <motion.div 
         className={`pro-video-grid-responsive pro-video-grid--${realParticipantCount}`}
-        style={gridLayout}
+        style={{
+          ...gridLayout,
+          display: 'grid',
+          width: '100%',
+          height: '100%'
+        }}
         layout
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

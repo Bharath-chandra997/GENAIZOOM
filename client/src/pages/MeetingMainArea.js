@@ -158,7 +158,28 @@ const MeetingMainArea = ({
               )}
             </div>
           ) : (
-            <div className="pro-video-placeholder">{getUserAvatar(participant, 80)}</div>
+            <div className="pro-video-placeholder">
+              {(() => {
+                // Check if participant has a profilePicture (from Google OAuth)
+                if (participant.profilePicture && typeof participant.profilePicture === 'string') {
+                  return (
+                    <img 
+                      src={participant.profilePicture} 
+                      alt={participant.username}
+                      style={{
+                        width: '120px',
+                        height: '120px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: '3px solid rgba(59, 130, 246, 0.5)',
+                      }}
+                    />
+                  );
+                }
+                // Otherwise use the avatar generation function
+                return getUserAvatar(participant, 120);
+              })()}
+            </div>
           )}
         </div>
 

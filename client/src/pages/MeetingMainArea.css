@@ -189,6 +189,14 @@
   border-radius: 6px;
 }
 
+.pro-video-placeholder img {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(59, 130, 246, 0.5);
+}
+
 /* AI Visualization */
 .pro-ai-visualization {
   width: 100%;

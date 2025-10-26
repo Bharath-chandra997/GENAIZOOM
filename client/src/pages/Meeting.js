@@ -1271,6 +1271,13 @@ const Meeting = () => {
       />
 
       {/* Screen Share Toolbar */}
+      {console.log('Rendering ScreenShareToolbar with:', { 
+        isScreenSharing: isSharingScreen, 
+        currentTool, 
+        currentColor, 
+        userColor: userColors[socketRef.current?.id] || '#3b82f6',
+        isActiveUser: screenShareUserId === socketRef.current?.id 
+      })}
       <ScreenShareToolbar
         isScreenSharing={isSharingScreen}
         onToolSelect={handleToolSelect}

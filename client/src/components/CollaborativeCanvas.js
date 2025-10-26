@@ -204,7 +204,10 @@ const CollaborativeCanvas = ({
     }
   };
 
-  if (!isScreenSharing) return null;
+  // Temporarily show canvas for debugging
+  // if (!isScreenSharing) return null;
+
+  console.log('CollaborativeCanvas rendering:', { isScreenSharing, currentTool, currentColor, userColor, userId });
 
   return (
     <canvas
@@ -218,6 +221,7 @@ const CollaborativeCanvas = ({
         zIndex: 999,
         pointerEvents: 'auto',
         cursor: currentTool === 'eraser' ? 'crosshair' : 'crosshair',
+        backgroundColor: 'rgba(0, 0, 0, 0.1)',
       }}
       onMouseDown={startDrawing}
       onMouseMove={draw}

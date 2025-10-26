@@ -17,6 +17,8 @@ import MeetingControls from './MeetingControls';
 import AIPopup from './AIPopup';
 import Chat from '../components/Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
+import ScreenShareToolbar from '../components/ScreenShareToolbar';
+import CollaborativeCanvas from '../components/CollaborativeCanvas';
 import './Meeting.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
@@ -126,6 +128,13 @@ const Meeting = () => {
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
+
+  // Screen sharing and drawing state
+  const [currentTool, setCurrentTool] = useState('pen');
+  const [currentColor, setCurrentColor] = useState('#3b82f6');
+  const [drawingData, setDrawingData] = useState([]);
+  const [userColors, setUserColors] = useState({});
+  const [screenShareUserId, setScreenShareUserId] = useState(null);
 
   const [aiParticipant] = useState({
     userId: 'ai-assistant',
@@ -507,6 +516,31 @@ const Meeting = () => {
     setAiUploadedAudio(null);
   }, []);
 
+  // Drawing handler functions
+  const handleDrawingData = useCallback((drawingData) => {
+    socket.emit('drawing-data', { drawingData, userId: socket.id });
+  }, [socket]);
+
+  const handleClearCanvas = useCallback(() => {
+    socket.emit('clear-canvas', { userId: socket.id });
+  }, [socket]);
+
+  const handleToolSelect = useCallback((tool) => {
+    setCurrentTool(tool);
+  }, []);
+
+  const handleColorChange = useCallback((color) => {
+    setCurrentColor(color);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    // Undo functionality will be handled by the canvas component
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    // Redo functionality will be handled by the canvas component
+  }, []);
+
   const getIceServers = useCallback(async () => {
     const now = Date.now();
     if (iceServersCache.current && now - lastIceFetch.current < 5 * 60 * 1000) {
@@ -806,6 +840,27 @@ const Meeting = () => {
       socket.on('shared-ai-result', handleSharedAIResult);
       socket.on('shared-media-display', handleSharedMediaDisplay);
       socket.on('shared-media-removal', handleSharedMediaRemoval);
+      
+      // Drawing-related socket events
+      socket.on('drawing-data', ({ drawingData, userId }) => {
+        setDrawingData(prev => [...prev, drawingData]);
+      });
+      
+      socket.on('clear-canvas', ({ userId }) => {
+        setDrawingData([]);
+      });
+      
+      socket.on('screen-share-user', ({ userId }) => {
+        setScreenShareUserId(userId);
+        // Assign unique color to user if not already assigned
+        if (!userColors[userId]) {
+          const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280', '#000000'];
+          const usedColors = Object.values(userColors);
+          const availableColors = colors.filter(color => !usedColors.includes(color));
+          const assignedColor = availableColors[0] || colors[Math.floor(Math.random() * colors.length)];
+          setUserColors(prev => ({ ...prev, [userId]: assignedColor }));
+        }
+      });
 
       return () => {
         socket.off('connect', onConnect);
@@ -989,17 +1044,33 @@ const Meeting = () => {
     if (isSharingScreen) {
       await replaceTrack(localCameraTrackRef.current, false);
       setIsSharingScreen(false);
+      setScreenShareUserId(null);
+      setDrawingData([]); // Clear drawing data when stopping screen share
+      socket.emit('screen-share-stop', { userId: socket.id });
       screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     } else {
+      // Check if someone else is already screen sharing
+      if (screenShareUserId && screenShareUserId !== socket.id) {
+        toast.error('Someone else is already screen sharing. Please wait for them to stop.');
+        return;
+      }
+      
       try {
         const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
         screenStreamRef.current = screen;
         const screenTrack = screen.getVideoTracks()[0];
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
+        setScreenShareUserId(socket.id);
+        socket.emit('screen-share-start', { userId: socket.id });
+        socket.emit('screen-share-user', { userId: socket.id });
+        
         screenTrack.onended = async () => {
           await replaceTrack(localCameraTrackRef.current, false);
           setIsSharingScreen(false);
+          setScreenShareUserId(null);
+          setDrawingData([]);
+          socket.emit('screen-share-stop', { userId: socket.id });
         };
       } catch (e) {
         console.error('Screen share error:', e);
@@ -1197,6 +1268,31 @@ const Meeting = () => {
       <canvas
         ref={aiCanvasRef}
         style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }}
+      />
+
+      {/* Screen Share Toolbar */}
+      <ScreenShareToolbar
+        isScreenSharing={isSharingScreen}
+        onToolSelect={handleToolSelect}
+        onClearCanvas={handleClearCanvas}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        currentTool={currentTool}
+        currentColor={currentColor}
+        onColorChange={handleColorChange}
+        userColor={userColors[socket.id] || '#3b82f6'}
+        isActiveUser={screenShareUserId === socket.id}
+      />
+
+      {/* Collaborative Drawing Canvas */}
+      <CollaborativeCanvas
+        isScreenSharing={isSharingScreen}
+        currentTool={currentTool}
+        currentColor={currentColor}
+        userColor={userColors[socket.id] || '#3b82f6'}
+        userId={socket.id}
+        onDrawingData={handleDrawingData}
+        drawingData={drawingData}
       />
     </div>
   );

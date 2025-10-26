@@ -284,27 +284,27 @@ const MeetingMainArea = ({
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
-        width: '100%',
+        width: '100vw',
       };
     } else if (participantCount === 1) {
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
-        width: '100%',
-        maxWidth: '100%',
+        width: '100vw',
+        maxWidth: '100vw',
       };
     } else if (participantCount === 2) {
       return {
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
-        width: '100%',
+        width: '100vw',
         gap: '0px',
       };
     } else if (participantCount === 3) {
       return {
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
-        width: '100%',
+        width: '100vw',
         gap: '0px',
       };
     } else {
@@ -312,7 +312,7 @@ const MeetingMainArea = ({
       return {
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
-        width: '100%',
+        width: '100vw',
         gap: '0px',
       };
     }
@@ -340,7 +340,7 @@ const MeetingMainArea = ({
         style={{
           ...gridLayout,
           display: 'grid',
-          width: '100%',
+          width: '100vw',
           height: '100%'
         }}
         layout

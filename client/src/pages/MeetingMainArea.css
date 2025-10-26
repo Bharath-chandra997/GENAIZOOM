@@ -89,10 +89,7 @@
   padding: 0;
 }
 
-.pro-video-grid-item-responsive:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-}
+/* Removed hover effects */
 
 /* Video Frame Styles - Side by side (horizontal layout) */
 .pro-video-frame {
@@ -111,9 +108,7 @@
   padding: 0;
 }
 
-.pro-video-frame:hover {
-  transform: translateY(-2px);
-}
+/* Removed hover effects */
 
 .pro-video-frame--active {
   border-color: #3b82f6;
@@ -445,9 +440,7 @@
   transition: background 0.2s ease;
 }
 
-.pro-pagination-btn:hover {
-  background: rgba(59, 130, 246, 0.9);
-}
+/* Removed hover effects */
 
 .pro-pagination-btn:disabled {
   opacity: 0.5;
@@ -470,9 +463,7 @@
   cursor: pointer;
 }
 
-.pro-grid-dot:hover {
-  background: #94a3b8;
-}
+/* Removed hover effects */
 
 .pro-grid-dot--active {
   background: #ffffff;

@@ -106,8 +106,10 @@ const MeetingMainArea = ({
       if (!isMirroringBrowser) {
         videoClass += ' pro-video-element--mirrored';
       }
+    } else {
+      // Explicitly ensure remote users are NOT mirrored
+      videoClass = 'pro-video-element';
     }
-    // Remote users should NEVER be mirrored
 
     return (
       <motion.div
@@ -123,7 +125,6 @@ const MeetingMainArea = ({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.8 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
       >
         <div className="pro-video-container">
@@ -361,7 +362,6 @@ const MeetingMainArea = ({
                 delay: index * 0.1,
                 ease: "easeOut"
               }}
-              whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
               className="pro-video-grid-item-responsive"
             >

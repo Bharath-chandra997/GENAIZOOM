@@ -298,14 +298,14 @@ const MeetingMainArea = ({
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
         width: '100%',
-        gap: '8px',
+        gap: '0px',
       };
     } else if (participantCount === 3) {
       return {
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
         width: '100%',
-        gap: '8px',
+        gap: '0px',
       };
     } else {
       // For 4+ participants, use 3 columns with pagination
@@ -313,7 +313,7 @@ const MeetingMainArea = ({
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
         width: '100%',
-        gap: '8px',
+        gap: '0px',
       };
     }
   };
@@ -333,7 +333,6 @@ const MeetingMainArea = ({
     const totalParticipantCount = sortedParticipants.length;
     const gridLayout = getGridLayout(totalParticipantCount);
 
-    console.log('Grid layout for', totalParticipantCount, 'participants:', gridLayout);
     
     return (
       <motion.div 

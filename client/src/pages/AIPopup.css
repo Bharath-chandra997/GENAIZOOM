@@ -96,8 +96,9 @@
 }
 
 .pro-ai-status-section {
-  margin-bottom: 0;
-  padding-bottom: 20px;
+  margin-bottom: 20px;
+  padding-bottom: 0;
+  border-bottom: none;
   flex-shrink: 0;
 }
 

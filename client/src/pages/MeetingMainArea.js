@@ -55,8 +55,8 @@ const MeetingMainArea = ({
 
   // Get participants for current grid page
   const getCurrentPageParticipants = () => {
-    const startIndex = gridPage * 3; // Changed from 4 to 3
-    const endIndex = startIndex + 3; // Changed from 4 to 3
+    const startIndex = gridPage * 3;
+    const endIndex = startIndex + 3;
     return participants.slice(startIndex, endIndex);
   };
 
@@ -225,51 +225,36 @@ const MeetingMainArea = ({
 
   // Get responsive grid layout based on participant count
   const getGridLayout = (participantCount) => {
-    if (participantCount === 1) {
+    // Always show maximum 3 participants per grid
+    if (participantCount <= 0) {
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '600px',
-        maxHeight: '400px'
+      };
+    } else if (participantCount === 1) {
+      return {
+        gridTemplateColumns: '1fr',
+        gridTemplateRows: '1fr',
       };
     } else if (participantCount === 2) {
       return {
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '800px',
-        maxHeight: '400px'
       };
-    } else if (participantCount === 3) {
+    } else {
+      // For 3 or more, use 3 columns with 2 rows
       return {
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr 1fr',
         gridTemplateAreas: '"video1 video2" "video3 video3"',
-        maxWidth: '800px',
-        maxHeight: '600px'
-      };
-    } else if (participantCount === 4) {
-      return {
-        gridTemplateColumns: '1fr 1fr',
-        gridTemplateRows: '1fr 1fr',
-        maxWidth: '800px',
-        maxHeight: '600px'
-      };
-    } else {
-      // 5+ participants - use a responsive grid
-      const cols = Math.ceil(Math.sqrt(participantCount));
-      const rows = Math.ceil(participantCount / cols);
-      return {
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gridTemplateRows: `repeat(${rows}, 1fr)`,
-        maxWidth: '100%',
-        maxHeight: '100%'
       };
     }
   };
 
   // Render responsive grid view
   const renderGridView = () => {
-    const participantCount = participants.length;
+    const currentPageParticipants = getCurrentPageParticipants();
+    const participantCount = currentPageParticipants.length;
     const gridLayout = getGridLayout(participantCount);
 
     return (
@@ -282,7 +267,7 @@ const MeetingMainArea = ({
         transition={{ duration: 0.5, ease: "easeOut" }}
       >
         <AnimatePresence mode="popLayout">
-          {participants.map((participant, index) => (
+          {currentPageParticipants.map((participant, index) => (
             <motion.div
               key={participant.userId}
               layout

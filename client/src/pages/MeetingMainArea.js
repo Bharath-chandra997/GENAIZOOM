@@ -285,34 +285,23 @@ const MeetingMainArea = ({
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '600px',
-        width: '100%',
       };
     } else if (participantCount === 1) {
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '600px',
-        width: '100%',
+        maxWidth: '800px',
       };
     } else if (participantCount === 2) {
       return {
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '100%',
-        width: '100%',
-        gap: '16px',
-        padding: '0 16px',
       };
     } else {
       // For 3 participants, use 3 columns
       return {
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '100%',
-        width: '100%',
-        gap: '16px',
-        padding: '0 16px',
       };
     }
   };

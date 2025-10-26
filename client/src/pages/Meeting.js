@@ -992,32 +992,20 @@ const Meeting = () => {
     if (isSharingScreen) {
       await replaceTrack(localCameraTrackRef.current, false);
       setIsSharingScreen(false);
-      setScreenShareUserId(null);
-      setDrawingData([]); // Clear drawing data when stopping screen share
       socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
       screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     } else {
-      // Check if someone else is already screen sharing
-      if (screenShareUserId && screenShareUserId !== socketRef.current?.id) {
-        toast.error('Someone else is already screen sharing. Please wait for them to stop.');
-        return;
-      }
-      
       try {
         const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
         screenStreamRef.current = screen;
         const screenTrack = screen.getVideoTracks()[0];
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
-        setScreenShareUserId(socketRef.current?.id);
         socketRef.current?.emit('screen-share-start', { userId: socketRef.current.id });
-        socketRef.current?.emit('screen-share-user', { userId: socketRef.current.id });
         
         screenTrack.onended = async () => {
           await replaceTrack(localCameraTrackRef.current, false);
           setIsSharingScreen(false);
-          setScreenShareUserId(null);
-          setDrawingData([]);
           socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
         };
       } catch (e) {
@@ -1218,30 +1206,6 @@ const Meeting = () => {
         style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }}
       />
 
-      {/* Screen Share Toolbar */}
-      <ScreenShareToolbar
-        isScreenSharing={isSharingScreen}
-        onToolSelect={handleToolSelect}
-        onClearCanvas={handleClearCanvas}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        currentTool={currentTool}
-        currentColor={currentColor}
-        onColorChange={handleColorChange}
-        userColor={userColors[socketRef.current?.id] || '#3b82f6'}
-        isActiveUser={screenShareUserId === socketRef.current?.id}
-      />
-
-      {/* Collaborative Drawing Canvas */}
-      <CollaborativeCanvas
-        isScreenSharing={isSharingScreen}
-        currentTool={currentTool}
-        currentColor={currentColor}
-        userColor={userColors[socketRef.current?.id] || '#3b82f6'}
-        userId={socketRef.current?.id}
-        onDrawingData={handleDrawingData}
-        drawingData={drawingData}
-      />
 
     </div>
   );

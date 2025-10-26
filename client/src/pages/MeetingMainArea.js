@@ -230,33 +230,34 @@ const MeetingMainArea = ({
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '800px',
+        maxWidth: '600px',
         width: '100%',
       };
     } else if (participantCount === 1) {
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '800px',
+        maxWidth: '600px',
         width: '100%',
       };
     } else if (participantCount === 2) {
       return {
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '1400px',
+        maxWidth: '100%',
         width: '100%',
         gap: '16px',
+        padding: '0 16px',
       };
     } else {
-      // For 3 or more, use 2 columns with 2 rows
+      // For 3 or more, use 3 columns
       return {
-        gridTemplateColumns: '1fr 1fr',
-        gridTemplateRows: '1fr 1fr',
-        gridTemplateAreas: '"video1 video2" "video3 video3"',
-        maxWidth: '1400px',
+        gridTemplateColumns: '1fr 1fr 1fr',
+        gridTemplateRows: '1fr',
+        maxWidth: '100%',
         width: '100%',
         gap: '16px',
+        padding: '0 16px',
       };
     }
   };
@@ -291,9 +292,8 @@ const MeetingMainArea = ({
               }}
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
-              className="pro-video-grid-item-responsive"
-              style={participantCount === 3 && index === 2 ? { gridArea: 'video3' } : {}}
-            >
+                             className="pro-video-grid-item-responsive"
+             >
               {renderParticipantVideo(participant, index)}
             </motion.div>
           ))}

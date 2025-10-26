@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
@@ -20,18 +20,7 @@ const Home = () => {
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
 
-  useEffect(() => {
-    if (isLoading) return; // Wait for auth to initialize
-    if (!isAuthenticated || !user) {
-      console.log('Home: Redirecting to login, isAuthenticated:', isAuthenticated, 'user:', user);
-      toast.error('Please log in to access the home page');
-      navigate('/login');
-    } else {
-      fetchScheduledMeetings();
-    }
-  }, [isLoading, isAuthenticated, user, navigate]);
-
-  const fetchScheduledMeetings = async () => {
+  const fetchScheduledMeetings = useCallback(async () => {
     if (!user?.token) return;
     try {
       const response = await axios.get(`${SERVER_URL}/api/meetings/scheduled`, {
@@ -41,7 +30,30 @@ const Home = () => {
     } catch (error) {
       console.error('Error fetching scheduled meetings:', error);
     }
-  };
+  }, [user?.token]);
+
+  useEffect(() => {
+    if (isLoading) return; // Wait for auth to initialize
+    if (!isAuthenticated || !user) {
+      console.log('Home: Redirecting to login, isAuthenticated:', isAuthenticated, 'user:', user);
+      toast.error('Please log in to access the home page');
+      navigate('/login');
+    } else {
+      fetchScheduledMeetings();
+    }
+  }, [isLoading, isAuthenticated, user, navigate, fetchScheduledMeetings]);
+
+  // Refetch when window regains focus (user returns from scheduling)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (isAuthenticated && user) {
+        fetchScheduledMeetings();
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [isAuthenticated, user, fetchScheduledMeetings]);
 
   const formatTimeRemaining = (scheduledStart) => {
     const now = new Date();
@@ -374,7 +386,11 @@ const Home = () => {
           </AnimatePresence>
 
           <div className="mb-12">
-            <h3 className="text-2xl font-bold text-gray-900 text-center mb-8">Quick Actions</h3>
+            <h3 className={`text-2xl font-bold text-center mb-8 transition-colors duration-300 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
+              Quick Actions
+            </h3>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {quickActions.map((action, index) => (
                 <button
@@ -394,8 +410,16 @@ const Home = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
-            <h3 className="text-2xl font-bold text-gray-900 text-center mb-8">Meeting Features</h3>
+          <div className={`rounded-2xl shadow-lg border p-8 transition-colors duration-300 ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-700' 
+              : 'bg-white border-gray-200'
+          }`}>
+            <h3 className={`text-2xl font-bold text-center mb-8 transition-colors duration-300 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
+              Meeting Features
+            </h3>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
                 { icon: '🎤', title: 'HD Audio', desc: 'Crystal clear voice' },
@@ -405,8 +429,16 @@ const Home = () => {
               ].map((feature, index) => (
                 <div key={index} className="text-center p-4">
                   <div className="text-3xl mb-3">{feature.icon}</div>
-                  <h4 className="font-semibold text-gray-900 mb-1">{feature.title}</h4>
-                  <p className="text-sm text-gray-600">{feature.desc}</p>
+                  <h4 className={`font-semibold mb-1 transition-colors duration-300 ${
+                    isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}>
+                    {feature.title}
+                  </h4>
+                  <p className={`text-sm transition-colors duration-300 ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                  }`}>
+                    {feature.desc}
+                  </p>
                 </div>
               ))}
             </div>

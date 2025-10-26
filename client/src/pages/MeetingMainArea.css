@@ -285,7 +285,6 @@
   padding: 0;
   display: block;
   object-fit: cover;
-  transform: scaleX(-1);
 }
 
 .pro-ai-uploaded-audio {
@@ -294,7 +293,6 @@
   padding: 0;
   display: block;
   border-radius: 8px;
-  transform: scaleX(-1);
 }
 
 .pro-ai-response-display {

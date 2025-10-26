@@ -237,7 +237,6 @@ const MeetingMainArea = ({
             {isAI && (
               <div className="pro-ai-status">
                 <div className={`pro-ai-pulse ${aiBotInUse ? 'pro-ai-pulse--busy' : ''}`} />
-                <span>{aiBotInUse ? `In use by ${currentAIUser}` : 'Ready to help'}</span>
               </div>
             )}
             {isPinned && !isAI && (

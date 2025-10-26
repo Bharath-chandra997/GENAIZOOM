@@ -278,35 +278,42 @@ const MeetingMainArea = ({
     );
   };
 
-  // Get responsive grid layout based on participant count - AI first, then users
+  // Get responsive grid layout based on participant count - Fill entire container
   const getGridLayout = (participantCount) => {
-    // Always show maximum 3 participants per grid
     if (participantCount <= 0) {
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
+        width: '100%',
       };
     } else if (participantCount === 1) {
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '800px',
+        width: '100%',
+        maxWidth: '100%',
       };
     } else if (participantCount === 2) {
       return {
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
+        width: '100%',
+        gap: '8px',
       };
     } else if (participantCount === 3) {
       return {
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
+        width: '100%',
+        gap: '8px',
       };
     } else {
       // For 4+ participants, use 3 columns with pagination
       return {
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
+        width: '100%',
+        gap: '8px',
       };
     }
   };

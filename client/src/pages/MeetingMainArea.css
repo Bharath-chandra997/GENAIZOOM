@@ -18,10 +18,11 @@
   display: flex;
   align-items: stretch;
   justify-content: stretch;
-  padding: 8px;
+  padding: 4px;
   background: #0f1115;
   width: 100%;
   max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Responsive Video Grid Styles */
@@ -37,36 +38,39 @@
   margin: 0;
 }
 
-/* Grid layouts for different participant counts - Horizontal frames side by side */
+/* Grid layouts for different participant counts - Fill entire container width */
 .pro-video-grid--1 {
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
   width: 100%;
-  max-width: 800px;
+  max-width: 100%;
 }
 
 .pro-video-grid--2 {
   grid-template-columns: 1fr 1fr !important;
   grid-template-rows: 1fr !important;
-  width: 100%;
+  width: 100% !important;
   height: 100%;
   grid-auto-flow: row;
+  gap: 8px;
 }
 
 .pro-video-grid--3 {
   grid-template-columns: 1fr 1fr 1fr !important;
   grid-template-rows: 1fr !important;
-  width: 100%;
+  width: 100% !important;
   height: 100%;
   grid-auto-flow: row;
+  gap: 8px;
 }
 
 .pro-video-grid--4 {
   grid-template-columns: 1fr 1fr 1fr !important;
   grid-template-rows: 1fr !important;
-  width: 100%;
+  width: 100% !important;
   height: 100%;
   grid-auto-flow: row;
+  gap: 8px;
 }
 
 .pro-video-grid-item-responsive {
@@ -79,6 +83,7 @@
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
+  flex: 1;
 }
 
 .pro-video-grid-item-responsive:hover {

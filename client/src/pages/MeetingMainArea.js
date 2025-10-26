@@ -320,8 +320,16 @@ const MeetingMainArea = ({
   // Render responsive grid view
   const renderGridView = () => {
     const currentPageParticipants = getCurrentPageParticipants();
+    
+    // Sort participants: real users first, AI last (on the right)
+    const sortedParticipants = [...currentPageParticipants].sort((a, b) => {
+      if (a.userId === 'ai-assistant') return 1; // AI goes last
+      if (b.userId === 'ai-assistant') return -1;
+      return 0;
+    });
+    
     // Count only REAL participants (exclude AI from layout count)
-    const realParticipantCount = currentPageParticipants.filter(p => p.userId !== 'ai-assistant').length;
+    const realParticipantCount = sortedParticipants.filter(p => p.userId !== 'ai-assistant').length;
     const gridLayout = getGridLayout(realParticipantCount);
 
     return (
@@ -334,7 +342,7 @@ const MeetingMainArea = ({
         transition={{ duration: 0.5, ease: "easeOut" }}
       >
         <AnimatePresence mode="popLayout">
-          {currentPageParticipants.map((participant, index) => (
+          {sortedParticipants.map((participant, index) => (
             <motion.div
               key={participant.userId}
               layout

@@ -19,21 +19,12 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # --- GRADIO CLIENT SETUP ---
 client = None
-
-def connect_gradio_client():
-    """Connect to Gradio client with retry logic"""
-    global client
-    try:
-        logger.info(f"Connecting to Hugging Face Space: {HF_SPACE_NAME}...")
-        client = Client(HF_SPACE_NAME)
-        logger.info("✅ Connection to Hugging Face Space successful!")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Failed to connect to Hugging Face Space: {e}")
-        return False
-
-# Try to connect on startup
-connect_gradio_client()
+try:
+    logger.info(f"Connecting to Hugging Face Space: {HF_SPACE_NAME}...")
+    client = Client(HF_SPACE_NAME)
+    logger.info("✅ Connection to Hugging Face Space successful!")
+except Exception as e:
+    logger.error(f"❌ Failed to connect to Hugging Face Space: {e}")
 
 # --- FASTAPI APP SETUP ---
 app = FastAPI(title="SynergySphere VQA Proxy API")
@@ -72,27 +63,10 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
 
 @app.get("/")
 async def health_check():
-    global client
-    
-    # Attempt to reconnect if client is None
-    if not client:
-        logger.warning("Client is None, attempting to reconnect...")
-        if connect_gradio_client():
-            return {"status": "✅ Proxy server is running and connected to Hugging Face Space (reconnected)."}
-        else:
-            return JSONResponse(content={"status": "❌ Proxy server is running but FAILED to connect."}, status_code=503)
-    
-    # Test the connection
-    try:
-        client_info = client.view_api()
+    if client:
         return {"status": "✅ Proxy server is running and connected to Hugging Face Space."}
-    except Exception as e:
-        logger.error(f"Gradio client connection test failed: {e}")
-        # Attempt reconnection
-        if connect_gradio_client():
-            return {"status": "✅ Proxy server is running and connected to Hugging Face Space (reconnected)."}
-        else:
-            return JSONResponse(content={"status": f"❌ Proxy server is running but connection lost: {str(e)}"}, status_code=503)
+    else:
+        return JSONResponse(content={"status": "❌ Proxy server is running but FAILED to connect."}, status_code=503)
 
 @app.get("/ping")
 async def ping():
@@ -109,21 +83,16 @@ async def predict(
     """
     Proxy endpoint for the VQA model.
     """
-    global client
-    
     logger.info(f"🚀 Predict request from user: {user.get('username')}")
     logger.info(f"📁 Image: {image.filename} ({image.content_type}, {image.size} bytes)")
     logger.info(f"🎵 Audio: {audio.filename} ({audio.content_type}, {audio.size} bytes)")
     
-    # Attempt to reconnect if client is None
     if not client:
-        logger.warning("Gradio client not available, attempting to reconnect...")
-        if not connect_gradio_client():
-            logger.error("Failed to connect to Gradio client")
-            raise HTTPException(
-                status_code=503,
-                detail="Gradio client is not connected to the Hugging Face Space."
-            )
+        logger.error("Gradio client not available for prediction")
+        raise HTTPException(
+            status_code=503,
+            detail="Gradio client is not connected to the Hugging Face Space."
+        )
 
     # Validate file types and sizes
     valid_image_types = ['image/jpeg', 'image/png']

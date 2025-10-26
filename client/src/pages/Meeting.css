@@ -44,8 +44,7 @@
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  padding: 20px;
+  justify-content: center;
   z-index: 1000;
   animation: overlayFadeIn 0.3s ease-out;
 }
@@ -64,7 +63,8 @@
   background: #0f1115;
   border-radius: 12px;
   border: 1px solid #2a2f3a;
-  width: 400px;
+  max-width: 500px;
+  width: 95%;
   max-height: 90vh;
   overflow: hidden;
   animation: popupSlideIn 0.3s ease-out;

@@ -80,6 +80,128 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+// @route   POST /api/meetings/schedule
+// @desc    Schedule a meeting for future
+// @access  Private
+router.post('/schedule', auth, async (req, res) => {
+  try {
+    const { title, scheduledStart, duration } = req.body;
+    info(`Scheduling meeting for userId: ${req.user.userId}, IP: ${req.ip}`);
+
+    if (!scheduledStart) {
+      return res.status(400).json({ error: 'Scheduled start time is required' });
+    }
+
+    const startTime = new Date(scheduledStart);
+    const now = new Date();
+
+    if (startTime <= now) {
+      return res.status(400).json({ error: 'Scheduled time must be in the future' });
+    }
+
+    // Generate unique room ID and host ID
+    const roomId = uuidv4();
+    const hostId = uuidv4();
+   
+    // Sanitize title
+    const sanitizedTitle = title ? sanitizeInput(title) : 'Scheduled Meeting';
+
+    // Create scheduled meeting
+    const meeting = new Meeting({
+      roomId,
+      title: sanitizedTitle,
+      createdBy: req.user.userId,
+      hostId,
+      isScheduled: true,
+      scheduledStart: startTime,
+      duration: parseInt(duration) || 60
+    });
+
+    await meeting.save();
+    info(`Meeting scheduled: roomId: ${roomId}, title: ${sanitizedTitle}, createdBy: ${req.user.email}, hostId: ${hostId}, IP: ${req.ip}`);
+
+    const user = await User.findById(req.user.userId).select('username');
+
+    res.status(201).json({
+      success: true,
+      message: 'Meeting scheduled successfully',
+      meeting: {
+        roomId: meeting.roomId,
+        title: meeting.title,
+        createdBy: {
+          id: user._id,
+          username: user.username
+        },
+        scheduledStart: meeting.scheduledStart,
+        duration: meeting.duration,
+        createdAt: meeting.createdAt
+      }
+    });
+
+  } catch (error) {
+    logError(`Schedule meeting failed for userId: ${req.user?.userId || 'unknown'}, IP: ${req.ip}`, error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   GET /api/meetings/scheduled
+// @desc    Get user's scheduled meetings
+// @access  Private
+router.get('/scheduled', auth, async (req, res) => {
+  try {
+    info(`Fetching scheduled meetings for userId: ${req.user.userId}, IP: ${req.ip}`);
+
+    const scheduledMeetings = await Meeting.find({
+      createdBy: req.user.userId,
+      isScheduled: true,
+      isActive: true
+    })
+    .sort({ scheduledStart: 1 })
+    .select('roomId title scheduledStart duration createdAt');
+
+    res.json({
+      success: true,
+      meetings: scheduledMeetings
+    });
+
+  } catch (error) {
+    logError(`Get scheduled meetings failed for userId: ${req.user?.userId || 'unknown'}, IP: ${req.ip}`, error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   DELETE /api/meetings/scheduled/:roomId
+// @desc    Cancel a scheduled meeting
+// @access  Private
+router.delete('/scheduled/:roomId', auth, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    info(`Canceling scheduled meeting for userId: ${req.user.userId}, roomId: ${roomId}, IP: ${req.ip}`);
+
+    const meeting = await Meeting.findOne({
+      roomId,
+      createdBy: req.user.userId,
+      isScheduled: true
+    });
+
+    if (!meeting) {
+      return res.status(404).json({ error: 'Scheduled meeting not found' });
+    }
+
+    await Meeting.findByIdAndDelete(meeting._id);
+    info(`Scheduled meeting canceled: roomId: ${roomId}, IP: ${req.ip}`);
+
+    res.json({
+      success: true,
+      message: 'Meeting canceled successfully'
+    });
+
+  } catch (error) {
+    logError(`Cancel scheduled meeting failed for userId: ${req.user?.userId || 'unknown'}, roomId: ${req.params.roomId}, IP: ${req.ip}`, error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // @route   GET /api/meetings/:roomId
 // @desc    Get meeting room details and verify access
 // @access  Public (for joining meetings)
@@ -315,128 +437,6 @@ router.get('/user/history', auth, async (req, res) => {
 
   } catch (error) {
     logError(`Get meeting history failed for userId: ${req.user?.userId || 'unknown'}, IP: ${req.ip}`, error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// @route   POST /api/meetings/schedule
-// @desc    Schedule a meeting for future
-// @access  Private
-router.post('/schedule', auth, async (req, res) => {
-  try {
-    const { title, scheduledStart, duration } = req.body;
-    info(`Scheduling meeting for userId: ${req.user.userId}, IP: ${req.ip}`);
-
-    if (!scheduledStart) {
-      return res.status(400).json({ error: 'Scheduled start time is required' });
-    }
-
-    const startTime = new Date(scheduledStart);
-    const now = new Date();
-
-    if (startTime <= now) {
-      return res.status(400).json({ error: 'Scheduled time must be in the future' });
-    }
-
-    // Generate unique room ID and host ID
-    const roomId = uuidv4();
-    const hostId = uuidv4();
-   
-    // Sanitize title
-    const sanitizedTitle = title ? sanitizeInput(title) : 'Scheduled Meeting';
-
-    // Create scheduled meeting
-    const meeting = new Meeting({
-      roomId,
-      title: sanitizedTitle,
-      createdBy: req.user.userId,
-      hostId,
-      isScheduled: true,
-      scheduledStart: startTime,
-      duration: parseInt(duration) || 60
-    });
-
-    await meeting.save();
-    info(`Meeting scheduled: roomId: ${roomId}, title: ${sanitizedTitle}, createdBy: ${req.user.email}, hostId: ${hostId}, IP: ${req.ip}`);
-
-    const user = await User.findById(req.user.userId).select('username');
-
-    res.status(201).json({
-      success: true,
-      message: 'Meeting scheduled successfully',
-      meeting: {
-        roomId: meeting.roomId,
-        title: meeting.title,
-        createdBy: {
-          id: user._id,
-          username: user.username
-        },
-        scheduledStart: meeting.scheduledStart,
-        duration: meeting.duration,
-        createdAt: meeting.createdAt
-      }
-    });
-
-  } catch (error) {
-    logError(`Schedule meeting failed for userId: ${req.user?.userId || 'unknown'}, IP: ${req.ip}`, error);
-    res.status(500).json({ error: 'Server error during meeting scheduling' });
-  }
-});
-
-// @route   GET /api/meetings/scheduled
-// @desc    Get user's scheduled meetings
-// @access  Private
-router.get('/scheduled', auth, async (req, res) => {
-  try {
-    info(`Fetching scheduled meetings for userId: ${req.user.userId}, IP: ${req.ip}`);
-
-    const scheduledMeetings = await Meeting.find({
-      createdBy: req.user.userId,
-      isScheduled: true,
-      isActive: true
-    })
-    .sort({ scheduledStart: 1 })
-    .select('roomId title scheduledStart duration createdAt');
-
-    res.json({
-      success: true,
-      meetings: scheduledMeetings
-    });
-
-  } catch (error) {
-    logError(`Get scheduled meetings failed for userId: ${req.user?.userId || 'unknown'}, IP: ${req.ip}`, error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// @route   DELETE /api/meetings/scheduled/:roomId
-// @desc    Cancel a scheduled meeting
-// @access  Private
-router.delete('/scheduled/:roomId', auth, async (req, res) => {
-  try {
-    const { roomId } = req.params;
-    info(`Canceling scheduled meeting for userId: ${req.user.userId}, roomId: ${roomId}, IP: ${req.ip}`);
-
-    const meeting = await Meeting.findOne({
-      roomId,
-      createdBy: req.user.userId,
-      isScheduled: true
-    });
-
-    if (!meeting) {
-      return res.status(404).json({ error: 'Scheduled meeting not found' });
-    }
-
-    await Meeting.findByIdAndDelete(meeting._id);
-    info(`Scheduled meeting canceled: roomId: ${roomId}, IP: ${req.ip}`);
-
-    res.json({
-      success: true,
-      message: 'Meeting canceled successfully'
-    });
-
-  } catch (error) {
-    logError(`Cancel scheduled meeting failed for userId: ${req.user?.userId || 'unknown'}, roomId: ${req.params.roomId}, IP: ${req.ip}`, error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -55,9 +55,19 @@ const MeetingMainArea = ({
 
   // Get participants for current grid page
   const getCurrentPageParticipants = () => {
+    // Calculate start and end indices for current page
     const startIndex = gridPage * 3;
     const endIndex = startIndex + 3;
-    return participants.slice(startIndex, endIndex);
+    
+    // Get the participants for the current page
+    const pageParticipants = participants.slice(startIndex, endIndex);
+    
+    // Ensure we don't exceed 3 participants per page
+    if (pageParticipants.length > 3) {
+      return pageParticipants.slice(0, 3);
+    }
+    
+    return pageParticipants;
   };
 
   // Handle video element reference
@@ -316,6 +326,35 @@ const MeetingMainArea = ({
       >
         {isSomeoneScreenSharing ? renderScreenShareView() : renderGridView()}
       </motion.div>
+      
+      {/* Pagination Controls */}
+      {!isSomeoneScreenSharing && totalGridPages > 1 && participants.length > 3 && (
+        <div className="pro-grid-pagination">
+          <button
+            className="pro-pagination-btn"
+            onClick={() => setGridPage((prev) => Math.max(0, prev - 1))}
+            disabled={gridPage === 0}
+          >
+            ← Previous
+          </button>
+          <div className="pro-grid-dots">
+            {Array.from({ length: totalGridPages }).map((_, index) => (
+              <button
+                key={index}
+                className={`pro-grid-dot ${gridPage === index ? 'pro-grid-dot--active' : ''}`}
+                onClick={() => setGridPage(index)}
+              />
+            ))}
+          </div>
+          <button
+            className="pro-pagination-btn"
+            onClick={() => setGridPage((prev) => Math.min(totalGridPages - 1, prev + 1))}
+            disabled={gridPage === totalGridPages - 1}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 };

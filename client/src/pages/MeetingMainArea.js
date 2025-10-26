@@ -97,11 +97,17 @@ const MeetingMainArea = ({
     const hasVideo = participant.videoEnabled && participant.stream;
     const isScreenSharing = participant.isScreenSharing;
 
-    // Fixed mirroring logic: Always mirror local (unless iOS Safari already does), never mirror remote
+    // Mirroring logic: 
+    // - Mirror ONLY local user's video (for intuitive self-view)
+    // - NEVER mirror remote users (they should appear naturally to others)
     let videoClass = 'pro-video-element';
-    if (participant.isLocal && !isMirroringBrowser) {
-      videoClass += ' pro-video-element--mirrored';
+    if (participant.isLocal) {
+      // Mirror local user's view (unless it's iOS Safari which already does it)
+      if (!isMirroringBrowser) {
+        videoClass += ' pro-video-element--mirrored';
+      }
     }
+    // Remote users should NEVER be mirrored
 
     return (
       <motion.div
@@ -167,21 +173,36 @@ const MeetingMainArea = ({
             </div>
           ) : (
             <div className="pro-video-placeholder">
-              {participant.profilePicture && typeof participant.profilePicture === 'string' ? (
-                <img 
-                  src={participant.profilePicture} 
-                  alt={participant.username}
-                  style={{
-                    width: '120px',
-                    height: '120px',
-                    borderRadius: '50%',
-                    objectFit: 'cover',
-                    border: '3px solid rgba(59, 130, 246, 0.5)',
-                  }}
-                />
-              ) : (
-                getUserAvatar(participant, 80)
-              )}
+              {(() => {
+                // Debug: Log participant data
+                console.log('Participant data:', {
+                  userId: participant.userId,
+                  username: participant.username,
+                  isLocal: participant.isLocal,
+                  profilePicture: participant.profilePicture,
+                  hasVideo: hasVideo,
+                  videoEnabled: participant.videoEnabled
+                });
+                
+                // Check if participant has a profilePicture URL string
+                if (participant.profilePicture && typeof participant.profilePicture === 'string') {
+                  return (
+                    <img 
+                      src={participant.profilePicture} 
+                      alt={participant.username}
+                      style={{
+                        width: '120px',
+                        height: '120px',
+                        borderRadius: '50%',
+                        objectFit: 'cover',
+                        border: '3px solid rgba(59, 130, 246, 0.5)',
+                      }}
+                    />
+                  );
+                }
+                // Otherwise use the avatar generation function
+                return getUserAvatar(participant, 80);
+              })()}
             </div>
           )}
         </div>
@@ -299,12 +320,13 @@ const MeetingMainArea = ({
   // Render responsive grid view
   const renderGridView = () => {
     const currentPageParticipants = getCurrentPageParticipants();
-    const participantCount = currentPageParticipants.length;
-    const gridLayout = getGridLayout(participantCount);
+    // Count only REAL participants (exclude AI from layout count)
+    const realParticipantCount = currentPageParticipants.filter(p => p.userId !== 'ai-assistant').length;
+    const gridLayout = getGridLayout(realParticipantCount);
 
     return (
       <motion.div 
-        className={`pro-video-grid-responsive pro-video-grid--${participantCount}`}
+        className={`pro-video-grid-responsive pro-video-grid--${realParticipantCount}`}
         style={gridLayout}
         layout
         initial={{ opacity: 0 }}

@@ -88,7 +88,31 @@ const Navbar = () => {
           <div className="flex items-center space-x-4">
             {isAuthenticated ? (
               <div className="flex items-center space-x-3">
-                {/* Dark Mode Toggle */}
+                {/* User Info - Desktop */}
+                <div className="hidden md:flex flex-col items-end">
+                  <span className="text-sm font-medium text-gray-900">
+                    {user?.username}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {user?.email}
+                  </span>
+                </div>
+
+                {/* User Avatar */}
+                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                  {user?.username?.charAt(0).toUpperCase()}
+                </div>
+
+                {/* Logout Button - Desktop */}
+                <button
+                  onClick={handleLogout}
+                  className="hidden md:flex items-center space-x-1 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors duration-200"
+                >
+                  <span>Logout</span>
+                  <span className="text-lg">🚪</span>
+                </button>
+
+                {/* Dark Mode Toggle - Last Element */}
                 <button
                   onClick={toggleDarkMode}
                   className={`p-2 rounded-full transition-all duration-300 ${
@@ -101,30 +125,6 @@ const Navbar = () => {
                   <span className={`text-lg ${isDarkMode ? '' : 'text-gray-700'}`}>
                     {isDarkMode ? '☀️' : '🌙'}
                   </span>
-                </button>
-
-                {/* User Info - Desktop */}
-                <div className="hidden md:flex flex-col items-end">
-                  <span className="text-sm font-medium text-gray-900">
-                    {user?.username}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {user?.email}
-                  </span>
-                </div>
-
-                {/* User Avatar */}
-                <div className="w-8 h-8 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                  {user?.username?.charAt(0).toUpperCase()}
-                </div>
-
-                {/* Logout Button - Desktop */}
-                <button
-                  onClick={handleLogout}
-                  className="hidden md:flex items-center space-x-1 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors duration-200"
-                >
-                  <span>Logout</span>
-                  <span className="text-lg">🚪</span>
                 </button>
 
                 {/* Mobile Menu Button */}
@@ -168,7 +168,7 @@ const Navbar = () => {
               <div className="px-4 py-3 border-b border-gray-100">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold">
                       {user?.username?.charAt(0).toUpperCase()}
                     </div>
                     <div>

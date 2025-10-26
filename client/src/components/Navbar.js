@@ -6,7 +6,7 @@ import './Navbar.css'
  * Navigation bar component with responsive design and authentication handling
  */
 const Navbar = () => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, isDarkMode, toggleDarkMode } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -88,6 +88,21 @@ const Navbar = () => {
           <div className="flex items-center space-x-4">
             {isAuthenticated ? (
               <div className="flex items-center space-x-3">
+                {/* Dark Mode Toggle */}
+                <button
+                  onClick={toggleDarkMode}
+                  className={`p-2 rounded-full transition-all duration-300 ${
+                    isDarkMode 
+                      ? 'bg-yellow-500 hover:bg-yellow-600' 
+                      : 'bg-gray-200 hover:bg-gray-300'
+                  }`}
+                  title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                >
+                  <span className={`text-lg ${isDarkMode ? '' : 'text-gray-700'}`}>
+                    {isDarkMode ? '☀️' : '🌙'}
+                  </span>
+                </button>
+
                 {/* User Info - Desktop */}
                 <div className="hidden md:flex flex-col items-end">
                   <span className="text-sm font-medium text-gray-900">
@@ -151,18 +166,34 @@ const Navbar = () => {
             <div className="py-2 space-y-1">
               {/* User Info */}
               <div className="px-4 py-3 border-b border-gray-100">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
-                    {user?.username?.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {user?.username}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-white font-semibold">
+                      {user?.username?.charAt(0).toUpperCase()}
                     </div>
-                    <div className="text-xs text-gray-500">
-                      {user?.email}
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {user?.username}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {user?.email}
+                      </div>
                     </div>
                   </div>
+                  {/* Dark Mode Toggle in Mobile Menu */}
+                  <button
+                    onClick={toggleDarkMode}
+                    className={`p-2 rounded-full transition-all duration-300 ${
+                      isDarkMode 
+                        ? 'bg-yellow-500 hover:bg-yellow-600' 
+                        : 'bg-gray-200 hover:bg-gray-300'
+                    }`}
+                    title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                  >
+                    <span className={`text-lg ${isDarkMode ? '' : 'text-gray-700'}`}>
+                      {isDarkMode ? '☀️' : '🌙'}
+                    </span>
+                  </button>
                 </div>
               </div>
 

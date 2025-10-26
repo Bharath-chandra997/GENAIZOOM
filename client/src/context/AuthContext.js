@@ -12,7 +12,16 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
-  const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
+  // Dark mode state management
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('darkMode');
+    if (saved !== null) {
+      return JSON.parse(saved);
+    }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
   // This function now uses axios for consistency and better error handling
   const fetchUser = async (token, caller = 'unknown') => {
@@ -89,6 +98,10 @@ export const AuthProvider = ({ children }) => {
     navigate('/login');
   };
 
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+  };
+
   const updateProfile = async ({ username }) => {
     try {
       const token = localStorage.getItem('authToken');
@@ -110,6 +123,16 @@ export const AuthProvider = ({ children }) => {
       throw error;
     }
   };
+
+  // Dark mode effect
+  useEffect(() => {
+    localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
 
   // This useEffect hook runs only once on app startup
   useEffect(() => {
@@ -133,7 +156,7 @@ export const AuthProvider = ({ children }) => {
   }, []); // Empty dependency array ensures it runs only once
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, loginWithGoogle, handleGoogleCallback, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, loginWithGoogle, handleGoogleCallback, logout, updateProfile, isDarkMode, toggleDarkMode }}>
       {!isLoading && children}
     </AuthContext.Provider>
   );

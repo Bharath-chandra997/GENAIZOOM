@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
 const Home = () => {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading, isDarkMode } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [joinRoomId, setJoinRoomId] = useState('');
@@ -19,14 +19,6 @@ const Home = () => {
   const [scheduledMeetings, setScheduledMeetings] = useState([]);
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Check localStorage for saved preference or default to system preference
-    const saved = localStorage.getItem('darkMode');
-    if (saved !== null) {
-      return JSON.parse(saved);
-    }
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
 
   useEffect(() => {
     if (isLoading) return; // Wait for auth to initialize
@@ -38,20 +30,6 @@ const Home = () => {
       fetchScheduledMeetings();
     }
   }, [isLoading, isAuthenticated, user, navigate]);
-
-  // Dark mode effect
-  useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode]);
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-  };
 
   const fetchScheduledMeetings = async () => {
     if (!user?.token) return;
@@ -195,21 +173,6 @@ const Home = () => {
       <Navbar />
       <div className="py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
-          {/* Dark Mode Toggle */}
-          <div className="flex justify-end mb-6">
-            <button
-              onClick={toggleDarkMode}
-              className={`p-3 rounded-full transition-all duration-300 ${
-                isDarkMode 
-                  ? 'bg-yellow-500 hover:bg-yellow-600 text-white' 
-                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-              }`}
-              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {isDarkMode ? '☀️' : '🌙'}
-            </button>
-          </div>
-
           <div className="text-center mb-12 animate-fade-in">
             <h1 className={`text-4xl sm:text-5xl font-bold mb-4 transition-colors duration-300 ${
               isDarkMode ? 'text-white' : 'text-gray-900'

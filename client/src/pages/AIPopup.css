@@ -37,7 +37,7 @@
   justify-content: space-between;
   padding: 20px;
   background: linear-gradient(135deg, #1e293b, #0f172a);
-  border-bottom: 1px solid #334155;
+  border-bottom: none;
   flex-shrink: 0;
 }
 

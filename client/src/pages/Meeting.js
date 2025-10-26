@@ -16,10 +16,8 @@ import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import AIPopup from './AIPopup';
 import Chat from '../components/Chat';
-import LoadingSpinner from '../components/LoadingSpinner';
 import ScreenShareToolbar from '../components/ScreenShareToolbar';
 import CollaborativeCanvas from '../components/CollaborativeCanvas';
-import './Meeting.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 const VQA_API_URL = 'https://genaizoom-1.onrender.com/predict';
@@ -511,11 +509,6 @@ const Meeting = () => {
     if (audioUrl) setAiUploadedAudio(audioUrl);
   }, []);
 
-  const handleSharedMediaRemoval = useCallback(() => {
-    setAiUploadedImage(null);
-    setAiUploadedAudio(null);
-  }, []);
-
   // Drawing handler functions
   const handleDrawingData = useCallback((drawingData) => {
     socketRef.current?.emit('drawing-data', { drawingData, userId: socketRef.current.id });
@@ -540,6 +533,7 @@ const Meeting = () => {
   const handleRedo = useCallback(() => {
     // Redo functionality will be handled by the canvas component
   }, []);
+
 
   const getIceServers = useCallback(async () => {
     const now = Date.now();
@@ -1271,13 +1265,6 @@ const Meeting = () => {
       />
 
       {/* Screen Share Toolbar */}
-      {console.log('Rendering ScreenShareToolbar with:', { 
-        isScreenSharing: isSharingScreen, 
-        currentTool, 
-        currentColor, 
-        userColor: userColors[socketRef.current?.id] || '#3b82f6',
-        isActiveUser: screenShareUserId === socketRef.current?.id 
-      })}
       <ScreenShareToolbar
         isScreenSharing={isSharingScreen}
         onToolSelect={handleToolSelect}
@@ -1301,6 +1288,7 @@ const Meeting = () => {
         onDrawingData={handleDrawingData}
         drawingData={drawingData}
       />
+
     </div>
   );
 };

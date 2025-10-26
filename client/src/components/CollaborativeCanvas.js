@@ -48,17 +48,17 @@ const CollaborativeCanvas = ({
       if (drawing.type === 'path') {
         drawPath(ctx, drawing.points, drawing.color, drawing.tool, drawing.userId);
       } else if (drawing.type === 'shape') {
-        drawShape(ctx, drawing, drawing.userId);
+        drawShape(ctx, drawing.shape, drawing.color, drawing.tool, drawing.userId);
       }
     });
   }, [drawingData]);
 
-  const drawPath = (ctx, points, color, tool, userId) => {
+  const drawPath = (ctx, points, color, tool, drawingUserId) => {
     if (points.length < 2) return;
 
     ctx.strokeStyle = color;
-    ctx.lineWidth = tool === 'highlighter' ? 20 : tool === 'eraser' ? 30 : 5;
-    ctx.globalAlpha = tool === 'highlighter' ? 0.3 : tool === 'eraser' ? 0 : 1;
+    ctx.lineWidth = tool === 'highlighter' ? 20 : tool === 'eraser' ? 30 : 3;
+    ctx.globalAlpha = tool === 'highlighter' ? 0.3 : tool === 'eraser' ? 0.1 : 1;
     ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
 
     ctx.beginPath();
@@ -73,19 +73,18 @@ const CollaborativeCanvas = ({
     ctx.globalCompositeOperation = 'source-over';
   };
 
-  const drawShape = (ctx, shape, userId) => {
-    ctx.strokeStyle = shape.color;
+  const drawShape = (ctx, shape, color, tool, drawingUserId) => {
+    ctx.strokeStyle = color;
     ctx.lineWidth = 3;
     ctx.globalCompositeOperation = 'source-over';
 
-    if (shape.tool === 'rectangle') {
-      ctx.strokeRect(shape.startX, shape.startY, shape.width, shape.height);
-    } else if (shape.tool === 'circle') {
-      const radius = Math.sqrt(Math.pow(shape.width, 2) + Math.pow(shape.height, 2));
+    if (shape.type === 'rectangle') {
+      ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
+    } else if (shape.type === 'circle') {
       ctx.beginPath();
-      ctx.arc(shape.startX, shape.startY, radius, 0, 2 * Math.PI);
+      ctx.arc(shape.x, shape.y, shape.radius, 0, 2 * Math.PI);
       ctx.stroke();
-    } else if (shape.tool === 'arrow') {
+    } else if (shape.type === 'arrow') {
       drawArrow(ctx, shape.startX, shape.startY, shape.endX, shape.endY);
     }
   };
@@ -94,16 +93,22 @@ const CollaborativeCanvas = ({
     const headLength = 20;
     const angle = Math.atan2(endY - startY, endX - startX);
 
+    // Draw line
     ctx.beginPath();
     ctx.moveTo(startX, startY);
     ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    // Draw arrowhead
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
     ctx.lineTo(endX - headLength * Math.cos(angle - Math.PI / 6), endY - headLength * Math.sin(angle - Math.PI / 6));
     ctx.moveTo(endX, endY);
     ctx.lineTo(endX - headLength * Math.cos(angle + Math.PI / 6), endY - headLength * Math.sin(angle + Math.PI / 6));
     ctx.stroke();
   };
 
-  const getMousePos = (e) => {
+  const getPointFromEvent = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     return {
@@ -116,7 +121,7 @@ const CollaborativeCanvas = ({
     if (!isScreenSharing) return;
     
     setIsDrawing(true);
-    const point = getMousePos(e);
+    const point = getPointFromEvent(e);
     setLastPoint(point);
     
     if (currentTool === 'pen' || currentTool === 'highlighter' || currentTool === 'eraser') {
@@ -128,7 +133,6 @@ const CollaborativeCanvas = ({
         userId: userId,
         timestamp: Date.now()
       };
-      
       onDrawingData(drawingData);
     }
   };
@@ -136,7 +140,7 @@ const CollaborativeCanvas = ({
   const draw = (e) => {
     if (!isDrawing || !isScreenSharing) return;
     
-    const point = getMousePos(e);
+    const point = getPointFromEvent(e);
     
     if (currentTool === 'pen' || currentTool === 'highlighter' || currentTool === 'eraser') {
       const drawingData = {
@@ -147,46 +151,37 @@ const CollaborativeCanvas = ({
         userId: userId,
         timestamp: Date.now()
       };
-      
       onDrawingData(drawingData);
     }
     
     setLastPoint(point);
   };
 
-  const stopDrawing = (e) => {
-    if (!isDrawing) return;
-    
+  const stopDrawing = () => {
     setIsDrawing(false);
     setLastPoint(null);
-    
-    // Save to history
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-      const newHistory = history.slice(0, historyIndex + 1);
-      newHistory.push(imageData);
-      setHistory(newHistory);
-      setHistoryIndex(newHistory.length - 1);
-    }
   };
 
-  const clearCanvas = () => {
+  const saveToHistory = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Clear all drawings
-    onDrawingData({ type: 'clear', userId: userId, timestamp: Date.now() });
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    
+    // Remove future history if we're not at the end
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(imageData);
+    
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
   };
 
   const undo = () => {
     if (historyIndex > 0) {
       const canvas = canvasRef.current;
       if (!canvas) return;
-
+      
       const ctx = canvas.getContext('2d');
       ctx.putImageData(history[historyIndex - 1], 0, 0);
       setHistoryIndex(historyIndex - 1);
@@ -197,17 +192,15 @@ const CollaborativeCanvas = ({
     if (historyIndex < history.length - 1) {
       const canvas = canvasRef.current;
       if (!canvas) return;
-
+      
       const ctx = canvas.getContext('2d');
       ctx.putImageData(history[historyIndex + 1], 0, 0);
       setHistoryIndex(historyIndex + 1);
     }
   };
 
-  // Temporarily show canvas for debugging
-  // if (!isScreenSharing) return null;
-
-  console.log('CollaborativeCanvas rendering:', { isScreenSharing, currentTool, currentColor, userColor, userId });
+  // Only show canvas when screen sharing is active
+  if (!isScreenSharing) return null;
 
   return (
     <canvas
@@ -221,7 +214,7 @@ const CollaborativeCanvas = ({
         zIndex: 999,
         pointerEvents: 'auto',
         cursor: currentTool === 'eraser' ? 'crosshair' : 'crosshair',
-        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+        backgroundColor: 'transparent',
       }}
       onMouseDown={startDrawing}
       onMouseMove={draw}
@@ -229,25 +222,15 @@ const CollaborativeCanvas = ({
       onMouseLeave={stopDrawing}
       onTouchStart={(e) => {
         e.preventDefault();
-        const touch = e.touches[0];
-        const mouseEvent = new MouseEvent('mousedown', {
-          clientX: touch.clientX,
-          clientY: touch.clientY
-        });
-        startDrawing(mouseEvent);
+        startDrawing(e.touches[0]);
       }}
       onTouchMove={(e) => {
         e.preventDefault();
-        const touch = e.touches[0];
-        const mouseEvent = new MouseEvent('mousemove', {
-          clientX: touch.clientX,
-          clientY: touch.clientY
-        });
-        draw(mouseEvent);
+        draw(e.touches[0]);
       }}
       onTouchEnd={(e) => {
         e.preventDefault();
-        stopDrawing(e);
+        stopDrawing();
       }}
     />
   );

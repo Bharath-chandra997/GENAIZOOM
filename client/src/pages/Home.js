@@ -294,22 +294,42 @@ const Home = () => {
             </div>
           </div>
 
-          {/* Scheduled Meetings */}
-          <AnimatePresence>
-            {scheduledMeetings.length > 0 && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.5 }}
-                className="mb-12"
-              >
-                <h3 className={`text-2xl font-bold text-center mb-8 transition-colors duration-300 ${
+          {/* Scheduled Meetings Container */}
+          <div className="mb-12">
+            <h3 className={`text-2xl font-bold text-center mb-8 transition-colors duration-300 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
+              📅 Scheduled Meetings
+            </h3>
+            
+            {scheduledMeetings.length === 0 ? (
+              <div className={`rounded-2xl shadow-lg border p-12 text-center transition-colors duration-300 ${
+                isDarkMode 
+                  ? 'bg-gray-800 border-gray-700' 
+                  : 'bg-white border-gray-200'
+              }`}>
+                <div className="text-6xl mb-4">📅</div>
+                <h4 className={`text-xl font-semibold mb-2 transition-colors duration-300 ${
                   isDarkMode ? 'text-white' : 'text-gray-900'
                 }`}>
-                  Scheduled Meetings
-                </h3>
-                <div className="grid gap-4">
+                  No Scheduled Meetings
+                </h4>
+                <p className={`text-sm transition-colors duration-300 ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}>
+                  You haven't scheduled any meetings yet. Click below to schedule one!
+                </p>
+              </div>
+            ) : (
+              <AnimatePresence>
+                {scheduledMeetings.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <div className="grid gap-4">
                   {scheduledMeetings.map((meeting, index) => {
                     const timeRemaining = formatTimeRemaining(meeting.scheduledStart);
                     const isReady = timeRemaining === 'Ready to start';
@@ -357,16 +377,18 @@ const Home = () => {
                             </div>
                           </div>
                           <div className="flex items-center space-x-3 ml-4">
-                            {isReady && (
-                              <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => handleStartMeeting(meeting)}
-                                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-200 transition-all duration-200 btn-hover"
-                              >
-                                Start Meeting
-                              </motion.button>
-                            )}
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => handleStartMeeting(meeting)}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium focus:outline-none focus:ring-4 transition-all duration-200 btn-hover ${
+                                isReady 
+                                  ? 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-200' 
+                                  : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-200'
+                              }`}
+                            >
+                              {isReady ? 'Start Meeting' : 'Start Now'}
+                            </motion.button>
                             <motion.button
                               whileHover={{ scale: 1.05 }}
                               whileTap={{ scale: 0.95 }}
@@ -379,11 +401,13 @@ const Home = () => {
                         </div>
                       </motion.div>
                     );
-                  })}
-                </div>
-              </motion.div>
+                    })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             )}
-          </AnimatePresence>
+          </div>
 
           <div className="mb-12">
             <h3 className={`text-2xl font-bold text-center mb-8 transition-colors duration-300 ${

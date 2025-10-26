@@ -90,15 +90,15 @@ const Register = () => {
           </p>
           <div className="flex justify-center space-x-6 text-sm text-gray-600">
             <div className="flex items-center space-x-1">
-              <span>🔒</span>
+              <span className="text-blue-600">🔒</span>
               <span>Secure</span>
             </div>
             <div className="flex items-center space-x-1">
-              <span>🚀</span>
+              <span className="text-purple-600">🚀</span>
               <span>Fast Setup</span>
             </div>
             <div className="flex items-center space-x-1">
-              <span>🆓</span>
+              <span className="text-green-600">🆓</span>
               <span>Free Forever</span>
             </div>
           </div>

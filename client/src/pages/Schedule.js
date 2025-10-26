@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 const SERVER_URL = "https://genaizoomserver-0yn4.onrender.com";
 
 const Schedule = () => {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isDarkMode } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     title: '',
@@ -84,7 +84,11 @@ const Schedule = () => {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className={`min-h-screen py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-300 ${
+        isDarkMode 
+          ? 'bg-gradient-to-br from-gray-900 to-gray-800' 
+          : 'bg-gradient-to-br from-gray-50 to-blue-50'
+      }`}>
         <div className="max-w-md mx-auto">
           <motion.div 
             initial={{ opacity: 0, y: -20 }}
@@ -92,8 +96,14 @@ const Schedule = () => {
             transition={{ duration: 0.6 }}
             className="text-center mb-8"
           >
-            <h1 className="text-3xl font-bold text-gray-900">Schedule a Meeting</h1>
-            <p className="text-gray-600 mt-2">
+            <h1 className={`text-3xl font-bold transition-colors duration-300 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
+              Schedule a Meeting
+            </h1>
+            <p className={`mt-2 transition-colors duration-300 ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+            }`}>
               Plan your meeting with up to 15 participants
             </p>
           </motion.div>
@@ -101,7 +111,11 @@ const Schedule = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8"
+            className={`rounded-2xl shadow-lg border p-8 transition-colors duration-300 ${
+              isDarkMode
+                ? 'bg-gray-800 border-gray-700'
+                : 'bg-white border-gray-200'
+            }`}
           >
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>

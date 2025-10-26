@@ -6,7 +6,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import Navbar from '../components/Navbar'; // Adjust path if necessary
 
 const Profile = () => {
-  const { user, updateProfile, isLoading } = useAuth();
+  const { user, updateProfile, isLoading, isDarkMode } = useAuth();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -107,7 +107,11 @@ const Profile = () => {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className={`min-h-screen py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-300 ${
+        isDarkMode 
+          ? 'bg-gradient-to-br from-gray-900 to-gray-800' 
+          : 'bg-gray-50'
+      }`}>
         <div className="max-w-2xl mx-auto">
           
           <div className="text-center mb-8 animate-fade-in">
@@ -116,13 +120,25 @@ const Profile = () => {
                 {user.username?.charAt(0)?.toUpperCase()}
               </span>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
-            <p className="text-gray-600 mt-2">Manage your account information</p>
+            <h1 className={`text-3xl font-bold transition-colors duration-300 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
+              Profile Settings
+            </h1>
+            <p className={`mt-2 transition-colors duration-300 ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+            }`}>
+              Manage your account information
+            </p>
           </div>
 
           <div className="space-y-6">
             
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 animate-slide-up">
+            <div className={`rounded-2xl shadow-lg border p-8 animate-slide-up transition-colors duration-300 ${
+              isDarkMode
+                ? 'bg-gray-800 border-gray-700'
+                : 'bg-white border-gray-200'
+            }`}>
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">
                   Account Information

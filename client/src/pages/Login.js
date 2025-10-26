@@ -85,17 +85,17 @@ const Login = () => {
           </div>
         </div>
         <div className="text-center space-y-4">
-          <div className="flex justify-center space-x-6 text-sm text-gray-600">
+            <div className="flex justify-center space-x-6 text-sm text-gray-600">
             <div className="flex items-center space-x-1">
-              <span>🔒</span>
+              <span className="text-blue-600">🔒</span>
               <span>Secure</span>
             </div>
             <div className="flex items-center space-x-1">
-              <span>🎥</span>
+              <span className="text-green-600">🎥</span>
               <span>HD Quality</span>
             </div>
             <div className="flex items-center space-x-1">
-              <span>⚡</span>
+              <span className="text-yellow-600">⚡</span>
               <span>Fast Connect</span>
             </div>
           </div>

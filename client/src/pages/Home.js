@@ -167,6 +167,13 @@ const Home = () => {
       action: () => navigate('/profile'),
       color: 'bg-purple-500 hover:bg-purple-600 border-purple-500 text-white hover:text-white',
     },
+    {
+      title: 'Feedback',
+      description: 'Share your thoughts',
+      icon: '💬',
+      action: () => navigate('/feedback'),
+      color: 'bg-green-500 hover:bg-green-600 border-green-500 text-white hover:text-white',
+    },
   ];
 
   return (

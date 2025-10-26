@@ -97,29 +97,8 @@ const MeetingMainArea = ({
     const hasVideo = participant.videoEnabled && participant.stream;
     const isScreenSharing = participant.isScreenSharing;
 
-    // Mirroring logic: 
-    // - Mirror ONLY local user's video (for intuitive self-view)
-    // - NEVER mirror remote users (they should appear naturally to others)
+    // No mirroring - all videos appear in natural orientation
     let videoClass = 'pro-video-element';
-    
-    // Debug logging
-    console.log('Participant:', participant.username, 'isLocal:', participant.isLocal, 'userId:', participant.userId, 'isMirroringBrowser:', isMirroringBrowser);
-    
-    if (participant.isLocal) {
-      // Mirror local user's view (unless it's iOS Safari which already does it)
-      if (!isMirroringBrowser) {
-        videoClass += ' pro-video-element--mirrored';
-        console.log('Applied mirroring to local user:', participant.username);
-      } else {
-        console.log('iOS Safari detected, not mirroring local user:', participant.username);
-      }
-    } else {
-      // Explicitly ensure remote users are NOT mirrored
-      videoClass = 'pro-video-element';
-      console.log('No mirroring for remote user:', participant.username);
-    }
-    
-    console.log('Final videoClass for', participant.username, ':', videoClass);
 
     return (
       <motion.div
@@ -153,9 +132,7 @@ const MeetingMainArea = ({
                 borderRadius: '8px',
                 display: 'block',
                 margin: '0',
-                padding: '0',
-                // Mirroring logic: only local user gets mirrored
-                transform: participant.isLocal && !isMirroringBrowser ? 'scaleX(-1)' : 'none'
+                padding: '0'
               }}
             />
           ) : isAI ? (

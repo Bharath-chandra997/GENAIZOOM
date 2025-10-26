@@ -19,6 +19,14 @@ const Home = () => {
   const [scheduledMeetings, setScheduledMeetings] = useState([]);
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Check localStorage for saved preference or default to system preference
+    const saved = localStorage.getItem('darkMode');
+    if (saved !== null) {
+      return JSON.parse(saved);
+    }
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
 
   useEffect(() => {
     if (isLoading) return; // Wait for auth to initialize
@@ -30,6 +38,20 @@ const Home = () => {
       fetchScheduledMeetings();
     }
   }, [isLoading, isAuthenticated, user, navigate]);
+
+  // Dark mode effect
+  useEffect(() => {
+    localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+  };
 
   const fetchScheduledMeetings = async () => {
     if (!user?.token) return;
@@ -165,34 +187,81 @@ const Home = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+    <div className={`min-h-screen transition-colors duration-300 ${
+      isDarkMode 
+        ? 'bg-gradient-to-br from-gray-900 to-gray-800' 
+        : 'bg-gradient-to-br from-gray-50 to-blue-50'
+    }`}>
       <Navbar />
       <div className="py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
+          {/* Dark Mode Toggle */}
+          <div className="flex justify-end mb-6">
+            <button
+              onClick={toggleDarkMode}
+              className={`p-3 rounded-full transition-all duration-300 ${
+                isDarkMode 
+                  ? 'bg-yellow-500 hover:bg-yellow-600 text-white' 
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }`}
+              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDarkMode ? '☀️' : '🌙'}
+            </button>
+          </div>
+
           <div className="text-center mb-12 animate-fade-in">
-            <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">
+            <h1 className={`text-4xl sm:text-5xl font-bold mb-4 transition-colors duration-300 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
               Welcome back, {user?.username || 'User'}! 👋
             </h1>
-            <p className="text-xl text-gray-600 mb-4">Email: {user?.email || 'Not available'}</p>
-            <p className="text-xl text-gray-600 mb-8">Start a meeting or join one to connect with your team</p>
-            <div className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+            <p className={`text-xl mb-4 transition-colors duration-300 ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+            }`}>
+              Email: {user?.email || 'Not available'}
+            </p>
+            <p className={`text-xl mb-8 transition-colors duration-300 ${
+              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+            }`}>
+              Start a meeting or join one to connect with your team
+            </p>
+            <div className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 ${
+              isDarkMode 
+                ? 'bg-green-900 text-green-200' 
+                : 'bg-green-100 text-green-800'
+            }`}>
               <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
               Online and ready to connect
             </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 mb-12">
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 hover:shadow-xl transition-all duration-300 animate-slide-up">
+            <div className={`rounded-2xl shadow-lg border p-8 hover:shadow-xl transition-all duration-300 animate-slide-up ${
+              isDarkMode 
+                ? 'bg-gray-800 border-gray-700' 
+                : 'bg-white border-gray-200'
+            }`}>
               <div className="text-center">
-                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 ${
+                  isDarkMode ? 'bg-blue-900' : 'bg-blue-100'
+                }`}>
                   <span className="text-3xl">🎥</span>
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Start New Meeting</h2>
-                <p className="text-gray-600 mb-8">Create a new meeting room and invite up to 15 participants</p>
+                <h2 className={`text-2xl font-bold mb-4 transition-colors duration-300 ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>
+                  Start New Meeting
+                </h2>
+                <p className={`mb-8 transition-colors duration-300 ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}>
+                  Create a new meeting room and invite up to 15 participants
+                </p>
                 <button
                   onClick={() => setIsModalOpen(true)}
                   disabled={loading}
-                  className="w-full bg-primary-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 btn-hover"
+                  className="w-full bg-blue-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                 >
                   {loading ? (
                     <div className="flex items-center justify-center space-x-2">
@@ -206,24 +275,42 @@ const Home = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 hover:shadow-xl transition-all duration-300 animate-slide-up">
+            <div className={`rounded-2xl shadow-lg border p-8 hover:shadow-xl transition-all duration-300 animate-slide-up ${
+              isDarkMode 
+                ? 'bg-gray-800 border-gray-700' 
+                : 'bg-white border-gray-200'
+            }`}>
               <div className="text-center">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 ${
+                  isDarkMode ? 'bg-green-900' : 'bg-green-100'
+                }`}>
                   <span className="text-3xl">🚪</span>
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Join Meeting</h2>
-                <p className="text-gray-600 mb-8">Enter a meeting ID to join an existing room</p>
+                <h2 className={`text-2xl font-bold mb-4 transition-colors duration-300 ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>
+                  Join Meeting
+                </h2>
+                <p className={`mb-8 transition-colors duration-300 ${
+                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}>
+                  Enter a meeting ID to join an existing room
+                </p>
                 <form onSubmit={handleJoinMeeting} className="space-y-4">
                   <input
                     type="text"
                     value={joinRoomId}
                     onChange={(e) => setJoinRoomId(e.target.value)}
                     placeholder="Enter Meeting ID"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200 text-gray-900 placeholder-gray-500"
+                    className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 ${
+                      isDarkMode 
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                    }`}
                   />
                   <button
                     type="submit"
-                    className="w-full bg-green-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-200 transition-all duration-200 btn-hover"
+                    className="w-full bg-green-600 text-white py-4 px-6 rounded-xl font-semibold text-lg hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-200 transition-all duration-200"
                   >
                     Join Meeting
                   </button>
@@ -242,7 +329,11 @@ const Home = () => {
                 transition={{ duration: 0.5 }}
                 className="mb-12"
               >
-                <h3 className="text-2xl font-bold text-gray-900 text-center mb-8">Scheduled Meetings</h3>
+                <h3 className={`text-2xl font-bold text-center mb-8 transition-colors duration-300 ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>
+                  Scheduled Meetings
+                </h3>
                 <div className="grid gap-4">
                   {scheduledMeetings.map((meeting, index) => {
                     const timeRemaining = formatTimeRemaining(meeting.scheduledStart);
@@ -256,12 +347,22 @@ const Home = () => {
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.3, delay: index * 0.1 }}
                         whileHover={{ scale: 1.02 }}
-                        className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-200"
+                        className={`rounded-xl shadow-lg border p-6 hover:shadow-xl transition-all duration-200 ${
+                          isDarkMode 
+                            ? 'bg-gray-800 border-gray-700' 
+                            : 'bg-white border-gray-200'
+                        }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <h4 className="text-lg font-semibold text-gray-900 mb-2">{meeting.title}</h4>
-                            <div className="flex items-center space-x-4 text-sm text-gray-600">
+                            <h4 className={`text-lg font-semibold mb-2 transition-colors duration-300 ${
+                              isDarkMode ? 'text-white' : 'text-gray-900'
+                            }`}>
+                              {meeting.title}
+                            </h4>
+                            <div className={`flex items-center space-x-4 text-sm transition-colors duration-300 ${
+                              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+                            }`}>
                               <span>📅 {new Date(meeting.scheduledStart).toLocaleDateString()}</span>
                               <span>🕒 {new Date(meeting.scheduledStart).toLocaleTimeString()}</span>
                               <span>⏱️ {meeting.duration} minutes</span>
@@ -349,7 +450,11 @@ const Home = () => {
           </div>
 
           <div className="mt-8 text-center">
-            <div className="inline-flex items-center px-6 py-3 bg-blue-50 text-blue-800 rounded-full text-sm">
+            <div className={`inline-flex items-center px-6 py-3 rounded-full text-sm transition-colors duration-300 ${
+              isDarkMode 
+                ? 'bg-blue-900 text-blue-200' 
+                : 'bg-blue-50 text-blue-800'
+            }`}>
               <span className="mr-2">ℹ️</span>
               Maximum 15 participants per meeting for optimal performance
             </div>
@@ -358,10 +463,18 @@ const Home = () => {
           {/* Meeting Title Modal */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Create New Meeting</h2>
+              <div className={`rounded-2xl p-6 w-full max-w-md transition-colors duration-300 ${
+                isDarkMode ? 'bg-gray-800' : 'bg-white'
+              }`}>
+                <h2 className={`text-2xl font-bold mb-4 transition-colors duration-300 ${
+                  isDarkMode ? 'text-white' : 'text-gray-900'
+                }`}>
+                  Create New Meeting
+                </h2>
                 <div className="mb-4">
-                  <label htmlFor="meetingTitle" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="meetingTitle" className={`block text-sm font-medium mb-2 transition-colors duration-300 ${
+                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                  }`}>
                     Meeting Title
                   </label>
                   <input
@@ -370,14 +483,18 @@ const Home = () => {
                     value={meetingTitle}
                     onChange={(e) => setMeetingTitle(e.target.value)}
                     placeholder="Enter meeting title"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-4 focus:ring-primary-200 focus:border-primary-500 transition-all duration-200 text-gray-900 placeholder-gray-500"
+                    className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 ${
+                      isDarkMode 
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                    }`}
                   />
                 </div>
                 <div className="flex space-x-3">
                   <button
                     onClick={handleCreateMeeting}
                     disabled={loading}
-                    className="flex-1 bg-primary-600 text-white py-3 px-4 rounded-xl font-semibold hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 btn-hover"
+                    className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                   >
                     {loading ? (
                       <div className="flex items-center justify-center space-x-2">

@@ -16,6 +16,7 @@ import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import AIPopup from './AIPopup';
 import Chat from '../components/Chat';
+import LoadingSpinner from '../components/LoadingSpinner';
 import ScreenShareToolbar from '../components/ScreenShareToolbar';
 import CollaborativeCanvas from '../components/CollaborativeCanvas';
 
@@ -504,9 +505,9 @@ const Meeting = () => {
     toast.info(`${username} shared an AI result`, { position: 'bottom-center' });
   }, []);
 
-  const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username }) => {
-    if (imageUrl) setAiUploadedImage(imageUrl);
-    if (audioUrl) setAiUploadedAudio(audioUrl);
+  const handleSharedMediaRemoval = useCallback(() => {
+    setAiUploadedImage(null);
+    setAiUploadedAudio(null);
   }, []);
 
   // Drawing handler functions

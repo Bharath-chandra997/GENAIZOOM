@@ -234,11 +234,7 @@ const MeetingMainArea = ({
                 🚫
               </div>
             )}
-            {isAI && (
-              <div className="pro-ai-status">
-                <div className={`pro-ai-pulse ${aiBotInUse ? 'pro-ai-pulse--busy' : ''}`} />
-              </div>
-            )}
+            
             {isPinned && !isAI && (
               <div className="pro-status-icon pro-status-icon--pinned" title="Pinned">
                 📌

@@ -298,14 +298,14 @@ const MeetingMainArea = ({
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
         width: '100vw',
-        gap: '0px',
+        gap: '4px',
       };
     } else if (participantCount === 3) {
       return {
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
         width: '100vw',
-        gap: '0px',
+        gap: '4px',
       };
     } else {
       // For 4+ participants, use 3 columns with pagination
@@ -313,7 +313,7 @@ const MeetingMainArea = ({
         gridTemplateColumns: '1fr 1fr 1fr',
         gridTemplateRows: '1fr',
         width: '100vw',
-        gap: '0px',
+        gap: '4px',
       };
     }
   };

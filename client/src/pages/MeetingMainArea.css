@@ -29,7 +29,7 @@
 /* Responsive Video Grid Styles */
 .pro-video-grid-responsive {
   display: grid !important;
-  gap: 0px;
+  gap: 4px;
   width: 100vw;
   height: 100%;
   place-items: stretch;
@@ -53,7 +53,7 @@
   width: 100vw !important;
   height: 100%;
   grid-auto-flow: row;
-  gap: 0px;
+  gap: 4px;
 }
 
 .pro-video-grid--3 {
@@ -62,7 +62,7 @@
   width: 100vw !important;
   height: 100%;
   grid-auto-flow: row;
-  gap: 0px;
+  gap: 4px;
 }
 
 .pro-video-grid--4 {
@@ -71,7 +71,7 @@
   width: 100vw !important;
   height: 100%;
   grid-auto-flow: row;
-  gap: 0px;
+  gap: 4px;
 }
 
 .pro-video-grid-item-responsive {
@@ -79,7 +79,7 @@
   height: 100%;
   min-height: 300px;
   max-height: 100%;
-  border-radius: 0px;
+  border-radius: 8px;
   overflow: hidden;
   transition: all 0.3s ease;
   display: flex;
@@ -98,7 +98,7 @@
 .pro-video-frame {
   position: relative;
   background: #1a1d24;
-  border-radius: 0px;
+  border-radius: 8px;
   overflow: hidden;
   width: 100%;
   height: 100%;

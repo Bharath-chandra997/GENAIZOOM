@@ -230,16 +230,19 @@ const MeetingMainArea = ({
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
+        maxWidth: '800px',
       };
     } else if (participantCount === 1) {
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
+        maxWidth: '800px',
       };
     } else if (participantCount === 2) {
       return {
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
+        maxWidth: '1200px',
       };
     } else {
       // For 3 or more, use 3 columns with 2 rows
@@ -247,6 +250,7 @@ const MeetingMainArea = ({
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr 1fr',
         gridTemplateAreas: '"video1 video2" "video3 video3"',
+        maxWidth: '1400px',
       };
     }
   };
@@ -259,7 +263,7 @@ const MeetingMainArea = ({
 
     return (
       <motion.div 
-        className="pro-video-grid-responsive"
+        className={`pro-video-grid-responsive pro-video-grid--${participantCount}`}
         style={gridLayout}
         layout
         initial={{ opacity: 0 }}

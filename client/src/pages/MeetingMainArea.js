@@ -132,8 +132,7 @@ const MeetingMainArea = ({
                 borderRadius: '8px',
                 display: 'block',
                 margin: '0',
-                padding: '0',
-                transform: 'scaleX(-1)'
+                padding: '0'
               }}
             />
           ) : isAI ? (
@@ -198,8 +197,7 @@ const MeetingMainArea = ({
                         border: '3px solid rgba(59, 130, 246, 0.5)',
                         display: 'block',
                         margin: '0 auto',
-                        padding: '0',
-                        transform: 'scaleX(-1)'
+                        padding: '0'
                       }}
                     />
                   );

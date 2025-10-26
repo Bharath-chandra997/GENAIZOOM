@@ -187,7 +187,7 @@
   align-items: center;
 }
 
-/* Video Element - Consistent styling for all users (no rotation) */
+/* Video Element - Consistent styling for all users (reversed for natural orientation) */
 .pro-video-element {
   width: 100%;
   height: 100%;
@@ -196,6 +196,7 @@
   display: block;
   margin: 0;
   padding: 0;
+  transform: scaleX(-1);
 }
 
 /* Removed video rotation/mirroring CSS */
@@ -267,6 +268,7 @@
   padding: 0;
   display: block;
   object-fit: cover;
+  transform: scaleX(-1);
 }
 
 .pro-ai-uploaded-audio {
@@ -275,6 +277,7 @@
   padding: 0;
   display: block;
   border-radius: 8px;
+  transform: scaleX(-1);
 }
 
 .pro-ai-response-display {

@@ -55,9 +55,19 @@ const MeetingMainArea = ({
 
   // Get participants for current grid page
   const getCurrentPageParticipants = () => {
-    const startIndex = gridPage * 3; // Changed from 4 to 3
-    const endIndex = startIndex + 3; // Changed from 4 to 3
-    return participants.slice(startIndex, endIndex);
+    // Calculate start and end indices for current page
+    const startIndex = gridPage * 3;
+    const endIndex = startIndex + 3;
+    
+    // Get the participants for the current page
+    const pageParticipants = participants.slice(startIndex, endIndex);
+    
+    // Ensure we don't exceed 3 participants per page
+    if (pageParticipants.length > 3) {
+      return pageParticipants.slice(0, 3);
+    }
+    
+    return pageParticipants;
   };
 
   // Handle video element reference
@@ -247,58 +257,54 @@ const MeetingMainArea = ({
     );
   };
 
-  // Get responsive grid layout based on participant count
+  // Get responsive grid layout based on participant count - exactly 3 frames per screen
   const getGridLayout = (participantCount) => {
-    if (participantCount === 1) {
+    // Always show maximum 3 participants per grid
+    if (participantCount <= 0) {
       return {
         gridTemplateColumns: '1fr',
         gridTemplateRows: '1fr',
         maxWidth: '600px',
-        maxHeight: '400px'
+        width: '100%',
+      };
+    } else if (participantCount === 1) {
+      return {
+        gridTemplateColumns: '1fr',
+        gridTemplateRows: '1fr',
+        maxWidth: '600px',
+        width: '100%',
       };
     } else if (participantCount === 2) {
       return {
         gridTemplateColumns: '1fr 1fr',
         gridTemplateRows: '1fr',
-        maxWidth: '800px',
-        maxHeight: '400px'
-      };
-    } else if (participantCount === 3) {
-      return {
-        gridTemplateColumns: '1fr 1fr',
-        gridTemplateRows: '1fr 1fr',
-        gridTemplateAreas: '"video1 video2" "video3 video3"',
-        maxWidth: '800px',
-        maxHeight: '600px'
-      };
-    } else if (participantCount === 4) {
-      return {
-        gridTemplateColumns: '1fr 1fr',
-        gridTemplateRows: '1fr 1fr',
-        maxWidth: '800px',
-        maxHeight: '600px'
+        maxWidth: '100%',
+        width: '100%',
+        gap: '16px',
+        padding: '0 16px',
       };
     } else {
-      // 5+ participants - use a responsive grid
-      const cols = Math.ceil(Math.sqrt(participantCount));
-      const rows = Math.ceil(participantCount / cols);
+      // For 3 participants, use 3 columns
       return {
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gridTemplateRows: `repeat(${rows}, 1fr)`,
+        gridTemplateColumns: '1fr 1fr 1fr',
+        gridTemplateRows: '1fr',
         maxWidth: '100%',
-        maxHeight: '100%'
+        width: '100%',
+        gap: '16px',
+        padding: '0 16px',
       };
     }
   };
 
   // Render responsive grid view
   const renderGridView = () => {
-    const participantCount = participants.length;
+    const currentPageParticipants = getCurrentPageParticipants();
+    const participantCount = currentPageParticipants.length;
     const gridLayout = getGridLayout(participantCount);
 
     return (
       <motion.div 
-        className="pro-video-grid-responsive"
+        className={`pro-video-grid-responsive pro-video-grid--${participantCount}`}
         style={gridLayout}
         layout
         initial={{ opacity: 0 }}
@@ -306,7 +312,7 @@ const MeetingMainArea = ({
         transition={{ duration: 0.5, ease: "easeOut" }}
       >
         <AnimatePresence mode="popLayout">
-          {participants.map((participant, index) => (
+          {currentPageParticipants.map((participant, index) => (
             <motion.div
               key={participant.userId}
               layout
@@ -321,7 +327,6 @@ const MeetingMainArea = ({
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
               className="pro-video-grid-item-responsive"
-              style={participantCount === 3 && index === 2 ? { gridArea: 'video3' } : {}}
             >
               {renderParticipantVideo(participant, index)}
             </motion.div>
@@ -345,6 +350,35 @@ const MeetingMainArea = ({
       >
         {isSomeoneScreenSharing ? renderScreenShareView() : renderGridView()}
       </motion.div>
+      
+      {/* Pagination Controls */}
+      {!isSomeoneScreenSharing && totalGridPages > 1 && participants.length > 3 && (
+        <div className="pro-grid-pagination">
+          <button
+            className="pro-pagination-btn"
+            onClick={() => setGridPage((prev) => Math.max(0, prev - 1))}
+            disabled={gridPage === 0}
+          >
+            ← Previous
+          </button>
+          <div className="pro-grid-dots">
+            {Array.from({ length: totalGridPages }).map((_, index) => (
+              <button
+                key={index}
+                className={`pro-grid-dot ${gridPage === index ? 'pro-grid-dot--active' : ''}`}
+                onClick={() => setGridPage(index)}
+              />
+            ))}
+          </div>
+          <button
+            className="pro-pagination-btn"
+            onClick={() => setGridPage((prev) => Math.min(totalGridPages - 1, prev + 1))}
+            disabled={gridPage === totalGridPages - 1}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 };

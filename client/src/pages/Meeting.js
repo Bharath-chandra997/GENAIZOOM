@@ -505,6 +505,11 @@ const Meeting = () => {
     toast.info(`${username} shared an AI result`, { position: 'bottom-center' });
   }, []);
 
+  const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username }) => {
+    if (imageUrl) setAiUploadedImage(imageUrl);
+    if (audioUrl) setAiUploadedAudio(audioUrl);
+  }, []);
+
   const handleSharedMediaRemoval = useCallback(() => {
     setAiUploadedImage(null);
     setAiUploadedAudio(null);

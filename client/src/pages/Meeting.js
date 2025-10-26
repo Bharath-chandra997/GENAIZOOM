@@ -677,7 +677,19 @@ const Meeting = () => {
     }
   }, []);
 
-  const handleUserLeft = useCallback(({ userId }) => {
+  const handleUserLeft = useCallback(({ userId, username }) => {
+    // Show leave notification
+    if (username) {
+      toast.info(`${username} left the meeting`, { 
+        position: 'top-center',
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    }
+    
     const pc = peerConnections.current.get(userId);
     if (pc) pc.close();
     peerConnections.current.delete(userId);
@@ -696,6 +708,17 @@ const Meeting = () => {
           { roomId, username: user.username, isReconnect: false },
           (otherUsers, sessionData) => {
             const isHost = otherUsers.length === 0;
+            
+            // Show join notification for current user
+            toast.success(`Welcome to the meeting, ${user.username}!`, { 
+              position: 'top-center',
+              autoClose: 3000,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+            });
+            
             const remoteParticipants = otherUsers.map((u) => ({
               userId: u.userId,
               username: u.username,
@@ -740,6 +763,17 @@ const Meeting = () => {
       socket.on('connect', onConnect);
       socket.on('user-joined', async ({ userId, username, isHost, profilePicture }) => {
         if (userId === socket.id) return;
+        
+        // Show join notification
+        toast.success(`${username} joined the meeting`, { 
+          position: 'top-center',
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        
         setParticipants((prev) => {
           if (prev.some((p) => p.userId === userId)) return prev;
           return [

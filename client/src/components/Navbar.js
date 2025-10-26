@@ -35,7 +35,6 @@ const Navbar = () => {
 
   const navLinks = [
     { path: '/home', label: 'Home', icon: '🏠' },
-    { path: '/history', label: 'History', icon: '📋' },
     { path: '/schedule', label: 'Schedule', icon: '📅' },
     { path: '/profile', label: 'Profile', icon: '👤' },
     { path: '/feedback', label: 'Feedback', icon: '💬' },

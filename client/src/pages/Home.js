@@ -161,13 +161,6 @@ const Home = () => {
       color: 'bg-blue-500 hover:bg-blue-600 border-blue-500 text-white hover:text-white',
     },
     {
-      title: 'Meeting History',
-      description: 'View past meetings',
-      icon: '📋',
-      action: () => navigate('/history'),
-      color: 'bg-green-500 hover:bg-green-600 border-green-500 text-white hover:text-white',
-    },
-    {
       title: 'Profile Settings',
       description: 'Update your profile',
       icon: '⚙️',

@@ -4,7 +4,6 @@ import { AuthProvider } from './context/AuthContext';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import History from './pages/History';
 import JoinMeeting from './pages/JoinMeeting';
 import Schedule from './pages/Schedule';
 import Profile from './pages/Profile';
@@ -26,14 +25,6 @@ const App = () => {
           element={
             <ProtectedRoute>
               <Home />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/history"
-          element={
-            <ProtectedRoute>
-              <History />
             </ProtectedRoute>
           }
         />

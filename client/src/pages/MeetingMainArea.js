@@ -150,7 +150,11 @@ const MeetingMainArea = ({
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                // Explicitly ensure no mirroring for remote users
+                borderRadius: '8px',
+                display: 'block',
+                margin: '0',
+                padding: '0',
+                // Mirroring logic: only local user gets mirrored
                 transform: participant.isLocal && !isMirroringBrowser ? 'scaleX(-1)' : 'none'
               }}
             />
@@ -214,6 +218,9 @@ const MeetingMainArea = ({
                         borderRadius: '50%',
                         objectFit: 'cover',
                         border: '3px solid rgba(59, 130, 246, 0.5)',
+                        display: 'block',
+                        margin: '0 auto',
+                        padding: '0'
                       }}
                     />
                   );

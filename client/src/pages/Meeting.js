@@ -518,12 +518,12 @@ const Meeting = () => {
 
   // Drawing handler functions
   const handleDrawingData = useCallback((drawingData) => {
-    socket.emit('drawing-data', { drawingData, userId: socket.id });
-  }, [socket]);
+    socketRef.current?.emit('drawing-data', { drawingData, userId: socketRef.current.id });
+  }, []);
 
   const handleClearCanvas = useCallback(() => {
-    socket.emit('clear-canvas', { userId: socket.id });
-  }, [socket]);
+    socketRef.current?.emit('clear-canvas', { userId: socketRef.current.id });
+  }, []);
 
   const handleToolSelect = useCallback((tool) => {
     setCurrentTool(tool);
@@ -1046,11 +1046,11 @@ const Meeting = () => {
       setIsSharingScreen(false);
       setScreenShareUserId(null);
       setDrawingData([]); // Clear drawing data when stopping screen share
-      socket.emit('screen-share-stop', { userId: socket.id });
+      socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
       screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     } else {
       // Check if someone else is already screen sharing
-      if (screenShareUserId && screenShareUserId !== socket.id) {
+      if (screenShareUserId && screenShareUserId !== socketRef.current?.id) {
         toast.error('Someone else is already screen sharing. Please wait for them to stop.');
         return;
       }
@@ -1061,16 +1061,16 @@ const Meeting = () => {
         const screenTrack = screen.getVideoTracks()[0];
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
-        setScreenShareUserId(socket.id);
-        socket.emit('screen-share-start', { userId: socket.id });
-        socket.emit('screen-share-user', { userId: socket.id });
+        setScreenShareUserId(socketRef.current?.id);
+        socketRef.current?.emit('screen-share-start', { userId: socketRef.current.id });
+        socketRef.current?.emit('screen-share-user', { userId: socketRef.current.id });
         
         screenTrack.onended = async () => {
           await replaceTrack(localCameraTrackRef.current, false);
           setIsSharingScreen(false);
           setScreenShareUserId(null);
           setDrawingData([]);
-          socket.emit('screen-share-stop', { userId: socket.id });
+          socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
         };
       } catch (e) {
         console.error('Screen share error:', e);
@@ -1280,8 +1280,8 @@ const Meeting = () => {
         currentTool={currentTool}
         currentColor={currentColor}
         onColorChange={handleColorChange}
-        userColor={userColors[socket.id] || '#3b82f6'}
-        isActiveUser={screenShareUserId === socket.id}
+        userColor={userColors[socketRef.current?.id] || '#3b82f6'}
+        isActiveUser={screenShareUserId === socketRef.current?.id}
       />
 
       {/* Collaborative Drawing Canvas */}
@@ -1289,8 +1289,8 @@ const Meeting = () => {
         isScreenSharing={isSharingScreen}
         currentTool={currentTool}
         currentColor={currentColor}
-        userColor={userColors[socket.id] || '#3b82f6'}
-        userId={socket.id}
+        userColor={userColors[socketRef.current?.id] || '#3b82f6'}
+        userId={socketRef.current?.id}
         onDrawingData={handleDrawingData}
         drawingData={drawingData}
       />

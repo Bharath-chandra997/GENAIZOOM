@@ -20,7 +20,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import './Meeting.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
-const VQA_API_URL = 'https://unesteemed-trochaically-wilhelmina.ngrok-free.dev/predict';
+const VQA_API_URL = 'https://genaizoomserver-0yn4.onrender.com/predict'; // Updated to Node.js /predict endpoint for Google Gemini API
 
 const getColorForId = (id) => {
   if (!id) return '#FFFFFF';
@@ -126,7 +126,6 @@ const Meeting = () => {
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
-
 
   const [aiParticipant] = useState({
     userId: 'ai-assistant',
@@ -287,6 +286,192 @@ const Meeting = () => {
     return cleanup;
   }, [initializeAiAnimation]);
 
+  // // Original handleAIRequest (commented out for team leader to revert if needed)
+  // const handleAIRequest = useCallback(
+  //   async (imageFile, audioFile) => {
+  //     let isLocked = false;
+  //     setIsAIProcessing(true);
+  //     try {
+  //       console.log('Starting AI request for user:', user.username, {
+  //         image: imageFile?.name,
+  //         audio: audioFile?.name,
+  //         endpoint: VQA_API_URL,
+  //         token: user.token.substring(0, 20) + '...',
+  //       });
+  //
+  //       const lockResponse = await axios.post(
+  //         `${SERVER_URL}/api/ai/lock/${roomId}`,
+  //         { userId: user.userId, username: user.username },
+  //         {
+  //           headers: {
+  //             Authorization: `Bearer ${user.token}`,
+  //             'Content-Type': 'application/json',
+  //           },
+  //           timeout: 5000,
+  //         }
+  //       );
+  //       if (lockResponse.data.success) {
+  //         isLocked = true;
+  //         console.log('AI locked successfully');
+  //       } else {
+  //         throw new Error(lockResponse.data.error || 'Lock failed');
+  //       }
+  //
+  //       const validImageTypes = ['image/jpeg', 'image/png'];
+  //       const validAudioTypes = ['audio/mpeg', 'audio/wav'];
+  //       const maxFileSize = 100 * 1024 * 1024;
+  //       if (
+  //         !imageFile ||
+  //         !validImageTypes.includes(imageFile.type) ||
+  //         imageFile.size > maxFileSize
+  //       ) {
+  //         throw new Error('Invalid image file. Must be JPEG/PNG and less than 100 MB.');
+  //       }
+  //       if (
+  //         !audioFile ||
+  //         !validAudioTypes.includes(audioFile.type) ||
+  //         audioFile.size > maxFileSize
+  //       ) {
+  //         throw new Error('Invalid audio file. Must be MP3/WAV and less than 100 MB.');
+  //       }
+  //
+  //       console.log('Uploading files:', {
+  //         image: { name: imageFile.name, type: imageFile.type, size: imageFile.size },
+  //         audio: { name: audioFile.name, type: audioFile.type, size: audioFile.size },
+  //       });
+  //
+  //       const upload = async (formData, type) => {
+  //         console.log(`Uploading ${type}:`, {
+  //           filename: formData.get('file').name,
+  //           size: formData.get('file').size,
+  //         });
+  //         const res = await axios.post(
+  //           `${SERVER_URL}/upload/${type}`,
+  //           formData,
+  //           {
+  //             headers: {
+  //               Authorization: `Bearer ${user.token}`,
+  //               'Content-Type': 'multipart/form-data',
+  //             },
+  //             timeout: 30000,
+  //           }
+  //         );
+  //         console.log(`${type} uploaded:`, res.data.url);
+  //         return res.data.url;
+  //       };
+  //
+  //       const imageForm = new FormData();
+  //       imageForm.append('file', imageFile);
+  //       const imageUrl = await upload(imageForm, 'image');
+  //
+  //       const audioForm = new FormData();
+  //       audioForm.append('file', audioFile);
+  //       const audioUrl = await upload(audioForm, 'audio');
+  //
+  //       socketRef.current?.emit('shared-media-display', {
+  //         imageUrl,
+  //         audioUrl,
+  //         username: user.username,
+  //       });
+  //       setAiUploadedImage(imageUrl);
+  //       setAiUploadedAudio(audioUrl);
+  //
+  //       const formData = new FormData();
+  //       formData.append('image', imageFile);
+  //       formData.append('audio', audioFile);
+  //       console.log('Sending to FastAPI:', VQA_API_URL);
+  //       const response = await axios.post(VQA_API_URL, formData, {
+  //         headers: {
+  //           Authorization: `Bearer ${user.token}`,
+  //           'Content-Type': 'multipart/form-data',
+  //         },
+  //       });
+  //       console.log('FastAPI response:', response.data);
+  //
+  //       const prediction = response.data.prediction;
+  //       if (!prediction || prediction.trim() === '') {
+  //         throw new Error('No prediction received from AI model');
+  //       }
+  //
+  //       setAiResponse(prediction);
+  //       socketRef.current?.emit('shared-ai-result', {
+  //         response: prediction,
+  //         username: user.username,
+  //       });
+  //
+  //       await axios.post(
+  //         `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
+  //         {
+  //           isProcessing: false,
+  //           output: prediction,
+  //           completedAt: new Date().toISOString(),
+  //           currentUploader: null,
+  //           uploaderUsername: null,
+  //         },
+  //         {
+  //           headers: { Authorization: `Bearer ${user.token}` },
+  //           timeout: 5000,
+  //         }
+  //       );
+  //
+  //       toast.success('AI processing completed!', { position: 'bottom-center' });
+  //
+  //       await axios.post(
+  //         `${SERVER_URL}/api/ai/unlock/${roomId}`,
+  //         { userId: user.userId },
+  //         {
+  //           headers: { Authorization: `Bearer ${user.token}` },
+  //           timeout: 5000,
+  //         }
+  //       );
+  //       console.log('AI unlocked on success');
+  //     } catch (error) {
+  //       console.error('AI request error:', {
+  //         message: error.message,
+  //         status: error.response?.status,
+  //         data: error.response?.data,
+  //         code: error.code,
+  //         stack: error.stack,
+  //         url: VQA_API_URL,
+  //       });
+  //
+  //       let errorMessage = error.message;
+  //       if (error.response) {
+  //         const { status, data } = error.response;
+  //         if (status === 409) errorMessage = 'AI Bot is already in use by another participant.';
+  //         else if (status === 503) errorMessage = 'AI service unavailable. Try again later.';
+  //         else if (status === 401) errorMessage = 'Authentication failed. Please log in again.';
+  //         else if (status === 400) errorMessage = 'Invalid file format or missing files.';
+  //         else if (status === 403) errorMessage = 'Not authorized to access AI.';
+  //         else errorMessage = data?.error || data?.detail || error.message;
+  //       } else if (error.code === 'ERR_NETWORK') {
+  //         errorMessage = 'Network error: Unable to reach AI server. Please try again.';
+  //       }
+  //       toast.error(errorMessage, { position: 'bottom-center' });
+  //
+  //       if (isLocked) {
+  //         try {
+  //           await axios.post(
+  //             `${SERVER_URL}/api/ai/unlock/${roomId}`,
+  //             { userId: user.userId },
+  //             {
+  //               headers: { Authorization: `Bearer ${user.token}` },
+  //               timeout: 5000,
+  //             }
+  //           );
+  //           console.log('AI unlocked on error');
+  //         } catch (unlockError) {
+  //           console.warn('Failed to unlock AI:', unlockError.message);
+  //         }
+  //       }
+  //     } finally {
+  //       setIsAIProcessing(false);
+  //     }
+  //   },
+  //   [user, roomId]
+  // );
+
+  // New handleAIRequest for Google Gemini API integration
   const handleAIRequest = useCallback(
     async (imageFile, audioFile) => {
       let isLocked = false;
@@ -379,18 +564,19 @@ const Meeting = () => {
         const formData = new FormData();
         formData.append('image', imageFile);
         formData.append('audio', audioFile);
-        console.log('Sending to FastAPI:', VQA_API_URL);
+        console.log('Sending to Google Gemini API via Node.js:', VQA_API_URL);
         const response = await axios.post(VQA_API_URL, formData, {
           headers: {
             Authorization: `Bearer ${user.token}`,
             'Content-Type': 'multipart/form-data',
           },
+          timeout: 30000,
         });
-        console.log('FastAPI response:', response.data);
+        console.log('Google Gemini API response via Node.js:', response.data);
 
         const prediction = response.data.prediction;
         if (!prediction || prediction.trim() === '') {
-          throw new Error('No prediction received from AI model');
+          throw new Error('No prediction received from Google Gemini API');
         }
 
         setAiResponse(prediction);
@@ -507,8 +693,6 @@ const Meeting = () => {
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
   }, []);
-
-
 
   const getIceServers = useCallback(async () => {
     const now = Date.now();
@@ -844,7 +1028,6 @@ const Meeting = () => {
       socket.on('shared-media-display', handleSharedMediaDisplay);
       socket.on('shared-media-removal', handleSharedMediaRemoval);
       
-
       return () => {
         socket.off('connect', onConnect);
         socket.off('user-joined');
@@ -882,20 +1065,20 @@ const Meeting = () => {
     let mounted = true;
     let socketCleanup = () => {};
 
-    // === WAKE UP FASTAPI ON MOUNT ===
-    const wakeFastAPI = async () => {
-      if (!user?.token) return;
-      try {
-        await fetch('https://genaizoom-1.onrender.com/ping', {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
-        console.log('FastAPI backend is awake');
-      } catch (e) {
-        console.warn('FastAPI wake-up failed (will retry on AI call):', e);
-      }
-    };
-    wakeFastAPI();
+    // // === WAKE UP FASTAPI ON MOUNT ===
+    // const wakeFastAPI = async () => {
+    //   if (!user?.token) return;
+    //   try {
+    //     await fetch('https://genaizoom-1.onrender.com/ping', {
+    //       method: 'GET',
+    //       headers: { Authorization: `Bearer ${user.token}` },
+    //     });
+    //     console.log('FastAPI backend is awake');
+    //   } catch (e) {
+    //     console.warn('FastAPI wake-up failed (will retry on AI call):', e);
+    //   }
+    // };
+    // wakeFastAPI();
 
     const init = async () => {
       if (!user) {
@@ -1240,8 +1423,6 @@ const Meeting = () => {
         ref={aiCanvasRef}
         style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }}
       />
-
-
     </div>
   );
 };

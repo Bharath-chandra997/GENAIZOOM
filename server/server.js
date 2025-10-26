@@ -11,6 +11,7 @@ const twilio = require('twilio');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const fs = require('fs');
+const axios = require('axios'); // Added for Google Gemini API calls
 require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const meetingRoutes = require('./routes/meetings');
@@ -40,6 +41,13 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
   logError('FATAL ERROR: Cloudinary credentials not defined.');
   process.exit(1);
 }
+if (!process.env.GOOGLE_API_KEY) {
+  logError('FATAL ERROR: GOOGLE_API_KEY is not defined.');
+  process.exit(1);
+}
+
+// Google Gemini API URL
+const GOOGLE_VQA_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent';
 
 // App & Server Setup
 const app = express();
@@ -215,6 +223,81 @@ app.get('/ice-servers', async (req, res) => {
   } catch (error) {
     logError('ICE servers endpoint error', error);
     res.json(fastFallbackIceServers);
+  }
+});
+
+// Google Gemini /predict Endpoint
+app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }, { name: 'audio', maxCount: 1 }]), async (req, res) => {
+  try {
+    const imageFile = req.files?.image?.[0];
+    const audioFile = req.files?.audio?.[0];
+
+    if (!imageFile || !audioFile) {
+      logError('Missing image or audio file in /predict');
+      return res.status(400).json({ error: 'Both image and audio files are required' });
+    }
+
+    // Validate file types and sizes
+    const validImageTypes = ['image/jpeg', 'image/png'];
+    const validAudioTypes = ['audio/mpeg', 'audio/wav'];
+    const maxFileSize = 100 * 1024 * 1024; // 100 MB
+    if (!validImageTypes.includes(imageFile.mimetype)) {
+      return res.status(400).json({ error: 'Invalid image format. Only JPEG/PNG allowed.' });
+    }
+    if (!validAudioTypes.includes(audioFile.mimetype)) {
+      return res.status(400).json({ error: 'Invalid audio format. Only MP3/WAV allowed.' });
+    }
+    if (imageFile.size > maxFileSize || audioFile.size > maxFileSize) {
+      return res.status(400).json({ error: 'Files must be less than 100 MB.' });
+    }
+
+    // Convert image to base64 for Google API
+    const imageBase64 = fs.readFileSync(imageFile.path, { encoding: 'base64' });
+
+    // Placeholder for audio transcription (optional)
+    const prompt = 'Provide a visual question answering response based on this image and the audio context.';
+
+    const payload = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          {
+            inline_data: {
+              mime_type: imageFile.mimetype,
+              data: imageBase64
+            }
+          }
+        ]
+      }]
+    };
+
+    info(`Calling Google Gemini API for user ${req.user.username}`);
+    const googleResponse = await axios.post(
+      `${GOOGLE_VQA_API_URL}?key=${process.env.GOOGLE_API_KEY}`,
+      payload,
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000
+      }
+    );
+
+    const prediction = googleResponse.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from Google API';
+
+    if (!prediction || prediction.trim() === '') {
+      logError('Empty prediction from Google API');
+      return res.status(500).json({ error: 'No prediction received from Google API' });
+    }
+
+    info(`Google Gemini prediction: ${prediction.substring(0, 100)}...`);
+    res.json({ prediction });
+
+  } catch (error) {
+    logError('Error in /predict:', error);
+    res.status(500).json({ error: `Failed to process AI request: ${error.message}` });
+  } finally {
+    // Clean up temporary files
+    if (req.files?.image?.[0]) fs.unlinkSync(req.files.image[0].path);
+    if (req.files?.audio?.[0]) fs.unlinkSync(req.files.audio[0].path);
   }
 });
 
@@ -885,13 +968,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('shared-media-display', ({ imageUrl, audioUrl, username }) => {
+  socket.on('shared-media-display', async ({ imageUrl, audioUrl, username }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
       info(`Broadcasting shared-media-display from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
       try {
-        MeetingSession.findOneAndUpdate(
+        await MeetingSession.findOneAndUpdate(
           { roomId },
           { 
             $set: { 
@@ -912,13 +995,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('shared-media-removal', ({ username }) => {
+  socket.on('shared-media-removal', async ({ username }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
       info(`Broadcasting shared-media-removal from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
       try {
-        MeetingSession.findOneAndUpdate(
+        await MeetingSession.findOneAndUpdate(
           { roomId },
           { 
             $set: { 
@@ -947,13 +1030,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('shared-ai-result', ({ response, username }) => {
+  socket.on('shared-ai-result', async ({ response, username }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
       info(`Broadcasting shared-ai-result from ${socketIdToUsername[socket.id]} in room ${roomId}`);
       
       try {
-        MeetingSession.findOneAndUpdate(
+        await MeetingSession.findOneAndUpdate(
           { roomId },
           { 
             $set: { 

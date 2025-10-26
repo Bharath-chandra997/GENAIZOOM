@@ -20,7 +20,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import './Meeting.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
-const VQA_API_URL = 'https://genaizoom-1.onrender.com/predict';
+const VQA_API_URL = 'https://unesteemed-trochaically-wilhelmina.ngrok-free.dev/predict';
 
 const getColorForId = (id) => {
   if (!id) return '#FFFFFF';

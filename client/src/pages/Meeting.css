@@ -1300,6 +1300,12 @@
   flex: 1;
 }
 
+.pro-meeting-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .pro-meeting-title__main {
   font-size: 20px;
   font-weight: 600;

@@ -64,7 +64,7 @@ const AIAvatar = ({ size = 40 }) => {
     <div
       className="ai-avatar"
       style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 50%, #1e40af 100%)',
         width: size,
         height: size,
         borderRadius: '50%',
@@ -73,24 +73,34 @@ const AIAvatar = ({ size = 40 }) => {
         justifyContent: 'center',
         color: 'white',
         fontWeight: 'bold',
-        fontSize: size * 0.35,
-        border: '2px solid #10b981',
+        fontSize: size * 0.25,
+        border: '3px solid #10b981',
         position: 'relative',
+        boxShadow: '0 4px 20px rgba(59, 130, 246, 0.3)',
+        textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)',
       }}
     >
-      Robot
+      🤖
       <div
         style={{
           position: 'absolute',
-          bottom: -2,
-          right: -2,
-          width: 12,
-          height: 12,
+          bottom: -3,
+          right: -3,
+          width: 16,
+          height: 16,
           backgroundColor: '#10b981',
           borderRadius: '50%',
-          border: '2px solid white',
+          border: '2px solid #0f172a',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '8px',
+          color: 'white',
+          fontWeight: 'bold',
         }}
-      />
+      >
+        ✓
+      </div>
     </div>
   );
 };

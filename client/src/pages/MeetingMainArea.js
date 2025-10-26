@@ -141,6 +141,9 @@ const MeetingMainArea = ({
               {/* AI Logo/Avatar Display */}
               <div className="pro-ai-logo-container">
                 <AIAvatar size={120} />
+                <div className="pro-ai-ready-text">
+                  Ready to help
+                </div>
               </div>
               
               {/* Canvas for animations */}

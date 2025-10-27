@@ -1,0 +1,227 @@
+.drawing-toolbar {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 280px;
+  max-width: 600px;
+  transition: all 0.3s ease;
+}
+
+.drawing-toolbar--collapsed .drawing-toolbar-content {
+  display: none;
+}
+
+.drawing-toolbar-handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  cursor: move;
+  border-radius: 16px 16px 0 0;
+  user-select: none;
+}
+
+.drawing-toolbar-handle:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+.drawing-toolbar-handle-icon {
+  font-size: 20px;
+  opacity: 0.8;
+}
+
+.drawing-toolbar-handle-text {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+  text-align: center;
+}
+
+.drawing-toolbar-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.drawing-toolbar-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.drawing-toolbar-content {
+  padding: 16px;
+}
+
+.drawing-toolbar-section {
+  margin-bottom: 16px;
+}
+
+.drawing-toolbar-section:last-child {
+  margin-bottom: 0;
+}
+
+.drawing-toolbar-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.drawing-toolbar-tools,
+.drawing-toolbar-colors {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.drawing-toolbar-btn {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  color: #475569;
+}
+
+.drawing-toolbar-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+}
+
+.drawing-toolbar-btn--active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #764ba2;
+}
+
+.drawing-toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.drawing-toolbar-color-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.drawing-toolbar-color-btn:hover {
+  transform: scale(1.1);
+  border-color: #cbd5e1;
+}
+
+.drawing-toolbar-color-btn::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-weight: bold;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.drawing-toolbar-color-btn.drawing-toolbar-color-btn--active::after {
+  opacity: 1;
+}
+
+.drawing-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.drawing-toolbar-btn--action {
+  flex: 1;
+  min-width: auto;
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+.drawing-toolbar-btn--danger {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.drawing-toolbar-btn--danger:hover:not(:disabled) {
+  background: #fecaca;
+  border-color: #fca5a5;
+}
+
+.drawing-toolbar-btn--save {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  border-color: #059669;
+}
+
+.drawing-toolbar-btn--save:hover:not(:disabled) {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: translateY(-2px);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .drawing-toolbar {
+    min-width: 240px;
+    max-width: 90vw;
+  }
+  
+  .drawing-toolbar-tools,
+  .drawing-toolbar-colors {
+    gap: 6px;
+  }
+  
+  .drawing-toolbar-btn {
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 16px;
+  }
+  
+  .drawing-toolbar-color-btn {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .drawing-toolbar-actions {
+    flex-direction: column;
+  }
+  
+  .drawing-toolbar-btn--action {
+    width: 100%;
+  }
+}
+

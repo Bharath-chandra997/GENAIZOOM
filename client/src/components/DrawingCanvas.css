@@ -1,0 +1,43 @@
+.drawing-canvas-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: all;
+  z-index: 100;
+}
+
+.drawing-canvas {
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.drawing-canvas:active {
+  cursor: crosshair;
+}
+
+/* Tool-specific cursors */
+.drawing-canvas[data-tool="pen"] {
+  cursor: crosshair;
+}
+
+.drawing-canvas[data-tool="highlighter"] {
+  cursor: grab;
+}
+
+.drawing-canvas[data-tool="rectangle"],
+.drawing-canvas[data-tool="circle"] {
+  cursor: crosshair;
+}
+
+.drawing-canvas[data-tool="line"],
+.drawing-canvas[data-tool="arrow"] {
+  cursor: crosshair;
+}
+
+.drawing-canvas[data-tool="eraser"] {
+  cursor: grab;
+}
+

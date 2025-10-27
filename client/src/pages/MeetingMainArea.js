@@ -32,6 +32,7 @@ const MeetingMainArea = ({
   onPinParticipant,
   onUnpinParticipant,
   onAIReset,
+  drawingCanvasComponent,
 }) => {
   const [localPinnedParticipant, setLocalPinnedParticipant] = useState(pinnedParticipantId);
   const annotationCanvasRef = useRef(null);
@@ -255,7 +256,10 @@ const MeetingMainArea = ({
 
     return (
       <div className="pro-screenshare-view">
-        <div className="pro-screenshare-main">{renderParticipantVideo(screenSharer, 0)}</div>
+        <div className="pro-screenshare-main">
+          {renderParticipantVideo(screenSharer, 0)}
+          {drawingCanvasComponent && <div className="drawing-canvas-wrapper">{drawingCanvasComponent}</div>}
+        </div>
         {otherParticipants.length > 0 && (
           <motion.div 
             className="pro-screenshare-participants"

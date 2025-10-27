@@ -17,6 +17,9 @@ import MeetingControls from './MeetingControls';
 import AIPopup from './AIPopup';
 import Chat from '../components/Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
+import DrawingToolbar from '../components/DrawingToolbar';
+import DrawingCanvas from '../components/DrawingCanvas';
+import ParticipantColorLegend from '../components/ParticipantColorLegend';
 import './Meeting.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
@@ -126,6 +129,14 @@ const Meeting = () => {
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
+  
+  // Drawing state
+  const [isDrawingVisible, setIsDrawingVisible] = useState(false);
+  const [currentDrawingTool, setCurrentDrawingTool] = useState('pen');
+  const [currentDrawingColor, setCurrentDrawingColor] = useState('#000000');
+  const [participantColors, setParticipantColors] = useState({});
+  const [canvasHistory, setCanvasHistory] = useState([]);
+  const canvasHistoryRef = useRef({});
 
   const [aiParticipant] = useState({
     userId: 'ai-assistant',
@@ -154,6 +165,41 @@ const Meeting = () => {
   const lastIceFetch = useRef(0);
   const signalingStates = useRef(new Map());
   const pendingIceCandidates = useRef(new Map());
+  
+  // Generate colors for participants
+  const assignedColors = useMemo(() => {
+    const colors = [
+      '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', 
+      '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'
+    ];
+    const usedColors = new Set();
+    const colorMap = {};
+    
+    [...participants, aiParticipant].forEach((participant, index) => {
+      if (usedColors.size >= colors.length) {
+        // Reuse colors if all are assigned
+        colorMap[participant.userId] = colors[index % colors.length];
+      } else {
+        colorMap[participant.userId] = colors[index % colors.length];
+        usedColors.add(colors[index % colors.length]);
+      }
+    });
+    
+    return colorMap;
+  }, [participants, aiParticipant]);
+  
+  const participantColorsForLegend = useMemo(() => {
+    const legend = {};
+    [...participants, aiParticipant].forEach(p => {
+      if (p.userId !== 'ai-assistant') {
+        legend[p.userId] = {
+          username: p.username.replace(' (You)', ''),
+          color: assignedColors[p.userId] || '#000000'
+        };
+      }
+    });
+    return legend;
+  }, [participants, aiParticipant, assignedColors]);
 
   const isMirroringBrowser = useMemo(
     () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream,
@@ -1212,6 +1258,7 @@ const Meeting = () => {
     if (isSharingScreen) {
       await replaceTrack(localCameraTrackRef.current, false);
       setIsSharingScreen(false);
+      setIsDrawingVisible(false);
       socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
       screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     } else {
@@ -1221,11 +1268,13 @@ const Meeting = () => {
         const screenTrack = screen.getVideoTracks()[0];
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
+        setIsDrawingVisible(true);
         socketRef.current?.emit('screen-share-start', { userId: socketRef.current.id });
         
         screenTrack.onended = async () => {
           await replaceTrack(localCameraTrackRef.current, false);
           setIsSharingScreen(false);
+          setIsDrawingVisible(false);
           socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
         };
       } catch (e) {
@@ -1316,6 +1365,19 @@ const Meeting = () => {
               setAiUploadedAudio(null);
               socketRef.current?.emit('shared-media-removal', { username: user.username });
             }}
+            drawingCanvasComponent={
+              isSomeoneScreenSharing && isDrawingVisible ? (
+                <DrawingCanvas
+                  isVisible={isDrawingVisible}
+                  currentTool={currentDrawingTool}
+                  currentColor={assignedColors[socketRef.current?.id] || currentDrawingColor}
+                  userId={socketRef.current?.id}
+                  socketRef={socketRef}
+                  onDrawingChange={() => {}}
+                  canvasHistoryRef={canvasHistoryRef}
+                />
+              ) : null
+            }
           />
         </div>
 
@@ -1425,6 +1487,27 @@ const Meeting = () => {
         ref={aiCanvasRef}
         style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }}
       />
+      
+      {/* Drawing Components - Only visible when someone is screen sharing */}
+      {isSomeoneScreenSharing && (
+        <>
+          <DrawingToolbar
+            currentTool={currentDrawingTool}
+            onToolChange={setCurrentDrawingTool}
+            currentColor={currentDrawingColor}
+            onColorChange={setCurrentDrawingColor}
+            onClear={() => canvasHistoryRef.current?.clear()}
+            onUndo={() => canvasHistoryRef.current?.undo()}
+            onRedo={() => canvasHistoryRef.current?.redo()}
+            onSave={() => canvasHistoryRef.current?.save()}
+            canUndo={canvasHistoryRef.current?.canUndo || false}
+            canRedo={canvasHistoryRef.current?.canRedo || false}
+            isVisible={isDrawingVisible}
+            onToggle={() => setIsDrawingVisible(false)}
+          />
+          <ParticipantColorLegend participantColors={participantColorsForLegend} />
+        </>
+      )}
     </div>
   );
 };

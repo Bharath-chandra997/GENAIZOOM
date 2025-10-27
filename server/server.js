@@ -11,7 +11,7 @@ const twilio = require('twilio');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const fs = require('fs');
-const axios = require('axios'); // Added for Google Gemini API calls
+const axios = require('axios');
 require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const meetingRoutes = require('./routes/meetings');
@@ -41,13 +41,14 @@ if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !pr
   logError('FATAL ERROR: Cloudinary credentials not defined.');
   process.exit(1);
 }
-if (!process.env.GOOGLE_API_KEY) {
-  logError('FATAL ERROR: GOOGLE_API_KEY is not defined.');
+if (!process.env.FASTAPI_KEY) {
+  logError('FATAL ERROR: FASTAPI_KEY is not defined.');
   process.exit(1);
 }
 
-// Google Gemini API URL
-const GOOGLE_VQA_API_URL = 'https://unesteemed-trochaically-wilhelmina.ngrok-free.dev/predict';
+// FastAPI Server URL and Key
+const API_URL = 'https://unesteemed-trochaically-wilhelmina.ngrok-free.dev/predict';
+const API_KEY = process.env.FASTAPI_KEY; // Should be set to 'genaizoom' in .env
 
 // App & Server Setup
 const app = express();
@@ -226,7 +227,7 @@ app.get('/ice-servers', async (req, res) => {
   }
 });
 
-// Google Gemini /predict Endpoint
+// FastAPI /predict Endpoint
 app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }, { name: 'audio', maxCount: 1 }]), async (req, res) => {
   try {
     const imageFile = req.files?.image?.[0];
@@ -251,12 +252,12 @@ app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }
       return res.status(400).json({ error: 'Files must be less than 100 MB.' });
     }
 
-    // Convert image to base64 for Google API
+    // Convert files to base64 for FastAPI
     const imageBase64 = fs.readFileSync(imageFile.path, { encoding: 'base64' });
+    const audioBase64 = fs.readFileSync(audioFile.path, { encoding: 'base64' });
 
-    // Placeholder for audio transcription (optional)
+    // Prepare payload for FastAPI
     const prompt = 'Provide a visual question answering response based on this image and the audio context.';
-
     const payload = {
       contents: [{
         parts: [
@@ -266,29 +267,39 @@ app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }
               mime_type: imageFile.mimetype,
               data: imageBase64
             }
+          },
+          {
+            inline_data: {
+              mime_type: audioFile.mimetype,
+              data: audioBase64
+            }
           }
         ]
       }]
     };
 
-    info(`Calling Google Gemini API for user ${req.user.username}`);
-    const googleResponse = await axios.post(
-      `${GOOGLE_VQA_API_URL}?key=${process.env.GOOGLE_API_KEY}`,
+    info(`Calling FastAPI server for user ${req.user.username}`);
+    const response = await axios.post(
+      API_URL,
       payload,
       {
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`
+        },
         timeout: 30000
       }
     );
 
-    const prediction = googleResponse.data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from Google API';
+    // Handle FastAPI response (adjust based on your FastAPI response structure)
+    const prediction = response.data.prediction || response.data.result || 'No response from FastAPI server';
 
     if (!prediction || prediction.trim() === '') {
-      logError('Empty prediction from Google API');
-      return res.status(500).json({ error: 'No prediction received from Google API' });
+      logError('Empty prediction from FastAPI server');
+      return res.status(500).json({ error: 'No prediction received from FastAPI server' });
     }
 
-    info(`Google Gemini prediction: ${prediction.substring(0, 100)}...`);
+    info(`FastAPI prediction: ${prediction.substring(0, 100)}...`);
     res.json({ prediction });
 
   } catch (error) {

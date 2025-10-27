@@ -167,7 +167,7 @@ const fastFallbackIceServers = [
     credential: 'openrelayprojectsecret',
   },
   {
-    urls: 'turns:openrelay.metered.ca:443',
+    urls: 'turn:openrelay.metered.ca:443',
     username: 'openrelayproject',
     credential: 'openrelayprojectsecret',
   },
@@ -227,6 +227,12 @@ app.get('/ice-servers', async (req, res) => {
   }
 });
 
+// Handle GET /predict to return clear error
+app.get('/predict', (req, res) => {
+  logError('GET request not allowed for /predict');
+  res.status(405).json({ error: 'Method Not Allowed: Use POST for /predict' });
+});
+
 // FastAPI /predict Endpoint
 app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }, { name: 'audio', maxCount: 1 }]), async (req, res) => {
   try {
@@ -256,53 +262,48 @@ app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }
     const imageBase64 = fs.readFileSync(imageFile.path, { encoding: 'base64' });
     const audioBase64 = fs.readFileSync(audioFile.path, { encoding: 'base64' });
 
-    // Prepare payload for FastAPI
+    // Prepare payload for FastAPI (adjust based on FastAPI server requirements)
     const prompt = 'Provide a visual question answering response based on this image and the audio context.';
     const payload = {
-      contents: [{
-        parts: [
-          { text: prompt },
-          {
-            inline_data: {
-              mime_type: imageFile.mimetype,
-              data: imageBase64
-            }
-          },
-          {
-            inline_data: {
-              mime_type: audioFile.mimetype,
-              data: audioBase64
-            }
-          }
-        ]
-      }]
+      image: {
+        data: imageBase64,
+        mime_type: imageFile.mimetype
+      },
+      audio: {
+        data: audioBase64,
+        mime_type: audioFile.mimetype
+      },
+      prompt: prompt
     };
 
-    info(`Calling FastAPI server for user ${req.user.username}`);
+    info(`Calling FastAPI server for user ${req.user.username}: ${JSON.stringify(payload).substring(0, 100)}...`);
     const response = await axios.post(
-      API_URL,
+      `${API_URL}?key=${API_KEY}`,
       payload,
       {
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`
+          'Content-Type': 'application/json'
         },
         timeout: 30000
       }
     );
 
-    // Handle FastAPI response (adjust based on your FastAPI response structure)
-    const prediction = response.data.prediction || response.data.result || 'No response from FastAPI server';
+    // Handle FastAPI response
+    const prediction = response.data.prediction || response.data.result || response.data || 'No response from FastAPI server';
 
-    if (!prediction || prediction.trim() === '') {
-      logError('Empty prediction from FastAPI server');
-      return res.status(500).json({ error: 'No prediction received from FastAPI server' });
+    if (!prediction || (typeof prediction === 'string' && prediction.trim() === '')) {
+      logError('Empty or invalid prediction from FastAPI server', { response: response.data });
+      return res.status(500).json({ error: 'No valid prediction received from FastAPI server' });
     }
 
-    info(`FastAPI prediction: ${prediction.substring(0, 100)}...`);
+    info(`FastAPI prediction: ${typeof prediction === 'string' ? prediction.substring(0, 100) : JSON.stringify(prediction).substring(0, 100)}...`);
     res.json({ prediction });
 
   } catch (error) {
+    if (error.response) {
+      logError(`FastAPI error: ${error.response.status} - ${JSON.stringify(error.response.data)}`, error);
+      return res.status(500).json({ error: `Failed to process AI request: ${error.response.data.error || error.message}` });
+    }
     logError('Error in /predict:', error);
     res.status(500).json({ error: `Failed to process AI request: ${error.message}` });
   } finally {
@@ -540,6 +541,10 @@ io.use((socket, next) => {
   }
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (!decoded.userId) {
+      info(`Socket auth error: No userId in token for socket ${socket.id}`);
+      return next(new Error('Authentication error: Invalid token payload'));
+    }
     socket.user = { 
       userId: decoded.userId.toString(),
       username: decoded.username, 
@@ -569,6 +574,12 @@ io.on('connection', (socket) => {
       return;
     }
     
+    if (!userId) {
+      socket.emit('error', { message: 'Invalid user ID' });
+      info(`Join-room failed: Invalid user ID for ${username} (${socket.id})`);
+      return;
+    }
+
     socket.join(roomId);
     socketToRoom[socket.id] = roomId;
     socketIdToUsername[socket.id] = username;
@@ -580,7 +591,7 @@ io.on('connection', (socket) => {
         session.activeParticipants = [];
       }
 
-      const participantIndex = session.activeParticipants.findIndex(p => p.userId.toString() === userId.toString());
+      const participantIndex = session.activeParticipants.findIndex(p => p.userId && p.userId.toString() === userId.toString());
       if (participantIndex === -1) {
         session.activeParticipants.push({
           userId,
@@ -602,6 +613,8 @@ io.on('connection', (socket) => {
       info(`Updated participant ${username} in session for room ${roomId}`);
     } catch (err) {
       logError('Error updating meeting session:', err);
+      socket.emit('error', { message: 'Failed to update meeting session' });
+      return;
     }
     
     const room = io.sockets.adapter.rooms.get(roomId);

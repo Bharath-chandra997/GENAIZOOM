@@ -47,7 +47,7 @@ if (!process.env.GOOGLE_API_KEY) {
 }
 
 // Google Gemini API URL
-const GOOGLE_VQA_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent';
+const GOOGLE_VQA_API_URL = 'https://unesteemed-trochaically-wilhelmina.ngrok-free.dev/predict';
 
 // App & Server Setup
 const app = express();

@@ -244,49 +244,36 @@ app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }
       return res.status(400).json({ error: 'Both image and audio files are required' });
     }
 
-    // Validate file types and sizes
+    // Validate file types
     const validImageTypes = ['image/jpeg', 'image/png'];
     const validAudioTypes = ['audio/mpeg', 'audio/wav'];
-    const maxFileSize = 100 * 1024 * 1024; // 100 MB
     if (!validImageTypes.includes(imageFile.mimetype)) {
       return res.status(400).json({ error: 'Invalid image format. Only JPEG/PNG allowed.' });
     }
     if (!validAudioTypes.includes(audioFile.mimetype)) {
       return res.status(400).json({ error: 'Invalid audio format. Only MP3/WAV allowed.' });
     }
-    if (imageFile.size > maxFileSize || audioFile.size > maxFileSize) {
-      return res.status(400).json({ error: 'Files must be less than 100 MB.' });
-    }
 
-    // Convert files to base64 for FastAPI
-    const imageBase64 = fs.readFileSync(imageFile.path, { encoding: 'base64' });
-    const audioBase64 = fs.readFileSync(audioFile.path, { encoding: 'base64' });
+    // Prepare FormData for FastAPI
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('image', fs.createReadStream(imageFile.path), {
+      filename: imageFile.originalname,
+      contentType: imageFile.mimetype,
+    });
+    form.append('audio', fs.createReadStream(audioFile.path), {
+      filename: audioFile.originalname,
+      contentType: audioFile.mimetype,
+    });
 
-    // Prepare payload for FastAPI (adjust based on FastAPI server requirements)
-    const prompt = 'Provide a visual question answering response based on this image and the audio context.';
-    const payload = {
-      image: {
-        data: imageBase64,
-        mime_type: imageFile.mimetype
+    info(`Calling FastAPI server for user ${req.user.username} with files: ${imageFile.originalname}, ${audioFile.originalname}`);
+    const response = await axios.post(API_URL, form, {
+      headers: {
+        'x-api-key': API_KEY,
+        ...form.getHeaders(),
       },
-      audio: {
-        data: audioBase64,
-        mime_type: audioFile.mimetype
-      },
-      prompt: prompt
-    };
-
-    info(`Calling FastAPI server for user ${req.user.username}: ${JSON.stringify(payload).substring(0, 100)}...`);
-    const response = await axios.post(
-      `${API_URL}?key=${API_KEY}`,
-      payload,
-      {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
+      timeout: 30000,
+    });
 
     // Handle FastAPI response
     const prediction = response.data.prediction || response.data.result || response.data || 'No response from FastAPI server';

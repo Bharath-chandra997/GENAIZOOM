@@ -616,7 +616,8 @@ const Meeting = () => {
 
       // Normalize prediction
       let prediction = response.data.prediction;
-      console.log('Prediction type:', typeof prediction, 'Value:', prediction); // Debug log
+      //console.log('Prediction type:', typeof prediction, 'Value:', prediction); // Debug log
+      console.log('Value:', prediction);
       if (prediction === undefined || prediction === null) {
         throw new Error('No prediction field in response');
       }

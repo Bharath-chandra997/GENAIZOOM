@@ -1,8 +1,8 @@
 .drawing-toolbar {
   position: fixed;
-  bottom: 100px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 16px;
+  right: 16px;
+  transform: none;
   background: #ffffff;
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);

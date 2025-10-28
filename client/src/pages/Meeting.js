@@ -202,6 +202,10 @@ const Meeting = () => {
     return legend;
   }, [participants, aiParticipant, assignedColors]);
 
+  const isCurrentUserSharer = useMemo(() => {
+    return participants.some((p) => p.isScreenSharing && p.isLocal);
+  }, [participants]);
+
   const isMirroringBrowser = useMemo(
     () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream,
     []
@@ -1381,7 +1385,7 @@ const Meeting = () => {
               socketRef.current?.emit('shared-media-removal', { username: user.username });
             }}
             drawingCanvasComponent={
-              isSomeoneScreenSharing && isDrawingVisible ? (
+              isSomeoneScreenSharing && isDrawingVisible && !isCurrentUserSharer ? (
                 <DrawingCanvas
                   isVisible={isDrawingVisible}
                   currentTool={currentDrawingTool}
@@ -1506,7 +1510,7 @@ const Meeting = () => {
       />
       
       {/* Drawing Components - Only visible when someone is screen sharing */}
-      {isSomeoneScreenSharing && (
+      {isSomeoneScreenSharing && !isCurrentUserSharer && (
         <>
             <DrawingToolbar
               currentTool={currentDrawingTool}

@@ -134,6 +134,7 @@ const Meeting = () => {
   const [isDrawingVisible, setIsDrawingVisible] = useState(false);
   const [currentDrawingTool, setCurrentDrawingTool] = useState('pen');
   const [currentDrawingColor, setCurrentDrawingColor] = useState('#000000');
+  const [currentBrushSize, setCurrentBrushSize] = useState(5);
   const [participantColors, setParticipantColors] = useState({});
   const [canvasHistory, setCanvasHistory] = useState([]);
   const canvasHistoryRef = useRef({});
@@ -1389,6 +1390,8 @@ const Meeting = () => {
                   socketRef={socketRef}
                   onDrawingChange={() => {}}
                   canvasHistoryRef={canvasHistoryRef}
+                  isLocalOnly={true}
+                  brushSize={currentBrushSize}
                 />
               ) : null
             }
@@ -1505,20 +1508,24 @@ const Meeting = () => {
       {/* Drawing Components - Only visible when someone is screen sharing */}
       {isSomeoneScreenSharing && (
         <>
-          <DrawingToolbar
-            currentTool={currentDrawingTool}
-            onToolChange={setCurrentDrawingTool}
-            currentColor={currentDrawingColor}
-            onColorChange={setCurrentDrawingColor}
-            onClear={() => canvasHistoryRef.current?.clear()}
-            onUndo={() => canvasHistoryRef.current?.undo()}
-            onRedo={() => canvasHistoryRef.current?.redo()}
-            onSave={() => canvasHistoryRef.current?.save()}
-            canUndo={canvasHistoryRef.current?.canUndo || false}
-            canRedo={canvasHistoryRef.current?.canRedo || false}
-            isVisible={isDrawingVisible}
-            onToggle={() => setIsDrawingVisible(false)}
-          />
+            <DrawingToolbar
+              currentTool={currentDrawingTool}
+              onToolChange={setCurrentDrawingTool}
+              currentColor={currentDrawingColor}
+              onColorChange={setCurrentDrawingColor}
+              onClear={() => canvasHistoryRef.current?.clear()}
+              onUndo={() => canvasHistoryRef.current?.undo()}
+              onRedo={() => canvasHistoryRef.current?.redo()}
+              onSave={() => canvasHistoryRef.current?.save()}
+              canUndo={canvasHistoryRef.current?.canUndo || false}
+              canRedo={canvasHistoryRef.current?.canRedo || false}
+              isVisible={isDrawingVisible}
+              onToggle={() => setIsDrawingVisible(false)}
+              username={user.username}
+              userColor={assignedColors[socketRef.current?.id]}
+              brushSize={currentBrushSize}
+              onBrushSizeChange={setCurrentBrushSize}
+            />
           <ParticipantColorLegend participantColors={participantColorsForLegend} />
         </>
       )}

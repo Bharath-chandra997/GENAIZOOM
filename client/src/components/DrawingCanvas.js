@@ -9,7 +9,9 @@ const DrawingCanvas = ({
   userId,
   socketRef,
   onDrawingChange,
-  canvasHistoryRef
+  canvasHistoryRef,
+  isLocalOnly = false,
+  brushSize = 5
 }) => {
   const canvasRef = useRef(null);
   const fabricCanvasRef = useRef(null);
@@ -66,8 +68,9 @@ const DrawingCanvas = ({
     };
   }, [historyIndex]);
 
-  // Listen for drawing events from socket
+  // Listen for drawing events from socket (disabled in local-only mode)
   useEffect(() => {
+    if (isLocalOnly) return;
     if (!socketRef?.current) return;
 
     const socket = socketRef.current;
@@ -83,7 +86,7 @@ const DrawingCanvas = ({
     return () => {
       socket.off('drawing-event', handleDrawing);
     };
-  }, [socketRef, userId]);
+  }, [socketRef, userId, isLocalOnly]);
 
   const applyDrawingData = useCallback((data) => {
     if (!fabricCanvasRef.current) return;
@@ -141,7 +144,7 @@ const DrawingCanvas = ({
 
       if (currentTool === 'pen' || currentTool === 'highlighter') {
         canvas.isDrawingMode = true;
-        canvas.freeDrawingBrush.width = currentTool === 'highlighter' ? 20 : 5;
+        canvas.freeDrawingBrush.width = currentTool === 'highlighter' ? Math.max(brushSize * 2, 10) : brushSize;
         canvas.freeDrawingBrush.color = currentColor;
         canvas.renderAll();
       }
@@ -248,6 +251,7 @@ const DrawingCanvas = ({
   }, [currentTool, currentColor, startPoint]);
 
   const emitDrawingEvent = useCallback(() => {
+    if (isLocalOnly) return;
     if (!socketRef?.current) return;
 
     const canvas = fabricCanvasRef.current;
@@ -259,21 +263,21 @@ const DrawingCanvas = ({
       objects: canvasData,
       timestamp: Date.now()
     });
-  }, [socketRef, userId]);
+  }, [socketRef, userId, isLocalOnly]);
 
   const clearCanvas = useCallback(() => {
     if (!fabricCanvasRef.current) return;
     
     fabricCanvasRef.current.clear();
     
-    if (socketRef?.current) {
+    if (!isLocalOnly && socketRef?.current) {
       socketRef.current.emit('drawing-event', {
         type: 'clear',
         userId,
         timestamp: Date.now()
       });
     }
-  }, [socketRef, userId]);
+  }, [socketRef, userId, isLocalOnly]);
 
   const undo = useCallback(() => {
     if (historyIndex <= 0) return;

@@ -14,7 +14,11 @@ const DrawingToolbar = ({
   canUndo,
   canRedo,
   isVisible,
-  onToggle
+  onToggle,
+  username,
+  userColor,
+  brushSize,
+  onBrushSizeChange
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -41,6 +45,12 @@ const DrawingToolbar = ({
         <div className="drawing-toolbar-handle" onClick={() => setIsExpanded(!isExpanded)}>
           <span className="drawing-toolbar-handle-icon">⋯</span>
           <span className="drawing-toolbar-handle-text">Drawing Tools</span>
+          {username && (
+            <span className="drawing-toolbar-user">
+              <span className="drawing-toolbar-user-color" style={{ backgroundColor: userColor }} />
+              {username}
+            </span>
+          )}
           <button 
             className="drawing-toolbar-close" 
             onClick={(e) => {
@@ -85,6 +95,19 @@ const DrawingToolbar = ({
                   />
                 ))}
               </div>
+            </div>
+
+            {/* Thickness */}
+            <div className="drawing-toolbar-section">
+              <label className="drawing-toolbar-label">Thickness</label>
+              <input
+                type="range"
+                min="1"
+                max="30"
+                value={brushSize}
+                onChange={(e) => onBrushSizeChange?.(parseInt(e.target.value, 10))}
+                style={{ width: '100%' }}
+              />
             </div>
 
             {/* Actions */}

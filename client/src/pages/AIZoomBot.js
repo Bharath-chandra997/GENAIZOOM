@@ -391,8 +391,8 @@ const AIZoomBot = ({
         </button>
         {output && (
           <div className="mt-4">
-            <h3 className="text-md font-medium">AI Model Output</h3>
-            <pre className="bg-gray-800 p-2 rounded text-sm overflow-auto">{output}</pre>
+            <h3 className="text-md font-medium">AI Answer</h3>
+            <pre className="bg-gray-800 p-3 rounded text-lg overflow-auto">AI Answer: {output}</pre>
           </div>
         )}
       </div>

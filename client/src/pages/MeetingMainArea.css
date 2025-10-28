@@ -296,14 +296,15 @@
 }
 
 .pro-ai-response-display {
-  background: rgba(59, 130, 246, 0.1);
-  padding: 10px;
-  border-radius: 6px;
-  border-left: 3px solid #3b82f6;
-  font-size: 12px;
-  max-height: 80px;
+  background: rgba(59, 130, 246, 0.12);
+  padding: 14px;
+  border-radius: 8px;
+  border-left: 4px solid #3b82f6;
+  font-size: 16px;
+  line-height: 1.5;
+  max-height: 140px;
   overflow-y: auto;
-  color: #e5e7eb;
+  color: #f3f4f6;
   text-align: center;
 }
 

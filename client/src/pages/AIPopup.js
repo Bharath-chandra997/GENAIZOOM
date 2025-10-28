@@ -149,7 +149,7 @@ const AIPopup = ({
             {/* Response Section */}
             {aiResponse && (
               <div className="pro-ai-response-section">
-                <h4>AI Response</h4>
+                <h4>AI Answer</h4>
                 <div className="pro-ai-response-content">
                   <div className="pro-ai-user-info">
                     Requested by: <strong>{currentAIUser}</strong>
@@ -168,7 +168,7 @@ const AIPopup = ({
                   )}
                   
                   <div className="pro-ai-response-text">
-                    {aiResponse}
+                    <strong>AI Answer:</strong> {aiResponse}
                   </div>
 
                   {currentAIUser === user.username && (

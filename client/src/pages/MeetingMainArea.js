@@ -170,7 +170,7 @@ const MeetingMainArea = ({
                     <audio controls src={aiUploadedAudio} className="pro-ai-uploaded-audio" />
                   )}
                   {aiResponse && (
-                    <div className="pro-ai-response-display">{aiResponse}</div>
+                    <div className="pro-ai-response-display"><span style={{fontWeight:'700'}}>AI Answer:</span> {aiResponse}</div>
                   )}
                 </div>
               )}

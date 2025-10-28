@@ -425,6 +425,9 @@
   font-size: 16px;
   line-height: 1.6;
   color: #f3f4f6;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
   
   /* Firefox scrollbar */
   scrollbar-width: thin;

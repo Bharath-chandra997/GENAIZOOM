@@ -203,29 +203,25 @@ const AIZoomBot = ({
       console.log('AI response:', response.data);
       const modelOutput = response.data.result || response.data;
       
-      // Extract only the answer from the response, not the full JSON
+      // Extract ONLY plain text content for display
       let displayOutput = '';
-      if (typeof modelOutput === 'object') {
-        // Try to find common answer fields
-        if (modelOutput.answer) {
-          displayOutput = modelOutput.answer;
-        } else if (modelOutput.response) {
-          displayOutput = modelOutput.response;
-        } else if (modelOutput.text) {
+      if (typeof modelOutput === 'string') {
+        displayOutput = modelOutput;
+      } else if (typeof modelOutput === 'object' && modelOutput !== null) {
+        if (typeof modelOutput.text === 'string') {
           displayOutput = modelOutput.text;
-        } else if (modelOutput.result) {
-          displayOutput = modelOutput.result;
-        } else if (modelOutput.data && modelOutput.data.answer) {
-          displayOutput = modelOutput.data.answer;
-        } else if (modelOutput.data && modelOutput.data.response) {
-          displayOutput = modelOutput.data.response;
+        } else if (typeof modelOutput.answer === 'string') {
+          displayOutput = modelOutput.answer;
+        } else if (typeof modelOutput.response === 'string') {
+          displayOutput = modelOutput.response;
         } else {
-          // If no specific answer field, show the first string value
           const firstStringValue = Object.values(modelOutput).find(val => typeof val === 'string');
-          displayOutput = firstStringValue || JSON.stringify(modelOutput, null, 2);
+          displayOutput = firstStringValue || '';
         }
-      } else {
-        displayOutput = String(modelOutput);
+      }
+      displayOutput = (displayOutput || '').trim();
+      if (!displayOutput) {
+        throw new Error('No text content available in AI response');
       }
       
       console.log('Display output:', displayOutput);
@@ -392,7 +388,7 @@ const AIZoomBot = ({
         {output && (
           <div className="mt-4">
             <h3 className="text-md font-medium">AI Answer</h3>
-            <pre className="bg-gray-800 p-3 rounded text-lg overflow-auto">AI Answer: {output}</pre>
+            <pre className="bg-gray-800 p-3 rounded text-lg overflow-auto" style={{whiteSpace:'pre-wrap', wordWrap:'break-word', overflowWrap:'anywhere', fontFamily:'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', lineHeight:'1.6'}}>AI Answer: {output}</pre>
           </div>
         )}
       </div>

@@ -523,6 +523,8 @@ const Meeting = () => {
     let isLocked = false;
     setIsAIProcessing(true);
     try {
+      // Clear previous AI response for smooth UI updates
+      setAiResponse('');
       console.log('Starting AI request for user:', user.username, {
         image: imageFile?.name,
         audio: audioFile?.name,
@@ -614,23 +616,34 @@ const Meeting = () => {
       });
       console.log('Google Gemini API response via Node.js:', response.data);
 
-      // Normalize prediction
-      let prediction = response.data.prediction;
-      //console.log('Prediction type:', typeof prediction, 'Value:', prediction); // Debug log
-      console.log('AI Answer:', prediction);
-      if (prediction === undefined || prediction === null) {
+      // Normalize prediction: extract ONLY plain text content
+      const predictionRaw = response.data?.prediction;
+      if (predictionRaw === undefined || predictionRaw === null) {
         throw new Error('No prediction field in response');
       }
-      if (typeof prediction !== 'string') {
-        prediction = JSON.stringify(prediction);
-      }
-      if (!prediction || prediction.trim() === '') {
-        throw new Error('No valid prediction received from AI server');
+
+      let textOnly = '';
+      if (typeof predictionRaw === 'string') {
+        textOnly = predictionRaw;
+      } else if (typeof predictionRaw === 'object') {
+        if (typeof predictionRaw.text === 'string') {
+          textOnly = predictionRaw.text;
+        } else {
+          // Fallback: pick the first string-valued field
+          const firstString = Object.values(predictionRaw).find((v) => typeof v === 'string');
+          textOnly = typeof firstString === 'string' ? firstString : '';
+        }
       }
 
-      setAiResponse(prediction);
+      textOnly = (textOnly || '').trim();
+      if (!textOnly) {
+        throw new Error('No text content available in AI response');
+      }
+
+      console.log('AI Answer:', textOnly);
+      setAiResponse(textOnly);
       socketRef.current?.emit('shared-ai-result', {
-        response: prediction,
+        response: textOnly,
         username: user.username,
       });
 
@@ -638,7 +651,7 @@ const Meeting = () => {
         `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
         {
           isProcessing: false,
-          output: prediction,
+          output: textOnly,
           completedAt: new Date().toISOString(),
           currentUploader: null,
           uploaderUsername: null,

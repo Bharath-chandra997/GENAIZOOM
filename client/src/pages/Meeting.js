@@ -1534,6 +1534,8 @@ const Meeting = () => {
           roomId={roomId}
           onClose={() => setScribbleActive(false)}
           initialColor={scribbleColor}
+          participants={participants.map(p => ({ userId: p.userId, username: p.username.replace(' (You)', ''), color: assignedColors[p.userId] }))}
+          currentUser={{ id: socketRef.current?.id, username: user.username }}
         />
       )}
     </div>

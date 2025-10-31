@@ -673,29 +673,46 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Scribble events
+  // Scribble events (per-room lock)
   socket.on('scribble:request-state', ({ roomId }) => {
     if (!roomId) return;
     const state = getScribbleState(roomId);
     socket.emit('scribble:image', state.image);
     socket.emit('scribble:drawings', state.drawings);
+    socket.emit('scribble:lock', { locked: !!state.lockedBy, by: state.lockedBy || null });
   });
 
   socket.on('scribble:image', ({ roomId, img }) => {
     if (!roomId) return;
     const state = getScribbleState(roomId);
-    const next = { image: img || null, drawings: [] };
+    if (state.lockedBy && state.lockedBy !== socket.id) {
+      return; // ignore if locked by someone else
+    }
+    const next = { image: img || null, drawings: [], lockedBy: socket.id };
     setScribbleState(roomId, next);
-    socket.to(roomId).emit('scribble:image', img || null);
-    socket.to(roomId).emit('scribble:drawings', []);
+    io.to(roomId).emit('scribble:image', img || null);
+    io.to(roomId).emit('scribble:drawings', []);
+    io.to(roomId).emit('scribble:lock', { locked: true, by: socket.id });
   });
 
   socket.on('scribble:drawings', ({ roomId, data }) => {
     if (!roomId) return;
     const state = getScribbleState(roomId);
-    const next = { image: state.image, drawings: Array.isArray(data) ? data : [] };
+    const next = { image: state.image, drawings: Array.isArray(data) ? data : [], lockedBy: state.lockedBy };
     setScribbleState(roomId, next);
     socket.to(roomId).emit('scribble:drawings', next.drawings);
+  });
+
+  socket.on('scribble:removeImage', ({ roomId }) => {
+    if (!roomId) return;
+    const state = getScribbleState(roomId);
+    if (state.lockedBy && state.lockedBy !== socket.id) {
+      return; // only locker can remove
+    }
+    const next = { image: null, drawings: [], lockedBy: null };
+    setScribbleState(roomId, next);
+    io.to(roomId).emit('scribble:removeImage');
+    io.to(roomId).emit('scribble:lock', { locked: false, by: null });
   });
 
   socket.on('offer', (payload) => {

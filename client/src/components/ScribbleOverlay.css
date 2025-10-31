@@ -2,20 +2,23 @@
   position: fixed;
   inset: 0;
   z-index: 2000;
+  pointer-events: none;
 }
 
 .scribble-backdrop {
   position: absolute;
   inset: 0;
-  background: #000000;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px) brightness(0.7);
+  transition: all 0.5s ease;
   animation: scribbleFade 0.4s ease forwards;
 }
 
 .scribble-stage {
   position: absolute;
-  inset: 0;
-  backdrop-filter: blur(8px);
+  inset: 0 0 80px 0; /* leave space for bottom controls */
   transition: backdrop-filter 0.4s ease;
+  pointer-events: none;
 }
 
 .scribble-canvas {
@@ -23,6 +26,7 @@
   height: 100%;
   cursor: crosshair;
   user-select: none;
+  pointer-events: auto;
 }
 
 .scribble-modal {
@@ -30,13 +34,15 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: #ffffff;
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  backdrop-filter: blur(18px);
+  background: rgba(255,255,255,0.1);
+  padding: 28px;
+  border-radius: 24px;
+  box-shadow: 0 0 25px rgba(255,255,255,0.2);
   width: 90%;
   max-width: 420px;
   text-align: center;
+  pointer-events: auto;
 }
 
 .scribble-actions {
@@ -48,11 +54,16 @@
 
 .scribble-actions button {
   padding: 8px 12px;
-  border: 1px solid #e5e7eb;
-  background: #f8fafc;
-  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.08));
+  color: #fff;
+  border-radius: 12px;
   cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.3s ease;
 }
+
+.scribble-actions button:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+.scribble-actions button:active { transform: scale(0.95); }
 
 .scribble-toolbar {
   position: fixed;
@@ -61,11 +72,12 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
-  background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(10px);
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  padding: 12px 16px;
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(16px);
+  border-radius: 20px;
+  box-shadow: 0 4px 25px rgba(0,0,0,0.3);
+  pointer-events: auto;
 }
 
 .scribble-row {
@@ -95,12 +107,44 @@
 
 .tool.active {
   background: rgba(255,255,255,0.3);
+  transform: scale(1.02);
 }
 
 .tool.danger {
   background: rgba(239,68,68,0.2);
   border-color: rgba(239,68,68,0.3);
 }
+.scribble-dropzone {
+  margin-top: 12px;
+  border: 2px dashed rgba(255,255,255,0.4);
+  border-radius: 16px;
+  padding: 20px;
+  color: #fff;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 20px;
+}
+
+.scribble-dropzone:hover { box-shadow: 0 0 20px rgba(255,255,255,0.15); }
+
+.scribble-legend {
+  position: fixed;
+  left: 16px;
+  bottom: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  color: #fff;
+  pointer-events: auto;
+}
+
+.scribble-legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.scribble-legend-dot { width: 12px; height: 12px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.4); }
+
 
 .scribble-user .dot {
   width: 14px;

@@ -10,6 +10,8 @@ const ScribbleOverlay = ({
   roomId,
   onClose,
   initialColor,
+  participants = [],
+  currentUser,
 }) => {
   const [image, setImage] = useState(null);
   const [pendingImage, setPendingImage] = useState(null);
@@ -22,6 +24,8 @@ const ScribbleOverlay = ({
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const lastPointRef = useRef(null);
+  const [uploadLocked, setUploadLocked] = useState(false);
+  const [lockedBy, setLockedBy] = useState(null);
 
   // Socket subscriptions
   useEffect(() => {
@@ -30,9 +34,13 @@ const ScribbleOverlay = ({
 
     const onImage = (img) => setImage(img);
     const onDrawings = (data) => setDrawings(Array.isArray(data) ? data : []);
+    const onLock = ({ locked, by }) => { setUploadLocked(locked); setLockedBy(by || null); };
+    const onRemoveImage = () => { setImage(null); setDrawings([]); setUploadLocked(false); setLockedBy(null); };
 
     socket.on('scribble:image', onImage);
     socket.on('scribble:drawings', onDrawings);
+    socket.on('scribble:lock', onLock);
+    socket.on('scribble:removeImage', onRemoveImage);
 
     // Request current state immediately
     socket.emit('scribble:request-state', { roomId });
@@ -40,6 +48,8 @@ const ScribbleOverlay = ({
     return () => {
       socket.off('scribble:image', onImage);
       socket.off('scribble:drawings', onDrawings);
+      socket.off('scribble:lock', onLock);
+      socket.off('scribble:removeImage', onRemoveImage);
     };
   }, [socketRef, roomId]);
 
@@ -169,6 +179,28 @@ const ScribbleOverlay = ({
     emitDrawings([]);
   };
 
+  const removeConfirmedImage = () => {
+    const socket = socketRef?.current;
+    if (socket) socket.emit('scribble:removeImage', { roomId });
+    setImage(null);
+    emitDrawings([]);
+  };
+
+  const savePng = () => {
+    const canvas = document.createElement('canvas');
+    const w = canvasRef.current.clientWidth;
+    const h = canvasRef.current.clientHeight;
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    // Render current overlay to export (basic: image + strokes)
+    // For brevity, we use current canvas draw pass
+    const exportCanvas = canvasRef.current;
+    const data = exportCanvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = data; a.download = `scribble-${Date.now()}.png`;
+    a.click();
+  };
+
   return (
     <div className="scribble-root">
       <div className="scribble-backdrop" />
@@ -185,20 +217,25 @@ const ScribbleOverlay = ({
       {!image && (
         <motion.div
           className="scribble-modal"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          initial={{ opacity: 0, scale: 0.8, y: 50 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
         >
-          <h3>Upload an image</h3>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
-          />
+          <div className="scribble-dropzone">
+            <div style={{ color:'#fff', fontFamily:'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', fontSize:20, marginBottom:12 }}>
+              Upload an image to start Scribbling
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
+              style={{ display:'block', margin:'0 auto', color:'#fff' }}
+            />
+          </div>
           {pendingImage && (
             <div className="scribble-actions">
               <button onClick={() => setPendingImage(null)}>Remove</button>
-              <button onClick={confirmImage}>Confirm</button>
+              <button disabled={uploadLocked && lockedBy && lockedBy !== currentUser?.id} onClick={confirmImage}>Confirm</button>
             </div>
           )}
         </motion.div>
@@ -214,13 +251,16 @@ const ScribbleOverlay = ({
           <div className="scribble-row">
             <button className={`tool ${tool === 'pen' ? 'active' : ''}`} onClick={() => setTool('pen')} title="Pen"><FiEdit3 /></button>
             <button className={`tool ${tool === 'eraser' ? 'active' : ''}`} onClick={() => setTool('eraser')} title="Eraser"><FiMinusCircle /></button>
-            <button className="tool" onClick={() => setTool('rect')} title="Rectangle"><FiSquare /></button>
-            <button className="tool" onClick={() => setTool('circle')} title="Circle"><FiCircle /></button>
-            <button className="tool" onClick={() => setTool('arrow')} title="Arrow"><FiArrowUpRight /></button>
+            <button className={`tool ${tool === 'highlighter' ? 'active' : ''}`} onClick={() => setTool('highlighter')} title="Highlighter">H</button>
+            <button className={`tool ${tool === 'rect' ? 'active' : ''}`} onClick={() => setTool('rect')} title="Rectangle"><FiSquare /></button>
+            <button className={`tool ${tool === 'circle' ? 'active' : ''}`} onClick={() => setTool('circle')} title="Circle"><FiCircle /></button>
+            <button className={`tool ${tool === 'arrow' ? 'active' : ''}`} onClick={() => setTool('arrow')} title="Arrow"><FiArrowUpRight /></button>
+            <button className={`tool ${tool === 'line' ? 'active' : ''}`} onClick={() => setTool('line')} title="Line">/</button>
             <button className="tool" onClick={() => { if (drawings.length) emitDrawings(drawings.slice(0, -1)); }} title="Undo"><FiRotateCcw /></button>
             <button className="tool" onClick={() => emitDrawings([])} title="Clear All"><FiTrash2 /></button>
             <button className="tool" onClick={() => setZoom(Math.min(2, zoom + 0.1))} title="Zoom In"><FiZoomIn /></button>
             <button className="tool" onClick={() => setTool('move')} title="Move"><FiMove /></button>
+            <button className="tool" onClick={savePng} title="Save PNG">⬇️</button>
             <button className="tool danger" onClick={onClose} title="Close"><FiX /></button>
           </div>
           <div className="scribble-row">
@@ -229,9 +269,22 @@ const ScribbleOverlay = ({
             <div className="scribble-user" title="Your color">
               <span className="dot" style={{ backgroundColor: color }} />
             </div>
+            {lockedBy === currentUser?.id && (
+              <button className="tool" onClick={removeConfirmedImage} title="Remove Image"><FiTrash2 /></button>
+            )}
           </div>
         </motion.div>
       )}
+
+      {/* Legend */}
+      <div className="scribble-legend">
+        {participants.map((p) => (
+          <div key={p.userId} className="scribble-legend-item">
+            <span className="scribble-legend-dot" style={{ backgroundColor: p.color }} />
+            <span>{p.username}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

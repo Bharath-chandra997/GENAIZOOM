@@ -1527,29 +1527,7 @@ const Meeting = () => {
       />
       
       {/* Drawing Components - Only visible when someone is screen sharing */}
-      {isSomeoneScreenSharing && !isCurrentUserSharer && (
-        <>
-            <DrawingToolbar
-              currentTool={currentDrawingTool}
-              onToolChange={setCurrentDrawingTool}
-              currentColor={currentDrawingColor}
-              onColorChange={setCurrentDrawingColor}
-              onClear={() => canvasHistoryRef.current?.clear()}
-              onUndo={() => canvasHistoryRef.current?.undo()}
-              onRedo={() => canvasHistoryRef.current?.redo()}
-              onSave={() => canvasHistoryRef.current?.save()}
-              canUndo={canvasHistoryRef.current?.canUndo || false}
-              canRedo={canvasHistoryRef.current?.canRedo || false}
-              isVisible={isDrawingVisible}
-              onToggle={() => setIsDrawingVisible(false)}
-              username={user.username}
-              userColor={assignedColors[socketRef.current?.id]}
-              brushSize={currentBrushSize}
-              onBrushSizeChange={setCurrentBrushSize}
-            />
-          <ParticipantColorLegend participantColors={participantColorsForLegend} />
-        </>
-      )}
+      {/* Screen sharing is pure broadcast now: no toolbars or overlays during share */}
       {scribbleActive && (
         <ScribbleOverlay
           socketRef={socketRef}

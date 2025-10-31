@@ -554,6 +554,11 @@ io.on('connection', (socket) => {
   const { username, userId, profilePicture } = socket.user;
   info(`Socket connected: ${socket.id} for user ${username} (${userId})`);
 
+  // Scribble state per room (in-memory)
+  if (!global.__scribbleStateByRoom) global.__scribbleStateByRoom = new Map();
+  const getScribbleState = (roomId) => global.__scribbleStateByRoom.get(roomId) || { image: null, drawings: [] };
+  const setScribbleState = (roomId, state) => global.__scribbleStateByRoom.set(roomId, state);
+
   socket.on('join-room', async ({ roomId, username, isReconnect = false }, callback) => {
     if (!roomId) {
       socket.emit('error', { message: 'Invalid room ID' });
@@ -666,6 +671,31 @@ io.on('connection', (socket) => {
         logError('Error adding participant to meeting', err);
       }
     }
+  });
+
+  // Scribble events
+  socket.on('scribble:request-state', ({ roomId }) => {
+    if (!roomId) return;
+    const state = getScribbleState(roomId);
+    socket.emit('scribble:image', state.image);
+    socket.emit('scribble:drawings', state.drawings);
+  });
+
+  socket.on('scribble:image', ({ roomId, img }) => {
+    if (!roomId) return;
+    const state = getScribbleState(roomId);
+    const next = { image: img || null, drawings: [] };
+    setScribbleState(roomId, next);
+    socket.to(roomId).emit('scribble:image', img || null);
+    socket.to(roomId).emit('scribble:drawings', []);
+  });
+
+  socket.on('scribble:drawings', ({ roomId, data }) => {
+    if (!roomId) return;
+    const state = getScribbleState(roomId);
+    const next = { image: state.image, drawings: Array.isArray(data) ? data : [] };
+    setScribbleState(roomId, next);
+    socket.to(roomId).emit('scribble:drawings', next.drawings);
   });
 
   socket.on('offer', (payload) => {

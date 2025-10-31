@@ -15,6 +15,8 @@ const MeetingControls = ({
   setIsAIPopupOpen,
   handleExitRoom,
   onCopyInvite,
+  scribbleActive,
+  onToggleScribble,
 }) => {
   return (
     <div className="pro-meeting-controls">
@@ -39,6 +41,13 @@ const MeetingControls = ({
           title={isSharingScreen ? 'Stop Sharing' : 'Share Screen'}
         >
           📺
+        </button>
+        <button
+          className={`pro-control-btn ${scribbleActive ? 'pro-control-btn--active' : ''}`}
+          onClick={onToggleScribble}
+          title={scribbleActive ? 'Exit Scribble' : 'Scribble'}
+        >
+          ✏️
         </button>
       </div>
       <div className="pro-controls-center">

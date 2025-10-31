@@ -1,0 +1,126 @@
+.scribble-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+
+.scribble-backdrop {
+  position: absolute;
+  inset: 0;
+  background: #000000;
+  animation: scribbleFade 0.4s ease forwards;
+}
+
+.scribble-stage {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(8px);
+  transition: backdrop-filter 0.4s ease;
+}
+
+.scribble-canvas {
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  user-select: none;
+}
+
+.scribble-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  width: 90%;
+  max-width: 420px;
+  text-align: center;
+}
+
+.scribble-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.scribble-actions button {
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.scribble-toolbar {
+  position: fixed;
+  top: 2%;
+  right: 2%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+
+.scribble-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tool {
+  width: 42px;
+  height: 42px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.24);
+  color: #ffffff;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tool:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 10px rgba(255,255,255,0.3);
+}
+
+.tool.active {
+  background: rgba(255,255,255,0.3);
+}
+
+.tool.danger {
+  background: rgba(239,68,68,0.2);
+  border-color: rgba(239,68,68,0.3);
+}
+
+.scribble-user .dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  border: 1px solid rgba(0,0,0,0.2);
+  display: inline-block;
+}
+
+@keyframes scribbleFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  .scribble-toolbar {
+    gap: 6px;
+    padding: 10px;
+  }
+  .tool { width: 38px; height: 38px; }
+}
+
+

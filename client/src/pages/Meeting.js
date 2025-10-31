@@ -15,6 +15,7 @@ import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import AIPopup from './AIPopup';
+import ScribbleOverlay from '../components/ScribbleOverlay';
 import Chat from '../components/Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
 import DrawingToolbar from '../components/DrawingToolbar';
@@ -138,6 +139,9 @@ const Meeting = () => {
   const [participantColors, setParticipantColors] = useState({});
   const [canvasHistory, setCanvasHistory] = useState([]);
   const canvasHistoryRef = useRef({});
+  // Scribble state
+  const [scribbleActive, setScribbleActive] = useState(false);
+  const [scribbleColor] = useState(() => `#${Math.random().toString(16).slice(2,8)}`);
 
   const [aiParticipant] = useState({
     userId: 'ai-assistant',
@@ -1074,6 +1078,15 @@ const Meeting = () => {
           prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: true } : p))
         );
       });
+      // Scribble state sync
+      socket.on('scribble:image', (payload) => {
+        // payload may be raw img or { img }
+        const img = typeof payload === 'string' ? payload : payload?.img;
+        // handled inside overlay through socket subscription
+      });
+      socket.on('scribble:drawings', () => {
+        // handled inside overlay component
+      });
       socket.on('screen-share-stop', ({ userId }) => {
         setParticipants((prev) =>
           prev.map((p) => (p.userId === userId ? { ...p, isScreenSharing: false } : p))
@@ -1112,6 +1125,8 @@ const Meeting = () => {
         socket.off('shared-ai-result');
         socket.off('shared-media-display');
         socket.off('shared-media-removal');
+        socket.off('scribble:image');
+        socket.off('scribble:drawings');
       };
     },
     [
@@ -1492,6 +1507,8 @@ const Meeting = () => {
         setIsParticipantsOpen={setIsParticipantsOpen}
         isAIPopupOpen={isAIPopupOpen}
         setIsAIPopupOpen={setIsAIPopupOpen}
+        scribbleActive={scribbleActive}
+        onToggleScribble={() => setScribbleActive((v) => !v)}
         handleExitRoom={() => {
           socketRef.current?.emit('leave-room', { userId: socketRef.current.id });
           navigate('/home');
@@ -1532,6 +1549,14 @@ const Meeting = () => {
             />
           <ParticipantColorLegend participantColors={participantColorsForLegend} />
         </>
+      )}
+      {scribbleActive && (
+        <ScribbleOverlay
+          socketRef={socketRef}
+          roomId={roomId}
+          onClose={() => setScribbleActive(false)}
+          initialColor={scribbleColor}
+        />
       )}
     </div>
   );

@@ -26,6 +26,9 @@ const ScribbleOverlay = ({
   const lastPointRef = useRef(null);
   const [uploadLocked, setUploadLocked] = useState(false);
   const [lockedBy, setLockedBy] = useState(null);
+  const imageRef = useRef(null);
+  const previewRef = useRef(null); // temporary shape/text preview state
+  const redoStackRef = useRef([]);
 
   // Socket subscriptions
   useEffect(() => {
@@ -53,8 +56,19 @@ const ScribbleOverlay = ({
     };
   }, [socketRef, roomId]);
 
-  // Drawing renderer
+  // Load image only when source changes
   useEffect(() => {
+    if (!image) { imageRef.current = null; redraw(); return; }
+    const img = new Image();
+    img.onload = () => { imageRef.current = img; redraw(); };
+    img.src = image;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image]);
+
+  // Redraw when drawings/zoom/preview change
+  useEffect(() => { redraw(); }, [drawings, zoom]);
+
+  const redraw = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -68,57 +82,70 @@ const ScribbleOverlay = ({
     ctx.clearRect(0, 0, clientWidth, clientHeight);
 
     // Draw image centered at 70% viewport width
-    if (image) {
-      const img = new Image();
-      img.onload = () => {
-        const maxW = clientWidth * 0.7;
-        const scale = Math.min(maxW / img.width, (clientHeight * 0.7) / img.height);
-        const drawW = img.width * scale * zoom;
-        const drawH = img.height * scale * zoom;
-        const x = (clientWidth - drawW) / 2;
-        const y = (clientHeight - drawH) / 2;
-        ctx.drawImage(img, x, y, drawW, drawH);
-
-        // Draw strokes over image
-        drawAllStrokes(ctx);
-      };
-      img.src = image;
-    } else {
-      drawAllStrokes(ctx);
+    if (imageRef.current) {
+      const img = imageRef.current;
+      const maxW = clientWidth * 0.7;
+      const scale = Math.min(maxW / img.width, (clientHeight * 0.7) / img.height);
+      const drawW = img.width * scale * zoom;
+      const drawH = img.height * scale * zoom;
+      const x = (clientWidth - drawW) / 2;
+      const y = (clientHeight - drawH) / 2;
+      ctx.drawImage(img, x, y, drawW, drawH);
     }
+    drawAllStrokes(ctx);
+    drawPreview(ctx);
+  };
 
-    function drawAllStrokes(context) {
-      drawings.forEach((s) => {
-        if (s.type === 'path') {
-          context.strokeStyle = s.color;
-          context.lineWidth = s.width;
-          context.lineJoin = 'round';
-          context.lineCap = 'round';
+  const drawAllStrokes = (context) => {
+    drawings.forEach((s) => {
+      if (s.type === 'path') {
+        context.save();
+        context.globalAlpha = s.alpha ?? 1;
+        context.strokeStyle = s.color;
+        context.lineWidth = s.width;
+        context.lineJoin = 'round';
+        context.lineCap = 'round';
+        context.beginPath();
+        s.points.forEach((p, idx) => {
+          if (idx === 0) context.moveTo(p.x, p.y);
+          else context.lineTo(p.x, p.y);
+        });
+        context.stroke();
+        context.restore();
+      } else if (s.type === 'shape') {
+        context.strokeStyle = s.color;
+        context.lineWidth = s.width;
+        if (s.shape === 'rect') {
+          context.strokeRect(s.x, s.y, s.w, s.h);
+        } else if (s.shape === 'circle') {
           context.beginPath();
-          s.points.forEach((p, idx) => {
-            if (idx === 0) context.moveTo(p.x, p.y);
-            else context.lineTo(p.x, p.y);
-          });
+          context.arc(s.cx, s.cy, s.r, 0, Math.PI * 2);
           context.stroke();
-        } else if (s.type === 'shape') {
-          context.strokeStyle = s.color;
-          context.lineWidth = s.width;
-          if (s.shape === 'rect') {
-            context.strokeRect(s.x, s.y, s.w, s.h);
-          } else if (s.shape === 'circle') {
-            context.beginPath();
-            context.arc(s.cx, s.cy, s.r, 0, Math.PI * 2);
-            context.stroke();
-          } else if (s.shape === 'arrow') {
-            context.beginPath();
-            context.moveTo(s.x1, s.y1);
-            context.lineTo(s.x2, s.y2);
-            context.stroke();
-          }
+        } else if (s.shape === 'arrow' || s.shape === 'line') {
+          context.beginPath();
+          context.moveTo(s.x1, s.y1);
+          context.lineTo(s.x2, s.y2);
+          context.stroke();
         }
-      });
-    }
-  }, [image, drawings, zoom]);
+      } else if (s.type === 'text') {
+        context.fillStyle = s.color;
+        context.font = `${s.size || 18}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+        context.fillText(s.text, s.x, s.y);
+      }
+    });
+  };
+
+  const drawPreview = (context) => {
+    const p = previewRef.current;
+    if (!p) return;
+    context.save();
+    context.strokeStyle = p.color;
+    context.lineWidth = p.width;
+    if (p.shape === 'rect') context.strokeRect(p.x, p.y, p.w, p.h);
+    if (p.shape === 'circle') { context.beginPath(); context.arc(p.cx, p.cy, p.r, 0, Math.PI * 2); context.stroke(); }
+    if (p.shape === 'arrow' || p.shape === 'line') { context.beginPath(); context.moveTo(p.x1, p.y1); context.lineTo(p.x2, p.y2); context.stroke(); }
+    context.restore();
+  };
 
   const emitDrawings = (updated) => {
     setDrawings(updated);
@@ -134,31 +161,60 @@ const ScribbleOverlay = ({
     const y = e.clientY - rect.top;
     lastPointRef.current = { x, y };
 
-    if (tool === 'pen') {
-      const stroke = { type: 'path', color, width: thickness, points: [{ x, y }] };
+    if (tool === 'pen' || tool === 'highlighter') {
+      const stroke = { type: 'path', color, width: thickness, points: [{ x, y }], alpha: tool === 'highlighter' ? 0.35 : 1 };
       emitDrawings([...drawings, stroke]);
     } else if (tool === 'eraser') {
       // Simple eraser: remove last stroke
       emitDrawings(drawings.slice(0, -1));
+      redoStackRef.current = [];
+    } else if (['rect','circle','arrow','line'].includes(tool)) {
+      previewRef.current = { shape: tool, color, width: thickness, x, y, x1:x, y1:y };
+      redraw();
+    } else if (tool === 'text') {
+      const text = window.prompt('Enter text');
+      if (text && text.trim()) {
+        const stroke = { type: 'text', text, x, y, color, size: Math.max(14, thickness * 3) };
+        emitDrawings([...drawings, stroke]);
+        redoStackRef.current = [];
+      }
     }
   };
 
   const handlePointerMove = (e) => {
-    if (!isDrawing || tool !== 'pen') return;
+    if (!isDrawing) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const updated = [...drawings];
-    const last = updated[updated.length - 1];
-    if (last && last.type === 'path') {
-      last.points.push({ x, y });
-      emitDrawings(updated);
+    if (tool === 'pen' || tool === 'highlighter') {
+      const updated = [...drawings];
+      const last = updated[updated.length - 1];
+      if (last && last.type === 'path') {
+        last.points.push({ x, y });
+        emitDrawings(updated);
+      }
+    } else if (['rect','circle','arrow','line'].includes(tool)) {
+      const p = previewRef.current;
+      if (!p) return;
+      if (tool === 'rect') { p.w = x - p.x; p.h = y - p.y; }
+      if (tool === 'circle') { const dx = x - p.x; const dy = y - p.y; p.cx = p.x; p.cy = p.y; p.r = Math.sqrt(dx*dx + dy*dy); }
+      if (tool === 'arrow' || tool === 'line') { p.x2 = x; p.y2 = y; }
+      redraw();
     }
   };
 
   const handlePointerUp = () => {
     setIsDrawing(false);
     lastPointRef.current = null;
+    if (previewRef.current) {
+      const p = previewRef.current;
+      previewRef.current = null;
+      if (p.shape === 'rect') emitDrawings([...drawings, { type:'shape', shape:'rect', x:p.x, y:p.y, w:p.w, h:p.h, color, width: thickness }]);
+      if (p.shape === 'circle') emitDrawings([...drawings, { type:'shape', shape:'circle', cx:p.cx, cy:p.cy, r:p.r, color, width: thickness }]);
+      if (p.shape === 'arrow') emitDrawings([...drawings, { type:'shape', shape:'arrow', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2, color, width: thickness }]);
+      if (p.shape === 'line') emitDrawings([...drawings, { type:'shape', shape:'line', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2, color, width: thickness }]);
+      redoStackRef.current = [];
+    }
   };
 
   const handleUpload = (file) => {
@@ -213,6 +269,7 @@ const ScribbleOverlay = ({
           onPointerUp={handlePointerUp}
         />
       </div>
+      <button className="scribble-close" onClick={onClose} title="Close">×</button>
 
       {!image && (
         <motion.div

@@ -80,6 +80,27 @@
   pointer-events: auto;
 }
 
+.scribble-close {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.24);
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  pointer-events: auto;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.scribble-close:hover { transform: scale(1.08); box-shadow: 0 0 10px rgba(255,255,255,0.3); }
+.scribble-close:active { transform: scale(0.95); }
+
 .scribble-row {
   display: flex;
   gap: 8px;
@@ -128,7 +149,7 @@
 
 .scribble-legend {
   position: fixed;
-  left: 16px;
+  right: 16px;
   bottom: 100px;
   display: flex;
   flex-direction: column;

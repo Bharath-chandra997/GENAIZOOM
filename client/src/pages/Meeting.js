@@ -676,7 +676,7 @@ const Meeting = () => {
         `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
         {
           isProcessing: false,
-          output: textOnly,
+          output: typeof finalResponse === 'object' ? JSON.stringify(finalResponse) : finalResponse,
           completedAt: new Date().toISOString(),
           currentUploader: null,
           uploaderUsername: null,

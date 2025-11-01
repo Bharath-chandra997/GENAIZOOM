@@ -737,6 +737,17 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('scribble:drawings', next.drawings);
   });
 
+  // Individual stroke handler for real-time updates
+  socket.on('scribble:stroke', ({ roomId, stroke }) => {
+    if (!roomId || !stroke) return;
+    const state = getScribbleState(roomId);
+    if (!state.drawings) state.drawings = [];
+    // Append stroke to existing array
+    state.drawings.push(stroke);
+    setScribbleState(roomId, state);
+    socket.to(roomId).emit('scribble:stroke', stroke);
+  });
+
   socket.on('scribble:removeImage', ({ roomId }) => {
     if (!roomId) return;
     const state = getScribbleState(roomId);

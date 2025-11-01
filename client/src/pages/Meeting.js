@@ -126,7 +126,7 @@ const Meeting = () => {
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
   const [toolbarPosition] = useState({ x: 20, y: 20 });
   const [gridPage, setGridPage] = useState(0);
-  const [aiResponse, setAiResponse] = useState('');
+  const [aiResponse, setAiResponse] = useState(null); // Can be string or object with sent_from_csv
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
@@ -625,34 +625,50 @@ const Meeting = () => {
       });
       console.log('Google Gemini API response via Node.js:', response.data);
 
-      // Normalize prediction: extract ONLY plain text content
+      // Preserve full response object to extract sent_from_csv if present
       const predictionRaw = response.data?.prediction;
       if (predictionRaw === undefined || predictionRaw === null) {
         throw new Error('No prediction field in response');
       }
 
-      let textOnly = '';
+      // Keep the full object if it has sent_from_csv, otherwise extract text
+      let responseObj = predictionRaw;
       if (typeof predictionRaw === 'string') {
-        textOnly = predictionRaw;
-      } else if (typeof predictionRaw === 'object') {
-        if (typeof predictionRaw.text === 'string') {
-          textOnly = predictionRaw.text;
-        } else {
-          // Fallback: pick the first string-valued field
-          const firstString = Object.values(predictionRaw).find((v) => typeof v === 'string');
-          textOnly = typeof firstString === 'string' ? firstString : '';
+        try {
+          const parsed = JSON.parse(predictionRaw);
+          if (typeof parsed === 'object' && parsed !== null) {
+            responseObj = parsed;
+          } else {
+            responseObj = predictionRaw;
+          }
+        } catch (e) {
+          responseObj = predictionRaw;
         }
       }
 
-      textOnly = (textOnly || '').trim();
-      if (!textOnly) {
+      // Ensure we have text content for display
+      let textContent = '';
+      if (typeof responseObj === 'string') {
+        textContent = responseObj;
+      } else if (typeof responseObj === 'object' && responseObj !== null) {
+        textContent = responseObj.text || responseObj.answer || responseObj.response || 
+          Object.values(responseObj).find((v) => typeof v === 'string') || '';
+      }
+
+      textContent = (textContent || '').trim();
+      if (!textContent && !responseObj?.sent_from_csv) {
         throw new Error('No text content available in AI response');
       }
 
-      console.log('AI Answer:', textOnly);
-      setAiResponse(textOnly);
+      // Store full object if it has sent_from_csv, otherwise store as string
+      const finalResponse = typeof responseObj === 'object' && responseObj !== null 
+        ? responseObj 
+        : textContent;
+      
+      console.log('AI Response Object:', finalResponse);
+      setAiResponse(finalResponse);
       socketRef.current?.emit('shared-ai-result', {
-        response: textOnly,
+        response: finalResponse,
         username: user.username,
       });
 
@@ -751,6 +767,7 @@ const Meeting = () => {
   }, [roomId, user]);
 
   const handleSharedAIResult = useCallback(({ response, username }) => {
+    // Preserve object structure if it has sent_from_csv
     setAiResponse(response);
     toast.info(`${username} shared an AI result`, { position: 'bottom-center' });
   }, []);
@@ -1002,7 +1019,18 @@ const Meeting = () => {
 
             if (sessionData?.chatMessages) setMessages(sessionData.chatMessages);
             if (sessionData?.aiState) {
-              setAiResponse(sessionData.aiState.output || '');
+              // Preserve object structure if output is JSON
+              const output = sessionData.aiState.output || null;
+              if (output) {
+                try {
+                  const parsed = typeof output === 'string' ? JSON.parse(output) : output;
+                  setAiResponse(typeof parsed === 'object' && parsed !== null ? parsed : output);
+                } catch (e) {
+                  setAiResponse(output);
+                }
+              } else {
+                setAiResponse(null);
+              }
               if (sessionData.uploadedFiles) {
                 const img = sessionData.uploadedFiles.find((f) => f.type === 'image');
                 const aud = sessionData.uploadedFiles.find((f) => f.type === 'audio');
@@ -1538,6 +1566,7 @@ const Meeting = () => {
             username: p.username.replace(' (You)', '') 
           }))}
           currentUser={{ id: socketRef.current?.id, username: user.username }}
+          aiResponse={aiResponse}
         />
       )}
     </div>

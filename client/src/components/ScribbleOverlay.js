@@ -9,6 +9,7 @@ const ScribbleOverlay = ({
   onClose,
   participants = [],
   currentUser,
+  aiResponse = null, // AI response object with sent_from_csv
 }) => {
   const [image, setImage] = useState(null);
   const [pendingImage, setPendingImage] = useState(null);
@@ -31,6 +32,7 @@ const ScribbleOverlay = ({
   const undoStackRef = useRef([]);
   const animationFrameRef = useRef(null);
   const strokesBufferRef = useRef([]); // Local buffer for strokes being drawn
+  const currentStrokeRef = useRef(null); // Current stroke being drawn
 
   // Socket subscriptions
   useEffect(() => {
@@ -70,6 +72,7 @@ const ScribbleOverlay = ({
       setLockedBy(null);
       imageRef.current = null;
       clearDrawCanvas();
+      strokesBufferRef.current = [];
     };
     
     const onUserColors = (colors) => {
@@ -81,13 +84,18 @@ const ScribbleOverlay = ({
     
     const onCanUpload = ({ canUpload, message }) => {
       if (!canUpload && message) {
-        // Could show toast notification here
         console.log(message);
       }
     };
 
+    const onStroke = (stroke) => {
+      // Append individual stroke for real-time updates
+      setStrokesArray(prev => [...prev, stroke]);
+    };
+
     socket.on('scribble:image', onImage);
     socket.on('scribble:drawings', onDrawings);
+    socket.on('scribble:stroke', onStroke);
     socket.on('scribble:lock', onLock);
     socket.on('scribble:removeImage', onRemoveImage);
     socket.on('scribble:userColors', onUserColors);
@@ -99,6 +107,7 @@ const ScribbleOverlay = ({
     return () => {
       socket.off('scribble:image', onImage);
       socket.off('scribble:drawings', onDrawings);
+      socket.off('scribble:stroke', onStroke);
       socket.off('scribble:lock', onLock);
       socket.off('scribble:removeImage', onRemoveImage);
       socket.off('scribble:userColors', onUserColors);
@@ -151,15 +160,21 @@ const ScribbleOverlay = ({
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const { clientWidth, clientHeight } = canvas;
-    if (canvas.width !== clientWidth * dpr || canvas.height !== clientHeight * dpr) {
-      canvas.width = clientWidth * dpr;
-      canvas.height = clientHeight * dpr;
+    const displayWidth = clientWidth * dpr;
+    const displayHeight = clientHeight * dpr;
+    if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+      canvas.width = displayWidth;
+      canvas.height = displayHeight;
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, clientWidth, clientHeight);
     
-    // Draw all strokes from server array + local buffer
+    // Draw all strokes from server array + local buffer + current stroke
     const allStrokes = [...strokesArray, ...strokesBufferRef.current];
+    if (currentStrokeRef.current) {
+      allStrokes.push(currentStrokeRef.current);
+    }
+    
     allStrokes.forEach((s) => {
       if (s.type === 'path') {
         ctx.save();
@@ -169,11 +184,13 @@ const ScribbleOverlay = ({
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         ctx.beginPath();
-        s.points.forEach((p, idx) => {
-          if (idx === 0) ctx.moveTo(p.x, p.y);
-          else ctx.lineTo(p.x, p.y);
-        });
-        ctx.stroke();
+        if (s.points && s.points.length > 0) {
+          s.points.forEach((p, idx) => {
+            if (idx === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          });
+          ctx.stroke();
+        }
         ctx.restore();
       } else if (s.type === 'shape') {
         ctx.strokeStyle = s.color;
@@ -238,16 +255,18 @@ const ScribbleOverlay = ({
     }
   }, [zoom, image]);
 
-  // Replay strokes when strokesArray changes from server
-  useEffect(() => {
-    // Strokes are drawn in drawLoop, just trigger a redraw
-    // (drawLoop already reads strokesArray)
-  }, [strokesArray]);
-
   const emitDrawings = (updated) => {
     setStrokesArray(updated);
     const socket = socketRef?.current;
     if (socket) socket.emit('scribble:drawings', { roomId, data: updated });
+  };
+
+  const emitStroke = (stroke) => {
+    // Emit individual stroke for real-time sync
+    const socket = socketRef?.current;
+    if (socket) {
+      socket.emit('scribble:stroke', { roomId, stroke });
+    }
   };
 
   const handlePointerDown = (e) => {
@@ -261,27 +280,44 @@ const ScribbleOverlay = ({
 
     if (tool === 'pen' || tool === 'highlighter') {
       const stroke = { 
+        id: Date.now() + Math.random(), // Unique ID
         type: 'path', 
         color: myColor, // Use server-assigned color
         width: thickness, 
         points: [{ x, y }], 
-        alpha: tool === 'highlighter' ? 0.35 : 1 
+        alpha: tool === 'highlighter' ? 0.35 : 1,
+        userId: currentUser?.id
       };
+      currentStrokeRef.current = stroke;
+      // Add to local buffer for immediate rendering
       strokesBufferRef.current.push(stroke);
       emitDrawings([...strokesArray, stroke]);
+      emitStroke(stroke);
     } else if (tool === 'eraser') {
       // Eraser: remove last stroke
       const updated = strokesArray.slice(0, -1);
-      undoStackRef.current.push(strokesArray[strokesArray.length - 1]);
-      emitDrawings(updated);
-      redoStackRef.current = [];
+      if (updated.length < strokesArray.length) {
+        undoStackRef.current.push(strokesArray[strokesArray.length - 1]);
+        emitDrawings(updated);
+        redoStackRef.current = [];
+      }
     } else if (['rect','circle','arrow','line'].includes(tool)) {
       previewRef.current = { shape: tool, color: myColor, width: thickness, x, y, x1:x, y1:y };
     } else if (tool === 'text') {
       const text = window.prompt('Enter text');
       if (text && text.trim()) {
-        const stroke = { type: 'text', text, x, y, color: myColor, size: Math.max(14, thickness * 3) };
+        const stroke = { 
+          id: Date.now() + Math.random(),
+          type: 'text', 
+          text, 
+          x, 
+          y, 
+          color: myColor, 
+          size: Math.max(14, thickness * 3),
+          userId: currentUser?.id
+        };
         emitDrawings([...strokesArray, stroke]);
+        emitStroke(stroke);
         redoStackRef.current = [];
       }
     }
@@ -295,16 +331,21 @@ const ScribbleOverlay = ({
     const y = e.clientY - rect.top;
     
     if (tool === 'pen' || tool === 'highlighter') {
-      const updated = [...strokesArray];
-      const last = updated[updated.length - 1];
-      if (last && last.type === 'path') {
-        last.points.push({ x, y });
-        // Update local buffer
-        const bufferLast = strokesBufferRef.current[strokesBufferRef.current.length - 1];
-        if (bufferLast && bufferLast.type === 'path') {
-          bufferLast.points.push({ x, y });
+      // Update current stroke
+      if (currentStrokeRef.current && currentStrokeRef.current.type === 'path') {
+        currentStrokeRef.current.points.push({ x, y });
+        // Update in buffer too
+        const bufferStroke = strokesBufferRef.current[strokesBufferRef.current.length - 1];
+        if (bufferStroke && bufferStroke.id === currentStrokeRef.current.id) {
+          bufferStroke.points.push({ x, y });
         }
-        emitDrawings(updated);
+        // Update in strokesArray for persistence
+        const updated = [...strokesArray];
+        const last = updated[updated.length - 1];
+        if (last && last.id === currentStrokeRef.current.id) {
+          last.points.push({ x, y });
+          emitDrawings(updated);
+        }
       }
     } else if (['rect','circle','arrow','line'].includes(tool)) {
       const p = previewRef.current;
@@ -324,16 +365,47 @@ const ScribbleOverlay = ({
   const handlePointerUp = () => {
     setIsDrawing(false);
     lastPointRef.current = null;
-    // Clear local buffer (stroke is now in strokesArray)
-    strokesBufferRef.current = [];
+    
+    // Finalize current stroke
+    if (currentStrokeRef.current) {
+      // Stroke is already in strokesArray, just clear current ref
+      currentStrokeRef.current = null;
+      // Clear buffer after a short delay to ensure rendering
+      setTimeout(() => {
+        strokesBufferRef.current = [];
+      }, 100);
+    }
     
     if (previewRef.current) {
       const p = previewRef.current;
       previewRef.current = null;
-      if (p.shape === 'rect') emitDrawings([...strokesArray, { type:'shape', shape:'rect', x:p.x, y:p.y, w:p.w, h:p.h, color: myColor, width: thickness }]);
-      if (p.shape === 'circle') emitDrawings([...strokesArray, { type:'shape', shape:'circle', cx:p.cx, cy:p.cy, r:p.r, color: myColor, width: thickness }]);
-      if (p.shape === 'arrow') emitDrawings([...strokesArray, { type:'shape', shape:'arrow', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2, color: myColor, width: thickness }]);
-      if (p.shape === 'line') emitDrawings([...strokesArray, { type:'shape', shape:'line', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2, color: myColor, width: thickness }]);
+      const shapeStroke = {
+        id: Date.now() + Math.random(),
+        type: 'shape',
+        shape: p.shape,
+        color: myColor,
+        width: thickness,
+        userId: currentUser?.id
+      };
+      
+      if (p.shape === 'rect') {
+        shapeStroke.x = p.x;
+        shapeStroke.y = p.y;
+        shapeStroke.w = p.w;
+        shapeStroke.h = p.h;
+      } else if (p.shape === 'circle') {
+        shapeStroke.cx = p.cx;
+        shapeStroke.cy = p.cy;
+        shapeStroke.r = p.r;
+      } else if (p.shape === 'arrow' || p.shape === 'line') {
+        shapeStroke.x1 = p.x1;
+        shapeStroke.y1 = p.y1;
+        shapeStroke.x2 = p.x2;
+        shapeStroke.y2 = p.y2;
+      }
+      
+      emitDrawings([...strokesArray, shapeStroke]);
+      emitStroke(shapeStroke);
       redoStackRef.current = [];
     }
   };
@@ -348,7 +420,6 @@ const ScribbleOverlay = ({
 
   const confirmImage = () => {
     if (uploadLocked && lockedBy && lockedBy !== currentUser?.id) {
-      // Could show toast: "Image locked by another user"
       return;
     }
     const img = pendingImage;
@@ -358,6 +429,7 @@ const ScribbleOverlay = ({
     if (socket) socket.emit('scribble:image', { roomId, img });
     // New image clears drawings
     emitDrawings([]);
+    strokesBufferRef.current = [];
   };
 
   const removeConfirmedImage = () => {
@@ -366,6 +438,10 @@ const ScribbleOverlay = ({
     }
     const socket = socketRef?.current;
     if (socket) socket.emit('scribble:removeImage', { roomId });
+    // Clear local state
+    setImage(null);
+    setStrokesArray([]);
+    strokesBufferRef.current = [];
   };
 
   const handleColorChange = (newColor) => {
@@ -431,6 +507,16 @@ const ScribbleOverlay = ({
     return participant?.username || 'Another user';
   };
 
+  // Extract AI question and answer
+  const aiQuestion = aiResponse && typeof aiResponse === 'object' && aiResponse.sent_from_csv 
+    ? aiResponse.sent_from_csv 
+    : null;
+  const aiAnswer = aiResponse 
+    ? (typeof aiResponse === 'string' 
+        ? aiResponse 
+        : (aiResponse.prediction || aiResponse.answer || aiResponse.response || JSON.stringify(aiResponse)))
+    : null;
+
   return (
     <div className="scribble-root">
       <div className="scribble-backdrop" />
@@ -450,15 +536,27 @@ const ScribbleOverlay = ({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         />
+        
+        {/* AI Q&A Display */}
+        {image && (aiQuestion || aiAnswer) && (
+          <div className="ai-qa-container">
+            {aiQuestion && (
+              <div className="ai-question">{aiQuestion}</div>
+            )}
+            {aiAnswer && (
+              <div className="ai-answer">{aiAnswer}</div>
+            )}
+          </div>
+        )}
       </div>
       <button className="scribble-close" onClick={onClose} title="Close Scribble">×</button>
 
       {!image && (
         <motion.div
           className="scribble-modal"
-          initial={{ opacity: 0, scale: 0.8, y: -50 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.55, ease: [0.2, 0.9, 0.2, 1] }}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
         >
           <button 
             className="scribble-modal-close"
@@ -484,12 +582,12 @@ const ScribbleOverlay = ({
           </div>
           {pendingImage && (
             <div className="scribble-actions">
-              <button onClick={() => setPendingImage(null)}>Cancel</button>
+              <button onClick={() => setPendingImage(null)}>🗑️ Remove</button>
               <button 
                 disabled={uploadLocked && lockedBy && lockedBy !== currentUser?.id} 
                 onClick={confirmImage}
               >
-                Confirm
+                ✅ Confirm
               </button>
             </div>
           )}
@@ -538,7 +636,7 @@ const ScribbleOverlay = ({
               <span className="dot" style={{ backgroundColor: myColor }} />
             </div>
             {lockedBy === currentUser?.id && (
-              <button className="tool" onClick={removeConfirmedImage} title="Remove Image"><FiTrash2 /></button>
+              <button className="tool" onClick={removeConfirmedImage} title="Remove Image">🗑️</button>
             )}
           </div>
         </motion.div>
@@ -551,7 +649,7 @@ const ScribbleOverlay = ({
           if (!participant) return null;
           return (
             <div key={socketId} className="scribble-legend-item">
-              <span className="scribble-legend-dot" style={{ backgroundColor: color }} />
+              <span className="scribble-legend-dot" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}` }} />
               <span>{participant.username}</span>
             </div>
           );

@@ -168,7 +168,11 @@ const AIPopup = ({
                   )}
                   
                   <div className="pro-ai-response-text">
-                    <strong>AI Answer:</strong> {aiResponse}
+                    <strong>AI Answer:</strong> {
+                      typeof aiResponse === 'object' && aiResponse !== null
+                        ? (aiResponse.text || aiResponse.answer || aiResponse.response || JSON.stringify(aiResponse))
+                        : aiResponse
+                    }
                   </div>
 
                   {currentAIUser === user.username && (

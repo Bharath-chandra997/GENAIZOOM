@@ -56,8 +56,23 @@ const ScribbleOverlay = ({
     };
     
     const onDrawings = (data) => {
-      if (Array.isArray(data)) {
-        setStrokesArray(data);
+      if (Array.isArray(data) && data.length > 0) {
+        // When receiving full state, merge with existing strokes to avoid duplicates
+        setStrokesArray(prev => {
+          // Create a map of existing stroke IDs to avoid duplicates
+          const existingIds = new Set(prev.map(s => s.id));
+          const newStrokes = data.filter(s => !existingIds.has(s.id));
+          // Merge and maintain order
+          return [...prev, ...newStrokes];
+        });
+        // Also update local buffer for persistence
+        strokesBufferRef.current = [...strokesBufferRef.current, ...data.filter(s => 
+          !strokesBufferRef.current.some(existing => existing.id === s.id)
+        )];
+      } else if (Array.isArray(data) && data.length === 0) {
+        // Empty array means clear (only happens when new image uploaded)
+        setStrokesArray([]);
+        strokesBufferRef.current = [];
       }
     };
     
@@ -170,9 +185,12 @@ const ScribbleOverlay = ({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, clientWidth, clientHeight);
     
-    // Draw all strokes from server array + local buffer + current stroke
-    const allStrokes = [...strokesArray, ...strokesBufferRef.current];
-    if (currentStrokeRef.current) {
+    // Draw all persisted strokes from strokesArray (server-synced)
+    // strokesBufferRef is for temporary strokes during drawing, but they should already be in strokesArray
+    // Only draw currentStrokeRef if it's actively being drawn
+    const allStrokes = [...strokesArray];
+    if (currentStrokeRef.current && isDrawing) {
+      // Include current stroke being drawn for real-time preview
       allStrokes.push(currentStrokeRef.current);
     }
     
@@ -371,10 +389,8 @@ const ScribbleOverlay = ({
     if (currentStrokeRef.current) {
       // Stroke is already in strokesArray, just clear current ref
       currentStrokeRef.current = null;
-      // Clear buffer after a short delay to ensure rendering
-      setTimeout(() => {
-        strokesBufferRef.current = [];
-      }, 100);
+      // Don't clear strokesBufferRef - keep it for persistence
+      // Only clear temporary drawing buffer for the current active stroke
     }
     
     if (previewRef.current) {
@@ -428,9 +444,8 @@ const ScribbleOverlay = ({
     setImage(img);
     const socket = socketRef?.current;
     if (socket) socket.emit('scribble:image', { roomId, img });
-    // New image clears drawings
-    emitDrawings([]);
-    strokesBufferRef.current = [];
+    // Server will clear drawings when new image is confirmed
+    // Don't clear here - let server handle it via scribble:drawings event
   };
 
   const removeConfirmedImage = () => {
@@ -439,10 +454,8 @@ const ScribbleOverlay = ({
     }
     const socket = socketRef?.current;
     if (socket) socket.emit('scribble:removeImage', { roomId });
-    // Clear local state
-    setImage(null);
-    setStrokesArray([]);
-    strokesBufferRef.current = [];
+    // Server will clear state when image is removed
+    // Keep strokes array - only clear when server tells us
   };
 
   const handleColorChange = (newColor) => {
@@ -531,17 +544,6 @@ const ScribbleOverlay = ({
           onPointerUp={handlePointerUp}
         />
         
-        {/* AI Q&A Display */}
-        {image && (aiQuestion || aiAnswer) && (
-          <div className="ai-qa-container">
-            {aiQuestion && (
-              <div className="ai-question">{aiQuestion}</div>
-            )}
-            {aiAnswer && (
-              <div className="ai-answer">{aiAnswer}</div>
-            )}
-          </div>
-        )}
       </div>
       <button className="scribble-close" onClick={onClose} title="Close Scribble">×</button>
 

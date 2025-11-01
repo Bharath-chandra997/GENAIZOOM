@@ -700,8 +700,15 @@ io.on('connection', (socket) => {
   socket.on('scribble:request-state', ({ roomId }) => {
     if (!roomId) return;
     const state = getScribbleState(roomId);
-    socket.emit('scribble:image', state.image);
-    socket.emit('scribble:drawings', state.drawings);
+    // Send image first
+    if (state.image) {
+      socket.emit('scribble:image', state.image);
+    }
+    // Send all persisted strokes (drawings array)
+    if (state.drawings && Array.isArray(state.drawings) && state.drawings.length > 0) {
+      // Send all strokes at once for initial sync
+      socket.emit('scribble:drawings', state.drawings);
+    }
     socket.emit('scribble:lock', { locked: !!state.uploadLockedBy, by: state.uploadLockedBy || null });
     socket.emit('scribble:userColors', state.userColors);
     socket.emit('scribble:canUpload', { canUpload: !state.uploadLockedBy || state.uploadLockedBy === socket.id });
@@ -717,13 +724,20 @@ io.on('connection', (socket) => {
     const next = { 
       ...state,
       image: img || null, 
-      drawings: [], 
-      uploadLockedBy: socket.id 
+      drawings: img ? [] : state.drawings, // Only clear drawings if new image is being uploaded
+      uploadLockedBy: img ? socket.id : null // Lock only when confirming image
     };
     setScribbleState(roomId, next);
-    io.to(roomId).emit('scribble:image', img || null);
-    io.to(roomId).emit('scribble:drawings', []);
-    io.to(roomId).emit('scribble:lock', { locked: true, by: socket.id });
+    if (img) {
+      io.to(roomId).emit('scribble:image', img);
+      // Only clear drawings if new image confirmed
+      io.to(roomId).emit('scribble:drawings', []);
+      io.to(roomId).emit('scribble:lock', { locked: true, by: socket.id });
+    } else {
+      // Just unlock without clearing
+      io.to(roomId).emit('scribble:image', null);
+      io.to(roomId).emit('scribble:lock', { locked: false, by: null });
+    }
   });
 
   socket.on('scribble:drawings', ({ roomId, data }) => {

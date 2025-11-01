@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { safeAIText } from '../utils/aiResponseHelpers';
+import { extractAIQuestionAndAnswer } from '../utils/aiResponseHelpers';
 import './MeetingMainArea.css';
 
 const MeetingMainArea = ({
@@ -152,7 +152,7 @@ const MeetingMainArea = ({
               <canvas ref={aiCanvasRef} className="pro-ai-canvas" />
               
               {/* Content Display when processing */}
-              {(aiUploadedImage || aiUploadedAudio || aiResponse) && (
+              {(aiUploadedImage || aiUploadedAudio) && (
                 <div className="pro-ai-content-display">
                   <button
                     className="pro-ai-reset-btn"
@@ -170,13 +170,25 @@ const MeetingMainArea = ({
                   {aiUploadedAudio && (
                     <audio controls src={aiUploadedAudio} className="pro-ai-uploaded-audio" />
                   )}
-                  {aiResponse && (
-                    <div className="pro-ai-response-display">
-                      <span style={{fontWeight:'700'}}>AI Answer:</span> {safeAIText(aiResponse)}
-                    </div>
-                  )}
                 </div>
               )}
+              
+              {/* AI Q&A Overlay on video frame */}
+              {aiResponse && (() => {
+                const { question, answer } = extractAIQuestionAndAnswer(aiResponse);
+                if (!question && !answer) return null;
+                
+                return (
+                  <div className="ai-response-overlay">
+                    {question && (
+                      <div className="ai-question">{question}</div>
+                    )}
+                    {answer && (
+                      <div className="ai-answer">{answer}</div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <div className="pro-video-placeholder">

@@ -261,6 +261,37 @@
   z-index: 0;
 }
 
+/* AI Response Overlay on Video Frame */
+.ai-response-overlay {
+  position: absolute;
+  bottom: 5%;
+  left: 5%;
+  right: 5%;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(6px);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: #000;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  z-index: 10;
+  max-width: 80%;
+  text-align: left;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.ai-response-overlay .ai-question {
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-bottom: 6px;
+  color: #000;
+}
+
+.ai-response-overlay .ai-answer {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #000;
+}
+
 .pro-ai-content-display {
   position: absolute;
   top: 0;

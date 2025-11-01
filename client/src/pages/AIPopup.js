@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { toast } from 'react-toastify';
+import { safeAIText } from '../utils/aiResponseHelpers';
 import './AIPopup.css';
 
 const AIPopup = ({ 
@@ -168,11 +169,7 @@ const AIPopup = ({
                   )}
                   
                   <div className="pro-ai-response-text">
-                    <strong>AI Answer:</strong> {
-                      typeof aiResponse === 'object' && aiResponse !== null
-                        ? (aiResponse.text || aiResponse.answer || aiResponse.response || JSON.stringify(aiResponse))
-                        : aiResponse
-                    }
+                    <strong>AI Answer:</strong> {safeAIText(aiResponse)}
                   </div>
 
                   {currentAIUser === user.username && (

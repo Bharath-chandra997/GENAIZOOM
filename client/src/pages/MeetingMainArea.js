@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { safeAIText } from '../utils/aiResponseHelpers';
 import './MeetingMainArea.css';
 
 const MeetingMainArea = ({
@@ -170,7 +171,9 @@ const MeetingMainArea = ({
                     <audio controls src={aiUploadedAudio} className="pro-ai-uploaded-audio" />
                   )}
                   {aiResponse && (
-                    <div className="pro-ai-response-display"><span style={{fontWeight:'700'}}>AI Answer:</span> {aiResponse}</div>
+                    <div className="pro-ai-response-display">
+                      <span style={{fontWeight:'700'}}>AI Answer:</span> {safeAIText(aiResponse)}
+                    </div>
                   )}
                 </div>
               )}

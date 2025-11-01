@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { FiX, FiEdit3, FiRotateCcw, FiRotateCw, FiTrash2, FiMinusCircle, FiSquare, FiCircle, FiArrowUpRight, FiZoomIn, FiMove } from 'react-icons/fi';
+import { extractAIQuestionAndAnswer } from '../utils/aiResponseHelpers';
 import './ScribbleOverlay.css';
 
 const ScribbleOverlay = ({
@@ -507,29 +508,8 @@ const ScribbleOverlay = ({
     return participant?.username || 'Another user';
   };
 
-  // Extract AI question and answer - ensure they're always strings
-  const extractString = (value) => {
-    if (!value) return null;
-    if (typeof value === 'string') return value;
-    if (typeof value === 'object') {
-      // If object has text property, use it; otherwise stringify
-      if (typeof value.text === 'string') return value.text;
-      if (typeof value.answer === 'string') return value.answer;
-      if (typeof value.response === 'string') return value.response;
-      return JSON.stringify(value);
-    }
-    return String(value);
-  };
-
-  const aiQuestion = aiResponse && typeof aiResponse === 'object' && aiResponse.sent_from_csv 
-    ? extractString(aiResponse.sent_from_csv)
-    : null;
-  
-  const aiAnswer = aiResponse 
-    ? (typeof aiResponse === 'string' 
-        ? aiResponse 
-        : extractString(aiResponse.prediction || aiResponse.answer || aiResponse.response || aiResponse))
-    : null;
+  // Extract AI question and answer using helper utilities
+  const { question: aiQuestion, answer: aiAnswer } = extractAIQuestionAndAnswer(aiResponse);
 
   return (
     <div className="scribble-root">

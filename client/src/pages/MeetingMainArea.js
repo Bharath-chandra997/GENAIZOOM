@@ -34,6 +34,8 @@ const MeetingMainArea = ({
   onUnpinParticipant,
   onAIReset,
   drawingCanvasComponent,
+  isAIProcessingLayout,
+  onRevertAILayout,
 }) => {
   const [localPinnedParticipant, setLocalPinnedParticipant] = useState(pinnedParticipantId);
   const annotationCanvasRef = useRef(null);
@@ -140,59 +142,82 @@ const MeetingMainArea = ({
             />
           ) : isAI ? (
             <div className="pro-ai-visualization">
-              {/* AI Logo/Avatar Display */}
-              <div className="pro-ai-logo-container">
-                <AIAvatar size={120} />
-                <div className="pro-ai-ready-text">
-                  Ready to help
+              {/* Wrong Button - Top Right Corner */}
+              {isAIProcessingLayout && (
+                <button
+                  className="pro-ai-wrong-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRevertAILayout && onRevertAILayout();
+                  }}
+                  title="Revert to previous layout"
+                >
+                  Wrong
+                </button>
+              )}
+              
+              {/* Processing Layout: Show uploaded files directly */}
+              {isAIProcessingLayout && !aiResponse && (aiUploadedImage || aiUploadedAudio) ? (
+                <div className="pro-ai-processing-layout">
+                  {aiUploadedImage && (
+                    <div className="pro-ai-uploaded-media-container">
+                      <img src={aiUploadedImage} alt="Uploaded image" className="pro-ai-uploaded-image-full" />
+                    </div>
+                  )}
+                  {aiUploadedAudio && (
+                    <div className="pro-ai-uploaded-audio-container">
+                      <audio controls src={aiUploadedAudio} className="pro-ai-uploaded-audio-full" />
+                    </div>
+                  )}
                 </div>
-              </div>
-              
-              {/* Canvas for animations */}
-              <canvas ref={aiCanvasRef} className="pro-ai-canvas" />
-              
-              {/* AI Overlay: Question → Image → Audio → Response (strict order) */}
-              {(aiResponse || aiUploadedImage || aiUploadedAudio) && (() => {
-                const { question, answer } = extractAIQuestionAndAnswer(aiResponse);
-                const hasContent = question || answer || aiUploadedImage || aiUploadedAudio;
-                if (!hasContent) return null;
-                
-                return (
-                  <div className="ai-overlay">
-                    {/* 1. Question */}
-                    {question && (
-                      <div className="ai-question">{question}</div>
-                    )}
-                    
-                    {/* 2. Image */}
-                    {aiUploadedImage && (
-                      <div className="pro-ai-content-display">
-                        <button
-                          className="pro-ai-reset-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAIReset && onAIReset();
-                          }}
-                          title="Clear AI results"
-                        >
-                          ×
-                        </button>
-                        <img src={aiUploadedImage} alt="AI processed content" className="pro-ai-uploaded-image" />
-                      </div>
-                    )}
-                    
-                    {/* 3. Audio */}
-                    {aiUploadedAudio && (
-                      <audio controls src={aiUploadedAudio} className="ai-audio" />
-                    )}
-                    
-                    {/* 4. Response */}
-                    {answer && (
-                      <div className="ai-answer">{answer}</div>
-                    )}
+              ) : isAIProcessingLayout && aiResponse ? (
+                /* Response Layout: Question → Image → Answer */
+                (() => {
+                  const { question, answer } = extractAIQuestionAndAnswer(aiResponse);
+                  return (
+                    <div className="pro-ai-response-layout">
+                      {/* Question above image */}
+                      {question && (
+                        <div className="pro-ai-question-text">{question}</div>
+                      )}
+                      
+                      {/* Image in center */}
+                      {aiUploadedImage && (
+                        <div className="pro-ai-response-image-container">
+                          <img src={aiUploadedImage} alt="AI processed content" className="pro-ai-response-image" />
+                        </div>
+                      )}
+                      
+                      {/* Audio if present */}
+                      {aiUploadedAudio && !aiUploadedImage && (
+                        <div className="pro-ai-response-audio-container">
+                          <audio controls src={aiUploadedAudio} className="pro-ai-response-audio" />
+                        </div>
+                      )}
+                      
+                      {/* Answer below image */}
+                      {answer && (
+                        <div className="pro-ai-answer-text">
+                          <span className="pro-ai-answer-label">AI Response:</span> {answer}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              ) : (
+                /* Default Layout: AI Logo/Avatar Display */
+                <>
+                  <div className="pro-ai-logo-container">
+                    <AIAvatar size={120} />
+                    <div className="pro-ai-ready-text">
+                      Ready to help
+                    </div>
                   </div>
-                );
-              })()}
+                  
+                  {/* Canvas for animations */}
+                  <canvas ref={aiCanvasRef} className="pro-ai-canvas" />
+                </>
+              )}
             </div>
           ) : (
             <div className="pro-video-placeholder">

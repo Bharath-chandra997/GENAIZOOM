@@ -130,6 +130,7 @@ const Meeting = () => {
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [isAIProcessingLayout, setIsAIProcessingLayout] = useState(false); // Track when processing layout is active
   
   // Drawing state
   const [isDrawingVisible, setIsDrawingVisible] = useState(false);
@@ -611,6 +612,7 @@ const Meeting = () => {
       });
       setAiUploadedImage(imageUrl);
       setAiUploadedAudio(audioUrl);
+      setIsAIProcessingLayout(true); // Activate processing layout when files are uploaded
 
       // Send to /predict endpoint
       const formData = new FormData();
@@ -667,6 +669,7 @@ const Meeting = () => {
       
       console.log('AI Response Object:', finalResponse);
       setAiResponse(finalResponse);
+      setIsAIProcessingLayout(true); // Activate processing layout when response is received
       socketRef.current?.emit('shared-ai-result', {
         response: finalResponse,
         username: user.username,
@@ -748,6 +751,7 @@ const Meeting = () => {
     setAiResponse('');
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
+    setIsAIProcessingLayout(false); // Revert to default layout
     socketRef.current?.emit('shared-media-removal', { username: user.username });
 
     try {
@@ -769,17 +773,20 @@ const Meeting = () => {
   const handleSharedAIResult = useCallback(({ response, username }) => {
     // Preserve object structure if it has sent_from_csv
     setAiResponse(response);
+    setIsAIProcessingLayout(true); // Activate processing layout when response is shared
     toast.info(`${username} shared an AI result`, { position: 'bottom-center' });
   }, []);
 
   const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username }) => {
     if (imageUrl) setAiUploadedImage(imageUrl);
     if (audioUrl) setAiUploadedAudio(audioUrl);
+    setIsAIProcessingLayout(true); // Activate processing layout when media is shared
   }, []);
 
   const handleSharedMediaRemoval = useCallback(() => {
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
+    setIsAIProcessingLayout(false); // Revert to default layout when media is removed
   }, []);
 
   const getIceServers = useCallback(async () => {
@@ -1425,8 +1432,11 @@ const Meeting = () => {
               setAiResponse('');
               setAiUploadedImage(null);
               setAiUploadedAudio(null);
+              setIsAIProcessingLayout(false); // Revert to default layout
               socketRef.current?.emit('shared-media-removal', { username: user.username });
             }}
+            isAIProcessingLayout={isAIProcessingLayout}
+            onRevertAILayout={() => setIsAIProcessingLayout(false)}
             drawingCanvasComponent={
               isSomeoneScreenSharing && isDrawingVisible && !isCurrentUserSharer ? (
                 <DrawingCanvas

@@ -225,6 +225,7 @@
   overflow: hidden;
   background: #ffffff;
   border-radius: 8px;
+  transition: all 0.3s ease;
 }
 
 .pro-ai-logo-container {
@@ -259,6 +260,173 @@
   top: 0;
   left: 0;
   z-index: 0;
+}
+
+/* Wrong Button - Top Right Corner */
+.pro-ai-wrong-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+  background: rgba(239, 68, 68, 0.9);
+  color: #ffffff;
+  border: 2px solid rgba(239, 68, 68, 1);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.pro-ai-wrong-btn:hover {
+  background: rgba(239, 68, 68, 1);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  transform: translateY(-1px);
+}
+
+.pro-ai-wrong-btn:active {
+  transform: translateY(0);
+}
+
+/* Processing Layout - Show uploaded files directly */
+.pro-ai-processing-layout {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  gap: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.pro-ai-uploaded-media-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.pro-ai-uploaded-image-full {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.pro-ai-uploaded-audio-container {
+  width: 90%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pro-ai-uploaded-audio-full {
+  width: 100%;
+  border-radius: 8px;
+}
+
+/* Response Layout - Question → Image → Answer */
+.pro-ai-response-layout {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.95); /* Dark background for white text visibility */
+  border-radius: 8px;
+}
+
+.pro-ai-response-layout::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%);
+  border-radius: 8px;
+  z-index: -1;
+}
+
+/* Question Text - White, no background, centered above image */
+.pro-ai-question-text {
+  color: #ffffff;
+  font-size: 1.2rem;
+  font-weight: 600;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  padding: 0 20px;
+  width: 100%;
+  margin-bottom: 8px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  background: none;
+}
+
+/* Response Image Container */
+.pro-ai-response-image-container {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  margin: 8px 0;
+}
+
+.pro-ai-response-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Response Audio Container */
+.pro-ai-response-audio-container {
+  width: 90%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 8px 0;
+}
+
+.pro-ai-response-audio {
+  width: 100%;
+  border-radius: 8px;
+}
+
+/* Answer Text - White, no background, below image */
+.pro-ai-answer-text {
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 400;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  padding: 0 20px;
+  width: 100%;
+  margin-top: 8px;
+  line-height: 1.6;
+  word-wrap: break-word;
+  background: none;
+}
+
+.pro-ai-answer-label {
+  font-weight: 600;
+  margin-right: 8px;
 }
 
 /* AI Overlay on Video Frame - White text, no background */

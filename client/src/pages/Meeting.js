@@ -1389,7 +1389,7 @@ const Meeting = () => {
         }}
       />
 
-      <div className="pro-meeting-body">
+      <div className={`pro-meeting-body ${scribbleActive ? 'scribble-blurred' : ''}`}>
         <div className={`pro-mainarea-container ${isChatOpen ? 'with-chat-sidebar' : ''}`}>
           <MeetingMainArea
             participants={displayParticipants}

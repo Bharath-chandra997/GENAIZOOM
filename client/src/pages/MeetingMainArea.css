@@ -262,6 +262,7 @@
 }
 
 /* AI Overlay on Video Frame - White text, no background */
+/* Order: Question → Image → Audio → Response */
 .ai-overlay {
   position: absolute;
   top: 5%;
@@ -273,21 +274,30 @@
   color: #fff;
   z-index: 10;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-.ai-overlay .ai-audio {
-  margin-bottom: 12px;
-  width: 80%;
-  align-self: flex-start;
-  border-radius: 8px;
+  gap: 12px;
 }
 
 .ai-overlay .ai-question {
   font-weight: 600;
   font-size: 1.2rem;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   color: #fff;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  width: 100%;
+}
+
+.ai-overlay .pro-ai-content-display {
+  position: relative;
+  width: 100%;
+  max-width: 90%;
+  margin: 0;
+}
+
+.ai-overlay .ai-audio {
+  width: 80%;
+  align-self: flex-start;
+  border-radius: 8px;
+  margin: 0;
 }
 
 .ai-overlay .ai-answer {
@@ -295,6 +305,7 @@
   line-height: 1.6;
   color: #fff;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  width: 100%;
 }
 
 .pro-ai-content-display {

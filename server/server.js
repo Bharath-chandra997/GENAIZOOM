@@ -759,6 +759,7 @@ io.on('connection', (socket) => {
     // Append stroke to existing array
     state.drawings.push(stroke);
     setScribbleState(roomId, state);
+    // Broadcast to all other clients instantly
     socket.to(roomId).emit('scribble:stroke', stroke);
   });
 

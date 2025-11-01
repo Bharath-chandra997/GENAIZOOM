@@ -31,6 +31,17 @@
   display: flex;
   min-height: 0;
   position: relative;
+  transition: filter 0.3s ease;
+}
+
+/* Blur only the meeting body when Scribble is active */
+.pro-meeting-body.scribble-blurred {
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.pro-meeting-body.scribble-blurred * {
+  pointer-events: none;
 }
 
 /* Popup Sidebar Overlay */

@@ -281,9 +281,12 @@ const ScribbleOverlay = ({
   };
 
   const emitStroke = (stroke) => {
-    // Emit individual stroke for real-time sync
+    // Emit individual stroke for instant real-time sync
     const socket = socketRef?.current;
     if (socket) {
+      // Add to local array immediately for instant visibility (before server roundtrip)
+      // The onStroke handler will filter out duplicates if server echoes back
+      setStrokesArray(prev => [...prev, stroke]);
       socket.emit('scribble:stroke', { roomId, stroke });
     }
   };
@@ -308,9 +311,9 @@ const ScribbleOverlay = ({
         userId: currentUser?.id
       };
       currentStrokeRef.current = stroke;
-      // Add to local buffer for immediate rendering
-      strokesBufferRef.current.push(stroke);
-      emitDrawings([...strokesArray, stroke]);
+      // Add to local array immediately for instant visibility
+      setStrokesArray(prev => [...prev, stroke]);
+      // Emit to server for real-time sync
       emitStroke(stroke);
     } else if (tool === 'eraser') {
       // Eraser: remove last stroke

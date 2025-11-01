@@ -151,37 +151,42 @@ const MeetingMainArea = ({
               {/* Canvas for animations */}
               <canvas ref={aiCanvasRef} className="pro-ai-canvas" />
               
-              {/* Content Display when processing */}
-              {aiUploadedImage && (
-                <div className="pro-ai-content-display">
-                  <button
-                    className="pro-ai-reset-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAIReset && onAIReset();
-                    }}
-                    title="Clear AI results"
-                  >
-                    ×
-                  </button>
-                  <img src={aiUploadedImage} alt="AI processed content" className="pro-ai-uploaded-image" />
-                </div>
-              )}
-              
-              {/* AI Q&A + Audio Overlay on video frame */}
-              {aiResponse && (() => {
+              {/* AI Overlay: Question → Image → Audio → Response (strict order) */}
+              {(aiResponse || aiUploadedImage || aiUploadedAudio) && (() => {
                 const { question, answer } = extractAIQuestionAndAnswer(aiResponse);
-                const hasContent = question || answer || aiUploadedAudio;
+                const hasContent = question || answer || aiUploadedImage || aiUploadedAudio;
                 if (!hasContent) return null;
                 
                 return (
                   <div className="ai-overlay">
-                    {aiUploadedAudio && (
-                      <audio controls src={aiUploadedAudio} className="ai-audio" />
-                    )}
+                    {/* 1. Question */}
                     {question && (
                       <div className="ai-question">{question}</div>
                     )}
+                    
+                    {/* 2. Image */}
+                    {aiUploadedImage && (
+                      <div className="pro-ai-content-display">
+                        <button
+                          className="pro-ai-reset-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAIReset && onAIReset();
+                          }}
+                          title="Clear AI results"
+                        >
+                          ×
+                        </button>
+                        <img src={aiUploadedImage} alt="AI processed content" className="pro-ai-uploaded-image" />
+                      </div>
+                    )}
+                    
+                    {/* 3. Audio */}
+                    {aiUploadedAudio && (
+                      <audio controls src={aiUploadedAudio} className="ai-audio" />
+                    )}
+                    
+                    {/* 4. Response */}
                     {answer && (
                       <div className="ai-answer">{answer}</div>
                     )}

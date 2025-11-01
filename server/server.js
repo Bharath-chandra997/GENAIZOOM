@@ -554,9 +554,23 @@ io.on('connection', (socket) => {
   const { username, userId, profilePicture } = socket.user;
   info(`Socket connected: ${socket.id} for user ${username} (${userId})`);
 
-  // Scribble state per room (in-memory)
+  // Scribble state per room (in-memory) with userColors, uploadLockedBy
   if (!global.__scribbleStateByRoom) global.__scribbleStateByRoom = new Map();
-  const getScribbleState = (roomId) => global.__scribbleStateByRoom.get(roomId) || { image: null, drawings: [] };
+  const generateColorForUser = (socketId) => {
+    // Generate a consistent color based on socketId hash
+    let hash = 0;
+    for (let i = 0; i < socketId.length; i++) {
+      hash = socketId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 90%, 60%)`;
+  };
+  const getScribbleState = (roomId) => global.__scribbleStateByRoom.get(roomId) || { 
+    image: null, 
+    drawings: [], 
+    userColors: {},
+    uploadLockedBy: null 
+  };
   const setScribbleState = (roomId, state) => global.__scribbleStateByRoom.set(roomId, state);
 
   socket.on('join-room', async ({ roomId, username, isReconnect = false }, callback) => {
@@ -575,6 +589,15 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socketToRoom[socket.id] = roomId;
     socketIdToUsername[socket.id] = username;
+    
+    // Assign color for new user in Scribble
+    const scribbleState = getScribbleState(roomId);
+    if (!scribbleState.userColors[socket.id]) {
+      scribbleState.userColors[socket.id] = generateColorForUser(socket.id);
+      setScribbleState(roomId, scribbleState);
+      // Broadcast updated colors to all clients in room
+      io.to(roomId).emit('scribble:userColors', scribbleState.userColors);
+    }
     
     try {
       let session = await MeetingSession.findOne({ roomId });
@@ -679,16 +702,24 @@ io.on('connection', (socket) => {
     const state = getScribbleState(roomId);
     socket.emit('scribble:image', state.image);
     socket.emit('scribble:drawings', state.drawings);
-    socket.emit('scribble:lock', { locked: !!state.lockedBy, by: state.lockedBy || null });
+    socket.emit('scribble:lock', { locked: !!state.uploadLockedBy, by: state.uploadLockedBy || null });
+    socket.emit('scribble:userColors', state.userColors);
+    socket.emit('scribble:canUpload', { canUpload: !state.uploadLockedBy || state.uploadLockedBy === socket.id });
   });
 
   socket.on('scribble:image', ({ roomId, img }) => {
     if (!roomId) return;
     const state = getScribbleState(roomId);
-    if (state.lockedBy && state.lockedBy !== socket.id) {
+    if (state.uploadLockedBy && state.uploadLockedBy !== socket.id) {
+      socket.emit('scribble:canUpload', { canUpload: false, message: 'Image locked by another user' });
       return; // ignore if locked by someone else
     }
-    const next = { image: img || null, drawings: [], lockedBy: socket.id };
+    const next = { 
+      ...state,
+      image: img || null, 
+      drawings: [], 
+      uploadLockedBy: socket.id 
+    };
     setScribbleState(roomId, next);
     io.to(roomId).emit('scribble:image', img || null);
     io.to(roomId).emit('scribble:drawings', []);
@@ -698,7 +729,10 @@ io.on('connection', (socket) => {
   socket.on('scribble:drawings', ({ roomId, data }) => {
     if (!roomId) return;
     const state = getScribbleState(roomId);
-    const next = { image: state.image, drawings: Array.isArray(data) ? data : [], lockedBy: state.lockedBy };
+    const next = { 
+      ...state,
+      drawings: Array.isArray(data) ? data : []
+    };
     setScribbleState(roomId, next);
     socket.to(roomId).emit('scribble:drawings', next.drawings);
   });
@@ -706,13 +740,31 @@ io.on('connection', (socket) => {
   socket.on('scribble:removeImage', ({ roomId }) => {
     if (!roomId) return;
     const state = getScribbleState(roomId);
-    if (state.lockedBy && state.lockedBy !== socket.id) {
-      return; // only locker can remove
+    const roomHost = roomHosts.get(roomId);
+    // Only locker or host can remove
+    if (state.uploadLockedBy && state.uploadLockedBy !== socket.id && roomHost !== socket.id) {
+      return;
     }
-    const next = { image: null, drawings: [], lockedBy: null };
+    const next = { 
+      ...state,
+      image: null, 
+      drawings: [], 
+      uploadLockedBy: null 
+    };
     setScribbleState(roomId, next);
     io.to(roomId).emit('scribble:removeImage');
     io.to(roomId).emit('scribble:lock', { locked: false, by: null });
+  });
+  
+  // Color change handler
+  socket.on('scribble:userColorChange', ({ roomId, id, color }) => {
+    if (!roomId || !id || !color) return;
+    const state = getScribbleState(roomId);
+    if (state.userColors[id]) {
+      state.userColors[id] = color;
+      setScribbleState(roomId, state);
+      io.to(roomId).emit('scribble:userColors', state.userColors);
+    }
   });
 
   socket.on('offer', (payload) => {
@@ -1147,6 +1199,21 @@ io.on('connection', (socket) => {
     const disconnectedUser = socketIdToUsername[socket.id] || 'A user';
     const roomId = socketToRoom[socket.id];
     info(`${disconnectedUser} (${socket.id}) disconnected from room ${roomId || 'none'}`);
+    
+    // Clean up user color on disconnect
+    if (roomId) {
+      const scribbleState = getScribbleState(roomId);
+      if (scribbleState.userColors[socket.id]) {
+        delete scribbleState.userColors[socket.id];
+        // If this user locked the upload, release the lock
+        if (scribbleState.uploadLockedBy === socket.id) {
+          scribbleState.uploadLockedBy = null;
+          io.to(roomId).emit('scribble:lock', { locked: false, by: null });
+        }
+        setScribbleState(roomId, scribbleState);
+        io.to(roomId).emit('scribble:userColors', scribbleState.userColors);
+      }
+    }
     
     if (roomId) {
       try {

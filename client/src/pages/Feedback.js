@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import axios from 'axios';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Navbar from '../components/Navbar';
+import './Feedback.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
@@ -89,7 +90,7 @@ const Feedback = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+    <div className="feedback theme--dark min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <Navbar />
       <div className="py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto">

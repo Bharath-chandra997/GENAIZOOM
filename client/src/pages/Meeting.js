@@ -1533,8 +1533,10 @@ const Meeting = () => {
           socketRef={socketRef}
           roomId={roomId}
           onClose={() => setScribbleActive(false)}
-          initialColor={scribbleColor}
-          participants={participants.map(p => ({ userId: p.userId, username: p.username.replace(' (You)', ''), color: assignedColors[p.userId] }))}
+          participants={participants.map(p => ({ 
+            userId: p.socketId || p.userId, 
+            username: p.username.replace(' (You)', '') 
+          }))}
           currentUser={{ id: socketRef.current?.id, username: user.username }}
         />
       )}

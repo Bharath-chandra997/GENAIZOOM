@@ -3,47 +3,95 @@ import { motion } from 'framer-motion';
 import { FiX, FiEdit3, FiRotateCcw, FiRotateCw, FiTrash2, FiMinusCircle, FiSquare, FiCircle, FiArrowUpRight, FiZoomIn, FiMove } from 'react-icons/fi';
 import './ScribbleOverlay.css';
 
-const generateRandomColor = () => `#${Math.random().toString(16).slice(2, 8)}`;
-
 const ScribbleOverlay = ({
   socketRef,
   roomId,
   onClose,
-  initialColor,
   participants = [],
   currentUser,
 }) => {
   const [image, setImage] = useState(null);
   const [pendingImage, setPendingImage] = useState(null);
-  const [drawings, setDrawings] = useState([]);
+  const [strokesArray, setStrokesArray] = useState([]); // Server-sent strokes array
   const [tool, setTool] = useState('pen');
-  const [color, setColor] = useState(initialColor || generateRandomColor());
+  const [userColors, setUserColors] = useState({}); // Server-sent userColors mapping
+  const [myColor, setMyColor] = useState('#000000'); // Current user's color from server
   const [thickness, setThickness] = useState(4);
   const [isDrawing, setIsDrawing] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const canvasRef = useRef(null);
+  const canvasImageRef = useRef(null); // Static image layer
+  const canvasDrawRef = useRef(null); // Drawing overlay layer
   const containerRef = useRef(null);
   const lastPointRef = useRef(null);
   const [uploadLocked, setUploadLocked] = useState(false);
   const [lockedBy, setLockedBy] = useState(null);
   const imageRef = useRef(null);
-  const previewRef = useRef(null); // temporary shape/text preview state
+  const previewRef = useRef(null);
   const redoStackRef = useRef([]);
+  const undoStackRef = useRef([]);
+  const animationFrameRef = useRef(null);
+  const strokesBufferRef = useRef([]); // Local buffer for strokes being drawn
 
   // Socket subscriptions
   useEffect(() => {
     const socket = socketRef?.current;
     if (!socket) return;
 
-    const onImage = (img) => setImage(img);
-    const onDrawings = (data) => setDrawings(Array.isArray(data) ? data : []);
-    const onLock = ({ locked, by }) => { setUploadLocked(locked); setLockedBy(by || null); };
-    const onRemoveImage = () => { setImage(null); setDrawings([]); setUploadLocked(false); setLockedBy(null); };
+    const onImage = (img) => {
+      setImage(img);
+      if (img) {
+        const imgEl = new Image();
+        imgEl.onload = () => {
+          imageRef.current = imgEl;
+          drawImageToCanvas();
+        };
+        imgEl.src = img;
+      } else {
+        imageRef.current = null;
+        clearDrawCanvas();
+      }
+    };
+    
+    const onDrawings = (data) => {
+      if (Array.isArray(data)) {
+        setStrokesArray(data);
+      }
+    };
+    
+    const onLock = ({ locked, by }) => {
+      setUploadLocked(locked);
+      setLockedBy(by || null);
+    };
+    
+    const onRemoveImage = () => {
+      setImage(null);
+      setStrokesArray([]);
+      setUploadLocked(false);
+      setLockedBy(null);
+      imageRef.current = null;
+      clearDrawCanvas();
+    };
+    
+    const onUserColors = (colors) => {
+      setUserColors(colors || {});
+      if (currentUser?.id && colors[currentUser.id]) {
+        setMyColor(colors[currentUser.id]);
+      }
+    };
+    
+    const onCanUpload = ({ canUpload, message }) => {
+      if (!canUpload && message) {
+        // Could show toast notification here
+        console.log(message);
+      }
+    };
 
     socket.on('scribble:image', onImage);
     socket.on('scribble:drawings', onDrawings);
     socket.on('scribble:lock', onLock);
     socket.on('scribble:removeImage', onRemoveImage);
+    socket.on('scribble:userColors', onUserColors);
+    socket.on('scribble:canUpload', onCanUpload);
 
     // Request current state immediately
     socket.emit('scribble:request-state', { roomId });
@@ -53,24 +101,18 @@ const ScribbleOverlay = ({
       socket.off('scribble:drawings', onDrawings);
       socket.off('scribble:lock', onLock);
       socket.off('scribble:removeImage', onRemoveImage);
+      socket.off('scribble:userColors', onUserColors);
+      socket.off('scribble:canUpload', onCanUpload);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
-  }, [socketRef, roomId]);
+  }, [socketRef, roomId, currentUser]);
 
-  // Load image only when source changes
-  useEffect(() => {
-    if (!image) { imageRef.current = null; redraw(); return; }
-    const img = new Image();
-    img.onload = () => { imageRef.current = img; redraw(); };
-    img.src = image;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image]);
-
-  // Redraw when drawings/zoom/preview change
-  useEffect(() => { redraw(); }, [drawings, zoom]);
-
-  const redraw = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // Draw image to static canvas (only once when image loads/changes)
+  const drawImageToCanvas = () => {
+    const canvas = canvasImageRef.current;
+    if (!canvas || !imageRef.current) return;
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const { clientWidth, clientHeight } = canvas;
@@ -80,75 +122,130 @@ const ScribbleOverlay = ({
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, clientWidth, clientHeight);
-
-    // Draw image centered at 70% viewport width
-    if (imageRef.current) {
-      const img = imageRef.current;
-      const maxW = clientWidth * 0.7;
-      const scale = Math.min(maxW / img.width, (clientHeight * 0.7) / img.height);
-      const drawW = img.width * scale * zoom;
-      const drawH = img.height * scale * zoom;
-      const x = (clientWidth - drawW) / 2;
-      const y = (clientHeight - drawH) / 2;
-      ctx.drawImage(img, x, y, drawW, drawH);
-    }
-    drawAllStrokes(ctx);
-    drawPreview(ctx);
+    
+    const img = imageRef.current;
+    const maxW = clientWidth * 0.7;
+    const scale = Math.min(maxW / img.width, (clientHeight * 0.7) / img.height);
+    const drawW = img.width * scale * zoom;
+    const drawH = img.height * scale * zoom;
+    const x = (clientWidth - drawW) / 2;
+    const y = (clientHeight - drawH) / 2;
+    ctx.drawImage(img, x, y, drawW, drawH);
   };
 
-  const drawAllStrokes = (context) => {
-    drawings.forEach((s) => {
+  // Clear only the drawing canvas
+  const clearDrawCanvas = () => {
+    const canvas = canvasDrawRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  // Draw loop: composite strokes onto drawing canvas
+  const drawLoop = () => {
+    const canvas = canvasDrawRef.current;
+    if (!canvas) {
+      animationFrameRef.current = requestAnimationFrame(drawLoop);
+      return;
+    }
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const { clientWidth, clientHeight } = canvas;
+    if (canvas.width !== clientWidth * dpr || canvas.height !== clientHeight * dpr) {
+      canvas.width = clientWidth * dpr;
+      canvas.height = clientHeight * dpr;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, clientWidth, clientHeight);
+    
+    // Draw all strokes from server array + local buffer
+    const allStrokes = [...strokesArray, ...strokesBufferRef.current];
+    allStrokes.forEach((s) => {
       if (s.type === 'path') {
-        context.save();
-        context.globalAlpha = s.alpha ?? 1;
-        context.strokeStyle = s.color;
-        context.lineWidth = s.width;
-        context.lineJoin = 'round';
-        context.lineCap = 'round';
-        context.beginPath();
+        ctx.save();
+        ctx.globalAlpha = s.alpha ?? 1;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.width;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.beginPath();
         s.points.forEach((p, idx) => {
-          if (idx === 0) context.moveTo(p.x, p.y);
-          else context.lineTo(p.x, p.y);
+          if (idx === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
         });
-        context.stroke();
-        context.restore();
+        ctx.stroke();
+        ctx.restore();
       } else if (s.type === 'shape') {
-        context.strokeStyle = s.color;
-        context.lineWidth = s.width;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.width;
         if (s.shape === 'rect') {
-          context.strokeRect(s.x, s.y, s.w, s.h);
+          ctx.strokeRect(s.x, s.y, s.w, s.h);
         } else if (s.shape === 'circle') {
-          context.beginPath();
-          context.arc(s.cx, s.cy, s.r, 0, Math.PI * 2);
-          context.stroke();
+          ctx.beginPath();
+          ctx.arc(s.cx, s.cy, s.r, 0, Math.PI * 2);
+          ctx.stroke();
         } else if (s.shape === 'arrow' || s.shape === 'line') {
-          context.beginPath();
-          context.moveTo(s.x1, s.y1);
-          context.lineTo(s.x2, s.y2);
-          context.stroke();
+          ctx.beginPath();
+          ctx.moveTo(s.x1, s.y1);
+          ctx.lineTo(s.x2, s.y2);
+          ctx.stroke();
         }
       } else if (s.type === 'text') {
-        context.fillStyle = s.color;
-        context.font = `${s.size || 18}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
-        context.fillText(s.text, s.x, s.y);
+        ctx.fillStyle = s.color;
+        ctx.font = `${s.size || 18}px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+        ctx.fillText(s.text, s.x, s.y);
       }
     });
+    
+    // Draw preview if any
+    const p = previewRef.current;
+    if (p) {
+      ctx.save();
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = p.width;
+      if (p.shape === 'rect') ctx.strokeRect(p.x, p.y, p.w, p.h);
+      if (p.shape === 'circle') {
+        ctx.beginPath();
+        ctx.arc(p.cx, p.cy, p.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (p.shape === 'arrow' || p.shape === 'line') {
+        ctx.beginPath();
+        ctx.moveTo(p.x1, p.y1);
+        ctx.lineTo(p.x2, p.y2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    
+    animationFrameRef.current = requestAnimationFrame(drawLoop);
   };
 
-  const drawPreview = (context) => {
-    const p = previewRef.current;
-    if (!p) return;
-    context.save();
-    context.strokeStyle = p.color;
-    context.lineWidth = p.width;
-    if (p.shape === 'rect') context.strokeRect(p.x, p.y, p.w, p.h);
-    if (p.shape === 'circle') { context.beginPath(); context.arc(p.cx, p.cy, p.r, 0, Math.PI * 2); context.stroke(); }
-    if (p.shape === 'arrow' || p.shape === 'line') { context.beginPath(); context.moveTo(p.x1, p.y1); context.lineTo(p.x2, p.y2); context.stroke(); }
-    context.restore();
-  };
+  // Start draw loop on mount
+  useEffect(() => {
+    drawLoop();
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
+  // Update image canvas when zoom or image changes
+  useEffect(() => {
+    if (imageRef.current) {
+      drawImageToCanvas();
+    }
+  }, [zoom, image]);
+
+  // Replay strokes when strokesArray changes from server
+  useEffect(() => {
+    // Strokes are drawn in drawLoop, just trigger a redraw
+    // (drawLoop already reads strokesArray)
+  }, [strokesArray]);
 
   const emitDrawings = (updated) => {
-    setDrawings(updated);
+    setStrokesArray(updated);
     const socket = socketRef?.current;
     if (socket) socket.emit('scribble:drawings', { roomId, data: updated });
   };
@@ -156,26 +253,35 @@ const ScribbleOverlay = ({
   const handlePointerDown = (e) => {
     if (!image) return;
     setIsDrawing(true);
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = canvasDrawRef.current.getBoundingClientRect();
+    // Coordinates in CSS pixels (will be transformed by ctx.setTransform)
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     lastPointRef.current = { x, y };
 
     if (tool === 'pen' || tool === 'highlighter') {
-      const stroke = { type: 'path', color, width: thickness, points: [{ x, y }], alpha: tool === 'highlighter' ? 0.35 : 1 };
-      emitDrawings([...drawings, stroke]);
+      const stroke = { 
+        type: 'path', 
+        color: myColor, // Use server-assigned color
+        width: thickness, 
+        points: [{ x, y }], 
+        alpha: tool === 'highlighter' ? 0.35 : 1 
+      };
+      strokesBufferRef.current.push(stroke);
+      emitDrawings([...strokesArray, stroke]);
     } else if (tool === 'eraser') {
-      // Simple eraser: remove last stroke
-      emitDrawings(drawings.slice(0, -1));
+      // Eraser: remove last stroke
+      const updated = strokesArray.slice(0, -1);
+      undoStackRef.current.push(strokesArray[strokesArray.length - 1]);
+      emitDrawings(updated);
       redoStackRef.current = [];
     } else if (['rect','circle','arrow','line'].includes(tool)) {
-      previewRef.current = { shape: tool, color, width: thickness, x, y, x1:x, y1:y };
-      redraw();
+      previewRef.current = { shape: tool, color: myColor, width: thickness, x, y, x1:x, y1:y };
     } else if (tool === 'text') {
       const text = window.prompt('Enter text');
       if (text && text.trim()) {
-        const stroke = { type: 'text', text, x, y, color, size: Math.max(14, thickness * 3) };
-        emitDrawings([...drawings, stroke]);
+        const stroke = { type: 'text', text, x, y, color: myColor, size: Math.max(14, thickness * 3) };
+        emitDrawings([...strokesArray, stroke]);
         redoStackRef.current = [];
       }
     }
@@ -183,36 +289,51 @@ const ScribbleOverlay = ({
 
   const handlePointerMove = (e) => {
     if (!isDrawing) return;
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = canvasDrawRef.current.getBoundingClientRect();
+    // Coordinates in CSS pixels (will be transformed by ctx.setTransform)
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    
     if (tool === 'pen' || tool === 'highlighter') {
-      const updated = [...drawings];
+      const updated = [...strokesArray];
       const last = updated[updated.length - 1];
       if (last && last.type === 'path') {
         last.points.push({ x, y });
+        // Update local buffer
+        const bufferLast = strokesBufferRef.current[strokesBufferRef.current.length - 1];
+        if (bufferLast && bufferLast.type === 'path') {
+          bufferLast.points.push({ x, y });
+        }
         emitDrawings(updated);
       }
     } else if (['rect','circle','arrow','line'].includes(tool)) {
       const p = previewRef.current;
       if (!p) return;
       if (tool === 'rect') { p.w = x - p.x; p.h = y - p.y; }
-      if (tool === 'circle') { const dx = x - p.x; const dy = y - p.y; p.cx = p.x; p.cy = p.y; p.r = Math.sqrt(dx*dx + dy*dy); }
+      if (tool === 'circle') { 
+        const dx = x - p.x; 
+        const dy = y - p.y; 
+        p.cx = p.x; 
+        p.cy = p.y; 
+        p.r = Math.sqrt(dx*dx + dy*dy); 
+      }
       if (tool === 'arrow' || tool === 'line') { p.x2 = x; p.y2 = y; }
-      redraw();
     }
   };
 
   const handlePointerUp = () => {
     setIsDrawing(false);
     lastPointRef.current = null;
+    // Clear local buffer (stroke is now in strokesArray)
+    strokesBufferRef.current = [];
+    
     if (previewRef.current) {
       const p = previewRef.current;
       previewRef.current = null;
-      if (p.shape === 'rect') emitDrawings([...drawings, { type:'shape', shape:'rect', x:p.x, y:p.y, w:p.w, h:p.h, color, width: thickness }]);
-      if (p.shape === 'circle') emitDrawings([...drawings, { type:'shape', shape:'circle', cx:p.cx, cy:p.cy, r:p.r, color, width: thickness }]);
-      if (p.shape === 'arrow') emitDrawings([...drawings, { type:'shape', shape:'arrow', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2, color, width: thickness }]);
-      if (p.shape === 'line') emitDrawings([...drawings, { type:'shape', shape:'line', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2, color, width: thickness }]);
+      if (p.shape === 'rect') emitDrawings([...strokesArray, { type:'shape', shape:'rect', x:p.x, y:p.y, w:p.w, h:p.h, color: myColor, width: thickness }]);
+      if (p.shape === 'circle') emitDrawings([...strokesArray, { type:'shape', shape:'circle', cx:p.cx, cy:p.cy, r:p.r, color: myColor, width: thickness }]);
+      if (p.shape === 'arrow') emitDrawings([...strokesArray, { type:'shape', shape:'arrow', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2, color: myColor, width: thickness }]);
+      if (p.shape === 'line') emitDrawings([...strokesArray, { type:'shape', shape:'line', x1:p.x1, y1:p.y1, x2:p.x2, y2:p.y2, color: myColor, width: thickness }]);
       redoStackRef.current = [];
     }
   };
@@ -226,6 +347,10 @@ const ScribbleOverlay = ({
   };
 
   const confirmImage = () => {
+    if (uploadLocked && lockedBy && lockedBy !== currentUser?.id) {
+      // Could show toast: "Image locked by another user"
+      return;
+    }
     const img = pendingImage;
     setPendingImage(null);
     setImage(img);
@@ -236,63 +361,136 @@ const ScribbleOverlay = ({
   };
 
   const removeConfirmedImage = () => {
+    if (uploadLocked && lockedBy !== currentUser?.id) {
+      return; // Only locker can remove
+    }
     const socket = socketRef?.current;
     if (socket) socket.emit('scribble:removeImage', { roomId });
-    setImage(null);
-    emitDrawings([]);
+  };
+
+  const handleColorChange = (newColor) => {
+    setMyColor(newColor);
+    const socket = socketRef?.current;
+    if (socket && currentUser?.id) {
+      socket.emit('scribble:userColorChange', { roomId, id: currentUser.id, color: newColor });
+    }
+  };
+
+  const undo = () => {
+    if (strokesArray.length === 0) return;
+    const last = strokesArray[strokesArray.length - 1];
+    undoStackRef.current.push(last);
+    emitDrawings(strokesArray.slice(0, -1));
+    redoStackRef.current = [];
+  };
+
+  const redo = () => {
+    if (undoStackRef.current.length === 0) return;
+    const last = undoStackRef.current.pop();
+    emitDrawings([...strokesArray, last]);
   };
 
   const savePng = () => {
     const canvas = document.createElement('canvas');
-    const w = canvasRef.current.clientWidth;
-    const h = canvasRef.current.clientHeight;
-    canvas.width = w; canvas.height = h;
+    const imgCanvas = canvasImageRef.current;
+    const drawCanvas = canvasDrawRef.current;
+    if (!imgCanvas || !drawCanvas) return;
+    
+    const w = imgCanvas.clientWidth;
+    const h = imgCanvas.clientHeight;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d');
-    // Render current overlay to export (basic: image + strokes)
-    // For brevity, we use current canvas draw pass
-    const exportCanvas = canvasRef.current;
-    const data = exportCanvas.toDataURL('image/png');
+    
+    // Draw image layer
+    if (imageRef.current) {
+      const img = imageRef.current;
+      const maxW = w * 0.7;
+      const scale = Math.min(maxW / img.width, (h * 0.7) / img.height);
+      const drawW = img.width * scale * zoom;
+      const drawH = img.height * scale * zoom;
+      const x = (w - drawW) / 2;
+      const y = (h - drawH) / 2;
+      ctx.drawImage(img, x, y, drawW, drawH);
+    }
+    
+    // Composite drawing layer
+    ctx.drawImage(drawCanvas, 0, 0, w, h);
+    
+    const data = canvas.toDataURL('image/png');
     const a = document.createElement('a');
-    a.href = data; a.download = `scribble-${Date.now()}.png`;
+    a.href = data;
+    a.download = `scribble-${Date.now()}.png`;
     a.click();
+  };
+
+  // Get participant name for locked by
+  const getLockedByName = () => {
+    if (!lockedBy) return null;
+    const participant = participants.find(p => p.userId === lockedBy);
+    return participant?.username || 'Another user';
   };
 
   return (
     <div className="scribble-root">
       <div className="scribble-backdrop" />
       <div className="scribble-stage" ref={containerRef}>
+        {/* Image layer (static) */}
         <canvas
-          ref={canvasRef}
-          className="scribble-canvas"
+          ref={canvasImageRef}
+          className="scribble-canvas-image"
+          style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+        />
+        {/* Drawing layer (overlay) */}
+        <canvas
+          ref={canvasDrawRef}
+          className="scribble-canvas-draw"
+          style={{ position: 'absolute', inset: 0, cursor: tool === 'pen' || tool === 'highlighter' ? 'crosshair' : 'default' }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         />
       </div>
-      <button className="scribble-close" onClick={onClose} title="Close">×</button>
+      <button className="scribble-close" onClick={onClose} title="Close Scribble">×</button>
 
       {!image && (
         <motion.div
           className="scribble-modal"
-          initial={{ opacity: 0, scale: 0.8, y: 50 }}
+          initial={{ opacity: 0, scale: 0.8, y: -50 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
+          transition={{ duration: 0.55, ease: [0.2, 0.9, 0.2, 1] }}
         >
+          <button 
+            className="scribble-modal-close"
+            onClick={onClose}
+            title="Close"
+          >×</button>
           <div className="scribble-dropzone">
             <div style={{ color:'#fff', fontFamily:'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', fontSize:20, marginBottom:12 }}>
               Upload an image to start Scribbling
             </div>
+            {uploadLocked && lockedBy && lockedBy !== currentUser?.id && (
+              <div style={{ color: '#ffcc00', marginBottom: 12, fontSize: 14 }}>
+                Image locked by {getLockedByName()}. Wait or request removal.
+              </div>
+            )}
             <input
               type="file"
               accept="image/*"
               onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
+              disabled={uploadLocked && lockedBy !== currentUser?.id}
               style={{ display:'block', margin:'0 auto', color:'#fff' }}
             />
           </div>
           {pendingImage && (
             <div className="scribble-actions">
-              <button onClick={() => setPendingImage(null)}>Remove</button>
-              <button disabled={uploadLocked && lockedBy && lockedBy !== currentUser?.id} onClick={confirmImage}>Confirm</button>
+              <button onClick={() => setPendingImage(null)}>Cancel</button>
+              <button 
+                disabled={uploadLocked && lockedBy && lockedBy !== currentUser?.id} 
+                onClick={confirmImage}
+              >
+                Confirm
+              </button>
             </div>
           )}
         </motion.div>
@@ -313,18 +511,31 @@ const ScribbleOverlay = ({
             <button className={`tool ${tool === 'circle' ? 'active' : ''}`} onClick={() => setTool('circle')} title="Circle"><FiCircle /></button>
             <button className={`tool ${tool === 'arrow' ? 'active' : ''}`} onClick={() => setTool('arrow')} title="Arrow"><FiArrowUpRight /></button>
             <button className={`tool ${tool === 'line' ? 'active' : ''}`} onClick={() => setTool('line')} title="Line">/</button>
-            <button className="tool" onClick={() => { if (drawings.length) emitDrawings(drawings.slice(0, -1)); }} title="Undo"><FiRotateCcw /></button>
+            <button className="tool" onClick={undo} title="Undo" disabled={strokesArray.length === 0}><FiRotateCcw /></button>
+            <button className="tool" onClick={redo} title="Redo" disabled={undoStackRef.current.length === 0}><FiRotateCw /></button>
             <button className="tool" onClick={() => emitDrawings([])} title="Clear All"><FiTrash2 /></button>
             <button className="tool" onClick={() => setZoom(Math.min(2, zoom + 0.1))} title="Zoom In"><FiZoomIn /></button>
-            <button className="tool" onClick={() => setTool('move')} title="Move"><FiMove /></button>
+            <button className="tool" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} title="Zoom Out">−</button>
             <button className="tool" onClick={savePng} title="Save PNG">⬇️</button>
             <button className="tool danger" onClick={onClose} title="Close"><FiX /></button>
           </div>
           <div className="scribble-row">
-            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-            <input type="range" min="1" max="20" value={thickness} onChange={(e) => setThickness(parseInt(e.target.value, 10))} />
+            <input 
+              type="color" 
+              value={myColor} 
+              onChange={(e) => handleColorChange(e.target.value)} 
+              title="Change Color"
+            />
+            <input 
+              type="range" 
+              min="1" 
+              max="20" 
+              value={thickness} 
+              onChange={(e) => setThickness(parseInt(e.target.value, 10))} 
+              title="Brush Size"
+            />
             <div className="scribble-user" title="Your color">
-              <span className="dot" style={{ backgroundColor: color }} />
+              <span className="dot" style={{ backgroundColor: myColor }} />
             </div>
             {lockedBy === currentUser?.id && (
               <button className="tool" onClick={removeConfirmedImage} title="Remove Image"><FiTrash2 /></button>
@@ -333,19 +544,21 @@ const ScribbleOverlay = ({
         </motion.div>
       )}
 
-      {/* Legend */}
+      {/* Legend - reads from server userColors */}
       <div className="scribble-legend">
-        {participants.map((p) => (
-          <div key={p.userId} className="scribble-legend-item">
-            <span className="scribble-legend-dot" style={{ backgroundColor: p.color }} />
-            <span>{p.username}</span>
-          </div>
-        ))}
+        {Object.entries(userColors).map(([socketId, color]) => {
+          const participant = participants.find(p => p.userId === socketId);
+          if (!participant) return null;
+          return (
+            <div key={socketId} className="scribble-legend-item">
+              <span className="scribble-legend-dot" style={{ backgroundColor: color }} />
+              <span>{participant.username}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 };
 
 export default ScribbleOverlay;
-
-

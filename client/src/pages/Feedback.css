@@ -1,0 +1,88 @@
+/* Dark mode theme variables */
+.theme--dark {
+  --bg: #0b0b0e;
+  --surface: #0f1720;
+  --text: #e6eef8;
+  --text-secondary: #a0aec0;
+  --border: #1e293b;
+  --input-bg: #1a202c;
+  --input-border: #2d3748;
+  --button-primary: #3b82f6;
+  --button-primary-hover: #2563eb;
+  --button-secondary: #475569;
+  --tip-bg: #1e293b;
+  --tip-border: #334155;
+}
+
+.feedback {
+  min-height: 100vh;
+  background: var(--bg, #f7fafc);
+  color: var(--text, #1a202c);
+}
+
+.feedback.theme--dark {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.feedback.theme--dark .bg-white {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.feedback.theme--dark h1,
+.feedback.theme--dark h3 {
+  color: var(--text) !important;
+}
+
+.feedback.theme--dark .text-gray-900 {
+  color: var(--text) !important;
+}
+
+.feedback.theme--dark .text-gray-600,
+.feedback.theme--dark .text-gray-700 {
+  color: var(--text-secondary) !important;
+}
+
+.feedback.theme--dark input,
+.feedback.theme--dark textarea {
+  background: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text) !important;
+}
+
+.feedback.theme--dark input::placeholder,
+.feedback.theme--dark textarea::placeholder {
+  color: var(--text-secondary) !important;
+}
+
+.feedback.theme--dark .bg-blue-50 {
+  background: var(--tip-bg) !important;
+  border-color: var(--tip-border) !important;
+}
+
+.feedback.theme--dark .text-blue-900 {
+  color: var(--text) !important;
+}
+
+.feedback.theme--dark .text-blue-800 {
+  color: var(--text-secondary) !important;
+}
+
+.feedback.theme--dark button {
+  color: var(--text) !important;
+}
+
+.feedback.theme--dark .bg-primary-600 {
+  background: var(--button-primary) !important;
+}
+
+.feedback.theme--dark .bg-primary-600:hover {
+  background: var(--button-primary-hover) !important;
+}
+
+.feedback.theme--dark .border-gray-300 {
+  border-color: var(--input-border) !important;
+}
+

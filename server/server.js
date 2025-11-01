@@ -778,6 +778,7 @@ io.on('connection', (socket) => {
     };
     setScribbleState(roomId, next);
     io.to(roomId).emit('scribble:removeImage');
+    io.to(roomId).emit('scribble:drawings', []); // Clear all clients
     io.to(roomId).emit('scribble:lock', { locked: false, by: null });
   });
   

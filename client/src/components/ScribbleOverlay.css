@@ -6,12 +6,16 @@
 }
 
 .scribble-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(15px) brightness(0.6);
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
   transition: all 0.5s ease;
   animation: scribbleFade 0.4s ease forwards;
+  z-index: 1999;
 }
 
 .scribble-stage {
@@ -41,13 +45,16 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 60vw;
-  height: 50vh;
-  min-height: 50vh;
-  border-radius: 18px;
-  background: rgba(255,255,255,0.08);
+  width: 50%;
+  min-width: 400px;
+  max-width: 600px;
+  border-radius: 16px;
+  background: #1e1e1e;
   backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
+  padding: 40px;
+  text-align: center;
+  color: white;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -275,6 +282,37 @@
 @keyframes scribbleFade {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+.scribble-image-controls {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 2001;
+  pointer-events: auto;
+}
+
+.scribble-remove-image-btn {
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.scribble-remove-image-btn:hover {
+  background: rgba(239, 68, 68, 1);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+}
+
+.scribble-remove-image-btn:active {
+  transform: translateY(0);
 }
 
 @media (max-width: 640px) {

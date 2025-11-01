@@ -452,10 +452,12 @@ const ScribbleOverlay = ({
     if (uploadLocked && lockedBy !== currentUser?.id) {
       return; // Only locker can remove
     }
-    const socket = socketRef?.current;
-    if (socket) socket.emit('scribble:removeImage', { roomId });
-    // Server will clear state when image is removed
-    // Keep strokes array - only clear when server tells us
+    if (window.confirm('Are you sure you want to remove the image? This will also clear all annotations.')) {
+      const socket = socketRef?.current;
+      if (socket) socket.emit('scribble:removeImage', { roomId });
+      // Server will clear state when image is removed
+      // Keep strokes array - only clear when server tells us
+    }
   };
 
   const handleColorChange = (newColor) => {
@@ -611,6 +613,7 @@ const ScribbleOverlay = ({
             <button className="tool" onClick={() => setZoom(Math.min(2, zoom + 0.1))} title="Zoom In"><FiZoomIn /></button>
             <button className="tool" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} title="Zoom Out">−</button>
             <button className="tool" onClick={savePng} title="Save PNG">⬇️</button>
+            <button className="tool danger" onClick={removeConfirmedImage} title="Remove Image">🗑️</button>
             <button className="tool danger" onClick={onClose} title="Close"><FiX /></button>
           </div>
           <div className="scribble-row">

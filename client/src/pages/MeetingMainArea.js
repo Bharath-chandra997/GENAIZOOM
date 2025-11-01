@@ -152,7 +152,7 @@ const MeetingMainArea = ({
               <canvas ref={aiCanvasRef} className="pro-ai-canvas" />
               
               {/* Content Display when processing */}
-              {(aiUploadedImage || aiUploadedAudio) && (
+              {aiUploadedImage && (
                 <div className="pro-ai-content-display">
                   <button
                     className="pro-ai-reset-btn"
@@ -164,22 +164,21 @@ const MeetingMainArea = ({
                   >
                     ×
                   </button>
-                  {aiUploadedImage && (
-                    <img src={aiUploadedImage} alt="AI processed content" className="pro-ai-uploaded-image" />
-                  )}
-                  {aiUploadedAudio && (
-                    <audio controls src={aiUploadedAudio} className="pro-ai-uploaded-audio" />
-                  )}
+                  <img src={aiUploadedImage} alt="AI processed content" className="pro-ai-uploaded-image" />
                 </div>
               )}
               
-              {/* AI Q&A Overlay on video frame */}
+              {/* AI Q&A + Audio Overlay on video frame */}
               {aiResponse && (() => {
                 const { question, answer } = extractAIQuestionAndAnswer(aiResponse);
-                if (!question && !answer) return null;
+                const hasContent = question || answer || aiUploadedAudio;
+                if (!hasContent) return null;
                 
                 return (
-                  <div className="ai-response-overlay">
+                  <div className="ai-overlay">
+                    {aiUploadedAudio && (
+                      <audio controls src={aiUploadedAudio} className="ai-audio" />
+                    )}
                     {question && (
                       <div className="ai-question">{question}</div>
                     )}

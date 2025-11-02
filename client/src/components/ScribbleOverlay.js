@@ -438,6 +438,20 @@ const ScribbleOverlay = ({
     reader.readAsDataURL(file);
   };
 
+  const handleReupload = () => {
+    // Trigger file input click for reupload
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        handleUpload(file);
+      }
+    };
+    input.click();
+  };
+
   const confirmImage = () => {
     if (uploadLocked && lockedBy && lockedBy !== currentUser?.id) {
       return;
@@ -449,6 +463,12 @@ const ScribbleOverlay = ({
     if (socket) socket.emit('scribble:image', { roomId, img });
     // Server will clear drawings when new image is confirmed
     // Don't clear here - let server handle it via scribble:drawings event
+  };
+
+  const handleClose = () => {
+    // Close Scribble but preserve drawings (don't clear state)
+    // Just call onClose to hide the overlay
+    onClose();
   };
 
   const removeConfirmedImage = () => {
@@ -550,45 +570,38 @@ const ScribbleOverlay = ({
         />
         
       </div>
-      <button className="scribble-close" onClick={onClose} title="Close Scribble">×</button>
 
       {!image && (
         <motion.div
-          className="scribble-modal"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
+          className="scribble-upload-container"
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
         >
-          <button 
-            className="scribble-modal-close"
-            onClick={onClose}
-            title="Close"
-          >×</button>
-          <div className="scribble-dropzone">
-            <div style={{ color:'#fff', fontFamily:'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', fontSize:20, marginBottom:12 }}>
-              Upload an image to start Scribbling
-            </div>
-            {uploadLocked && lockedBy && lockedBy !== currentUser?.id && (
-              <div style={{ color: '#ffcc00', marginBottom: 12, fontSize: 14 }}>
-                Image locked by {getLockedByName()}. Wait or request removal.
-              </div>
-            )}
+          <label className="scribble-upload-button">
             <input
               type="file"
               accept="image/*"
               onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
               disabled={uploadLocked && lockedBy !== currentUser?.id}
-              style={{ display:'block', margin:'0 auto', color:'#fff' }}
+              style={{ display: 'none' }}
             />
-          </div>
+            Upload Image
+          </label>
+          {uploadLocked && lockedBy && lockedBy !== currentUser?.id && (
+            <div className="scribble-upload-locked">
+              Image locked by {getLockedByName()}. Wait or request removal.
+            </div>
+          )}
           {pendingImage && (
-            <div className="scribble-actions">
-              <button onClick={() => setPendingImage(null)}>🗑️ Remove</button>
+            <div className="scribble-upload-actions">
+              <button onClick={() => setPendingImage(null)} className="scribble-action-btn">Cancel</button>
               <button 
                 disabled={uploadLocked && lockedBy && lockedBy !== currentUser?.id} 
                 onClick={confirmImage}
+                className="scribble-action-btn primary"
               >
-                ✅ Confirm
+                Confirm
               </button>
             </div>
           )}
@@ -597,12 +610,13 @@ const ScribbleOverlay = ({
 
       {image && (
         <motion.div
-          className="scribble-toolbar"
-          initial={{ opacity: 0, x: 50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
+          className="scribble-toolbar-professional"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: 'easeOut' }}
         >
-          <div className="scribble-row">
+          {/* Top Row - Drawing Tools */}
+          <div className="scribble-toolbar-row">
             <button className={`tool ${tool === 'pen' ? 'active' : ''}`} onClick={() => setTool('pen')} title="Pen"><FiEdit3 /></button>
             <button className={`tool ${tool === 'eraser' ? 'active' : ''}`} onClick={() => setTool('eraser')} title="Eraser"><FiMinusCircle /></button>
             <button className={`tool ${tool === 'highlighter' ? 'active' : ''}`} onClick={() => setTool('highlighter')} title="Highlighter">H</button>
@@ -610,21 +624,23 @@ const ScribbleOverlay = ({
             <button className={`tool ${tool === 'circle' ? 'active' : ''}`} onClick={() => setTool('circle')} title="Circle"><FiCircle /></button>
             <button className={`tool ${tool === 'arrow' ? 'active' : ''}`} onClick={() => setTool('arrow')} title="Arrow"><FiArrowUpRight /></button>
             <button className={`tool ${tool === 'line' ? 'active' : ''}`} onClick={() => setTool('line')} title="Line">/</button>
+            <div className="tool-separator"></div>
             <button className="tool" onClick={undo} title="Undo" disabled={strokesArray.length === 0}><FiRotateCcw /></button>
             <button className="tool" onClick={redo} title="Redo" disabled={undoStackRef.current.length === 0}><FiRotateCw /></button>
             <button className="tool" onClick={() => emitDrawings([])} title="Clear All"><FiTrash2 /></button>
             <button className="tool" onClick={() => setZoom(Math.min(2, zoom + 0.1))} title="Zoom In"><FiZoomIn /></button>
             <button className="tool" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} title="Zoom Out">−</button>
             <button className="tool" onClick={savePng} title="Save PNG">⬇️</button>
-            <button className="tool danger" onClick={removeConfirmedImage} title="Remove Image">🗑️</button>
-            <button className="tool danger" onClick={onClose} title="Close"><FiX /></button>
           </div>
-          <div className="scribble-row">
+          
+          {/* Second Row - Color, Size, Reupload, Close */}
+          <div className="scribble-toolbar-row">
             <input 
               type="color" 
               value={myColor} 
               onChange={(e) => handleColorChange(e.target.value)} 
               title="Change Color"
+              className="tool-color-input"
             />
             <input 
               type="range" 
@@ -633,30 +649,51 @@ const ScribbleOverlay = ({
               value={thickness} 
               onChange={(e) => setThickness(parseInt(e.target.value, 10))} 
               title="Brush Size"
+              className="tool-size-input"
             />
-            <div className="scribble-user" title="Your color">
-              <span className="dot" style={{ backgroundColor: myColor }} />
-            </div>
-            {lockedBy === currentUser?.id && (
-              <button className="tool" onClick={removeConfirmedImage} title="Remove Image">🗑️</button>
-            )}
+            <div className="tool-separator"></div>
+            <button className="tool tool-reupload" onClick={handleReupload} title="Reupload Image">
+              Reupload
+            </button>
+            <button className="tool tool-close" onClick={handleClose} title="Close Scribble">
+              <FiX />
+            </button>
           </div>
         </motion.div>
       )}
 
-      {/* Legend - reads from server userColors */}
-      <div className="scribble-legend">
-        {Object.entries(userColors).map(([socketId, color]) => {
-          const participant = participants.find(p => p.userId === socketId);
-          if (!participant) return null;
-          return (
-            <div key={socketId} className="scribble-legend-item">
-              <span className="scribble-legend-dot" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}` }} />
-              <span>{participant.username}</span>
-            </div>
-          );
-        })}
-      </div>
+      {/* Enhanced Legend - shows color-to-user mapping */}
+      {Object.keys(userColors).length > 0 && (
+        <motion.div 
+          className="scribble-legend-enhanced"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+        >
+          <div className="scribble-legend-header">Participants</div>
+          <div className="scribble-legend-items">
+            {Object.entries(userColors).map(([socketId, color]) => {
+              const participant = participants.find(p => p.userId === socketId);
+              if (!participant) return null;
+              const isCurrentUser = currentUser?.id === socketId;
+              return (
+                <div key={socketId} className={`scribble-legend-item ${isCurrentUser ? 'current-user' : ''}`}>
+                  <span 
+                    className="scribble-legend-dot" 
+                    style={{ 
+                      backgroundColor: color, 
+                      boxShadow: `0 0 8px ${color}, 0 0 12px ${color}40`,
+                      border: isCurrentUser ? `2px solid ${color}` : 'none'
+                    }} 
+                  />
+                  <span className="scribble-legend-name">{participant.username}</span>
+                  {isCurrentUser && <span className="scribble-legend-you">(You)</span>}
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 };

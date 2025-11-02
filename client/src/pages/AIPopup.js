@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { safeAIText } from '../utils/aiResponseHelpers';
 import './AIPopup.css';
@@ -19,6 +19,20 @@ const AIPopup = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
+
+  // Clear uploaded files when AI response is received
+  useEffect(() => {
+    if (aiResponse) {
+      setImageFile(null);
+      setAudioFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      if (audioInputRef.current) {
+        audioInputRef.current.value = '';
+      }
+    }
+  }, [aiResponse]);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -95,8 +109,8 @@ const AIPopup = ({
               </div>
             </div>
 
-            {/* Upload Section */}
-            {!aiBotInUse && !aiResponse && (
+            {/* Upload Section - Show when no response or after response (files cleared) */}
+            {!aiBotInUse && (
               <div className="pro-ai-upload-section">
                 <div className="pro-ai-upload-area">
                   <h4>Upload Image</h4>
@@ -134,7 +148,7 @@ const AIPopup = ({
               </div>
             )}
 
-            {/* Submit Button - Always visible when not in use */}
+            {/* Submit Button - Always visible when not in use and no response */}
             {!aiBotInUse && !aiResponse && (
               <div className="pro-ai-submit-bar">
                 <button 

@@ -12,10 +12,13 @@
   width: 100vw;
   height: 100vh;
   background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(10px);
-  transition: all 0.5s ease;
+  /* Minimal backdrop blur - main blur is handled by meeting body */
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: all 0.4s ease;
   animation: scribbleFade 0.4s ease forwards;
   z-index: 1999;
+  pointer-events: auto;
 }
 
 .scribble-stage {
@@ -40,29 +43,90 @@
   pointer-events: auto; /* Drawing layer receives all events */
 }
 
-.scribble-modal {
+/* Upload Container - Animated, centered */
+.scribble-upload-container {
   position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 50%;
-  min-width: 400px;
-  max-width: 600px;
-  border-radius: 16px;
-  background: #1e1e1e;
-  backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: 0 0 25px rgba(0, 0, 0, 0.6);
-  padding: 40px;
-  text-align: center;
-  color: white;
+  z-index: 2001;
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 16px;
+}
+
+.scribble-upload-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s ease;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   text-align: center;
-  z-index: 2001;
-  pointer-events: auto;
-  animation: modalFadeInScale 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: inline-block;
+}
+
+.scribble-upload-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(102, 126, 234, 0.5);
+}
+
+.scribble-upload-button:active {
+  transform: translateY(0);
+}
+
+.scribble-upload-locked {
+  color: #ffcc00;
+  font-size: 14px;
+  text-align: center;
+  padding: 8px 16px;
+  background: rgba(255, 204, 0, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 204, 0, 0.3);
+}
+
+.scribble-upload-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.scribble-action-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.scribble-action-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.scribble-action-btn.primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: transparent;
+}
+
+.scribble-action-btn.primary:hover {
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.scribble-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @keyframes modalFadeInScale {
@@ -137,19 +201,103 @@
 .scribble-actions button:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
 .scribble-actions button:active { transform: scale(0.95); }
 
-.scribble-toolbar {
+/* Professional Toolbar - Top Right */
+.scribble-toolbar-professional {
   position: fixed;
-  top: 2%;
-  right: 2%;
+  top: 20px;
+  right: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
-  background: rgba(255,255,255,0.08);
-  backdrop-filter: blur(16px);
-  border-radius: 20px;
-  box-shadow: 0 4px 25px rgba(0,0,0,0.3);
+  gap: 10px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.1);
   pointer-events: auto;
+  z-index: 2001;
+  min-width: 300px;
+}
+
+.scribble-toolbar-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tool-separator {
+  width: 1px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.1);
+  margin: 0 4px;
+}
+
+.tool-color-input {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  padding: 0;
+  overflow: hidden;
+}
+
+.tool-size-input {
+  width: 120px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.tool-size-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.tool-size-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.tool-reupload {
+  padding: 8px 16px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 8px !important;
+}
+
+.tool-reupload:hover {
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4) !important;
+}
+
+.tool-close {
+  background: rgba(239, 68, 68, 0.9) !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+.tool-close:hover {
+  background: rgba(239, 68, 68, 1) !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4) !important;
 }
 
 .scribble-close {
@@ -182,30 +330,44 @@
 .tool {
   width: 42px;
   height: 42px;
-  border-radius: 9999px;
+  border-radius: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.24);
-  color: #ffffff;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #374151;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: all 0.2s ease;
+  font-size: 18px;
 }
 
 .tool:hover {
-  transform: scale(1.08);
-  box-shadow: 0 0 10px rgba(255,255,255,0.3);
+  background: rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.tool:active {
+  transform: translateY(0);
 }
 
 .tool.active {
-  background: rgba(255,255,255,0.3);
-  transform: scale(1.02);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.tool:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .tool.danger {
-  background: rgba(239,68,68,0.2);
-  border-color: rgba(239,68,68,0.3);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
 }
 .scribble-dropzone {
   margin-top: 12px;
@@ -219,34 +381,84 @@
 
 .scribble-dropzone:hover { box-shadow: 0 0 20px rgba(255,255,255,0.15); }
 
-.scribble-legend {
+/* Enhanced Legend */
+.scribble-legend-enhanced {
   position: fixed;
-  right: 16px;
-  bottom: 100px;
+  left: 20px;
+  bottom: 20px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.2);
+  gap: 0;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-radius: 12px;
-  backdrop-filter: blur(12px);
-  color: #fff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  color: #1f2937;
   pointer-events: auto;
+  z-index: 2001;
+  min-width: 180px;
+  overflow: hidden;
+}
+
+.scribble-legend-header {
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7280;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.scribble-legend-items {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 6px;
 }
 
 .scribble-legend-item { 
   display: flex; 
   align-items: center; 
-  gap: 8px; 
-  font-size: 13px; 
-  color: #e6eef8;
+  gap: 10px; 
+  padding: 8px 12px;
+  font-size: 14px; 
+  color: #374151;
+  border-radius: 8px;
+  transition: background 0.2s ease;
 }
+
+.scribble-legend-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.scribble-legend-item.current-user {
+  background: rgba(102, 126, 234, 0.1);
+  font-weight: 500;
+}
+
 .scribble-legend-dot { 
-  width: 16px; 
-  height: 16px; 
+  width: 18px; 
+  height: 18px; 
   border-radius: 50%; 
-  border: 1px solid rgba(255,255,255,0.4);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.scribble-legend-name {
+  flex: 1;
+  font-weight: 400;
+}
+
+.scribble-legend-you {
+  font-size: 12px;
+  color: #667eea;
+  font-weight: 500;
+  font-style: italic;
 }
 
 /* AI Q&A Display */

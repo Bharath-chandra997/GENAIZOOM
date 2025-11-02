@@ -105,8 +105,14 @@ const ScribbleOverlay = ({
     };
 
     const onStroke = (stroke) => {
-      // Append individual stroke for real-time updates
-      setStrokesArray(prev => [...prev, stroke]);
+      // Append individual stroke for real-time updates (prevent duplicates)
+      setStrokesArray(prev => {
+        // Check if stroke already exists by ID
+        if (prev.some(s => s.id === stroke.id)) {
+          return prev; // Skip duplicate
+        }
+        return [...prev, stroke];
+      });
     };
 
     socket.on('scribble:image', onImage);
@@ -134,7 +140,7 @@ const ScribbleOverlay = ({
     };
   }, [socketRef, roomId, currentUser]);
 
-  // Draw image to static canvas (responsive, maintains aspect ratio)
+  // Draw image to static canvas (responsive, maintains aspect ratio, clear and centered)
   const drawImageToCanvas = () => {
     const canvas = canvasImageRef.current;
     if (!canvas || !imageRef.current) return;
@@ -148,21 +154,25 @@ const ScribbleOverlay = ({
       canvas.height = clientHeight * dpr;
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, clientWidth, clientHeight);
+    
+    // Fill with white background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, clientWidth, clientHeight);
     
     const img = imageRef.current;
-    // Calculate scale to fit within 90% of container while maintaining aspect ratio
-    const maxW = clientWidth * 0.9;
-    const maxH = clientHeight * 0.9;
+    // Calculate scale to fit within 95% of container while maintaining aspect ratio
+    const maxW = clientWidth * 0.95;
+    const maxH = clientHeight * 0.95;
     const scale = Math.min(maxW / img.width, maxH / img.height, 1) * zoom;
     const drawW = img.width * scale;
     const drawH = img.height * scale;
     const x = (clientWidth - drawW) / 2;
     const y = (clientHeight - drawH) / 2;
     
-    // Enable high-quality image rendering
+    // Enable high-quality image rendering - clear and crisp
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
+    ctx.globalAlpha = 1; // Full opacity, no transparency
     ctx.drawImage(img, x, y, drawW, drawH);
   };
 
@@ -328,7 +338,13 @@ const ScribbleOverlay = ({
     if (socket) {
       // Add to local array immediately for instant visibility (before server roundtrip)
       // The onStroke handler will filter out duplicates if server echoes back
-      setStrokesArray(prev => [...prev, stroke]);
+      setStrokesArray(prev => {
+        // Prevent duplicate if already exists
+        if (prev.some(s => s.id === stroke.id)) {
+          return prev;
+        }
+        return [...prev, stroke];
+      });
       socket.emit('scribble:stroke', { roomId, stroke });
     }
   };

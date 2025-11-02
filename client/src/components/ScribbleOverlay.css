@@ -11,20 +11,18 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.4);
-  /* Minimal backdrop blur - main blur is handled by meeting body */
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  transition: all 0.4s ease;
-  animation: scribbleFade 0.4s ease forwards;
+  background: #ffffff;
+  transition: all 0.3s ease;
+  animation: scribbleFade 0.3s ease forwards;
   z-index: 1999;
   pointer-events: auto;
 }
 
 .scribble-stage {
   position: absolute;
-  inset: 0 0 80px 0; /* leave space for bottom controls */
-  transition: backdrop-filter 0.4s ease;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
   pointer-events: none;
   /* Ensure stage doesn't blur canvas content */
   filter: none;
@@ -32,6 +30,7 @@
   /* Force GPU acceleration for smooth rendering */
   will-change: contents;
   transform: translateZ(0);
+  background: transparent;
 }
 
 .scribble-canvas-image,
@@ -57,6 +56,8 @@
   /* Ensure image canvas is clear and not blurred */
   will-change: contents;
   transform: translateZ(0); /* Force GPU acceleration */
+  background: #ffffff;
+  opacity: 1;
 }
 
 .scribble-canvas-draw {
@@ -64,9 +65,10 @@
   /* Ensure drawing canvas is clear and responsive */
   will-change: contents;
   transform: translateZ(0); /* Force GPU acceleration */
+  background: transparent;
 }
 
-/* Upload Container - Animated, centered */
+/* Upload Container - Animated, centered on white background */
 .scribble-upload-container {
   position: fixed;
   top: 50%;
@@ -77,7 +79,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 16px;
+  min-width: 280px;
 }
 
 .scribble-upload-button {
@@ -233,14 +237,13 @@
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: #ffffff;
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
   z-index: 2001;
   min-width: 300px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .scribble-toolbar-row {
@@ -413,16 +416,15 @@
   flex-direction: column;
   gap: 0;
   padding: 0;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: #ffffff;
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
   color: #1f2937;
   pointer-events: auto;
   z-index: 2001;
   min-width: 180px;
   overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .scribble-legend-header {
@@ -528,6 +530,167 @@
 @keyframes scribbleFade {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* Responsive Design - Clean white workspace across all screen sizes */
+@media (max-width: 768px) {
+  .scribble-toolbar-professional {
+    top: 12px;
+    right: 12px;
+    padding: 12px;
+    min-width: auto;
+    gap: 8px;
+  }
+  
+  .scribble-toolbar-row {
+    gap: 6px;
+  }
+  
+  .tool {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+  
+  .tool-color-input {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .tool-size-input {
+    width: 100px;
+  }
+  
+  .scribble-legend-enhanced {
+    left: 12px;
+    bottom: 12px;
+    min-width: 160px;
+  }
+  
+  .scribble-upload-container {
+    min-width: 240px;
+    padding: 0 20px;
+  }
+  
+  .scribble-upload-button {
+    padding: 14px 28px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .scribble-toolbar-professional {
+    top: 8px;
+    right: 8px;
+    padding: 10px;
+    gap: 6px;
+  }
+  
+  .tool {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+  
+  .tool-color-input {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .tool-size-input {
+    width: 80px;
+  }
+  
+  .scribble-legend-enhanced {
+    left: 8px;
+    bottom: 8px;
+    min-width: 140px;
+    font-size: 12px;
+  }
+  
+  .scribble-legend-header {
+    padding: 10px 12px;
+    font-size: 11px;
+  }
+  
+  .scribble-legend-item {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  
+  .scribble-upload-container {
+    min-width: 200px;
+  }
+  
+  .scribble-upload-button {
+    padding: 12px 24px;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .scribble-toolbar-professional {
+    top: 6px;
+    right: 6px;
+    padding: 8px;
+    gap: 4px;
+    min-width: auto;
+  }
+  
+  .scribble-toolbar-row {
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  
+  .tool {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+  
+  .tool-color-input {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .tool-size-input {
+    width: 60px;
+  }
+  
+  .tool-reupload {
+    padding: 6px 12px !important;
+    font-size: 11px !important;
+  }
+  
+  .scribble-legend-enhanced {
+    left: 6px;
+    bottom: 6px;
+    min-width: 120px;
+  }
+  
+  .scribble-legend-header {
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+  
+  .scribble-legend-item {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+  
+  .scribble-legend-dot {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .scribble-upload-container {
+    min-width: 180px;
+  }
+  
+  .scribble-upload-button {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
 }
 
 .scribble-image-controls {

@@ -532,6 +532,19 @@ const Meeting = () => {
   async (imageFile, audioFile) => {
     let isLocked = false;
     setIsAIProcessing(true);
+    // Immediately activate processing layout when "Process with AI" is clicked
+    setIsAIProcessingLayout(true);
+    // Immediately create object URLs to display files in processing layout
+    let imagePreviewUrl = null;
+    let audioPreviewUrl = null;
+    if (imageFile) {
+      imagePreviewUrl = URL.createObjectURL(imageFile);
+      setAiUploadedImage(imagePreviewUrl);
+    }
+    if (audioFile) {
+      audioPreviewUrl = URL.createObjectURL(audioFile);
+      setAiUploadedAudio(audioPreviewUrl);
+    }
     try {
       // Clear previous AI response for smooth UI updates
       setAiResponse('');
@@ -610,9 +623,16 @@ const Meeting = () => {
         audioUrl,
         username: user.username,
       });
+      // Revoke preview object URLs and replace with uploaded URLs
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+      if (audioPreviewUrl) {
+        URL.revokeObjectURL(audioPreviewUrl);
+      }
       setAiUploadedImage(imageUrl);
       setAiUploadedAudio(audioUrl);
-      setIsAIProcessingLayout(true); // Activate processing layout when files are uploaded
+      // Processing layout already activated at button click, no need to set again
 
       // Send to /predict endpoint
       const formData = new FormData();
@@ -669,7 +689,7 @@ const Meeting = () => {
       
       console.log('AI Response Object:', finalResponse);
       setAiResponse(finalResponse);
-      setIsAIProcessingLayout(true); // Activate processing layout when response is received
+      // Processing layout already activated, no need to set again
       socketRef.current?.emit('shared-ai-result', {
         response: finalResponse,
         username: user.username,
@@ -725,6 +745,14 @@ const Meeting = () => {
         errorMessage = 'Network error: Unable to reach AI server. Please try again.';
       }
       toast.error(errorMessage, { position: 'bottom-center' });
+
+      // Clean up preview URLs on error
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+      if (audioPreviewUrl) {
+        URL.revokeObjectURL(audioPreviewUrl);
+      }
 
       if (isLocked) {
         try {

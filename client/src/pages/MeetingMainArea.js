@@ -173,12 +173,12 @@ const MeetingMainArea = ({
                   </div>
                 </div>
               ) : isAIProcessingLayout && aiResponse ? (
-                /* Response Layout: Question → Image → Audio → AI Response */
+                /* Response Layout: Question → Image → AI Response */
                 (() => {
                   const { question, answer } = extractAIQuestionAndAnswer(aiResponse);
                   return (
                     <div className="pro-ai-response-layout">
-                      {/* 1. Question above image */}
+                      {/* 1. Question above image - white text, no background, centered */}
                       {question && (
                         <div className="pro-ai-question-text">{question}</div>
                       )}
@@ -190,14 +190,7 @@ const MeetingMainArea = ({
                         </div>
                       )}
                       
-                      {/* 3. Audio below image */}
-                      {aiUploadedAudio && (
-                        <div className="pro-ai-response-audio-container">
-                          <audio controls src={aiUploadedAudio} className="pro-ai-response-audio" />
-                        </div>
-                      )}
-                      
-                      {/* 4. AI Response below audio */}
+                      {/* 3. AI Response below image - white text, no background */}
                       {answer && (
                         <div className="pro-ai-answer-text">
                           <span className="pro-ai-answer-label">AI Response:</span> {answer}

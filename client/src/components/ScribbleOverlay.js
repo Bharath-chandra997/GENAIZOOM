@@ -64,16 +64,18 @@ const ScribbleOverlay = ({
     const onDrawings = (data) => {
       if (Array.isArray(data) && data.length > 0) {
         // When receiving full state, merge with existing strokes to avoid duplicates
+        // Filter out invalid strokes for safety
+        const validStrokes = data.filter(s => s && s.id);
         setStrokesArray(prev => {
           // Create a map of existing stroke IDs to avoid duplicates
-          const existingIds = new Set(prev.map(s => s.id));
-          const newStrokes = data.filter(s => !existingIds.has(s.id));
+          const existingIds = new Set(prev.map(s => s?.id).filter(Boolean));
+          const newStrokes = validStrokes.filter(s => !existingIds.has(s.id));
           // Merge and maintain order
           return [...prev, ...newStrokes];
         });
         // Also update local buffer for persistence
-        strokesBufferRef.current = [...strokesBufferRef.current, ...data.filter(s => 
-          !strokesBufferRef.current.some(existing => existing.id === s.id)
+        strokesBufferRef.current = [...strokesBufferRef.current, ...validStrokes.filter(s => 
+          !strokesBufferRef.current.some(existing => existing?.id === s.id)
         )];
       } else if (Array.isArray(data) && data.length === 0) {
         // Empty array means clear (only happens when new image uploaded)
@@ -99,7 +101,7 @@ const ScribbleOverlay = ({
     
     const onUserColors = (colors) => {
       setUserColors(colors || {});
-      if (currentUser?.id && colors[currentUser.id]) {
+      if (currentUser?.id && colors && colors[currentUser.id]) {
         setMyColor(colors[currentUser.id]);
       }
     };
@@ -112,9 +114,14 @@ const ScribbleOverlay = ({
 
     const onStroke = (stroke) => {
       // Handle individual stroke for real-time updates from other participants
+      // Validate stroke before processing
+      if (!stroke || !stroke.id) {
+        console.warn('Received invalid stroke from server');
+        return;
+      }
       setStrokesArray(prev => {
         // Check if stroke already exists by ID
-        const existingIndex = prev.findIndex(s => s.id === stroke.id);
+        const existingIndex = prev.findIndex(s => s?.id === stroke.id);
         if (existingIndex >= 0) {
           // Update existing stroke (for incremental updates during drawing)
           const updated = [...prev];
@@ -383,6 +390,11 @@ const ScribbleOverlay = ({
     lastPointRef.current = { x, y };
 
     if (tool === 'pen' || tool === 'highlighter') {
+      // Ensure currentUser is available before creating stroke
+      if (!currentUser?.id) {
+        console.warn('Cannot draw: currentUser is not available');
+        return;
+      }
       const stroke = { 
         id: Date.now() + Math.random(), // Unique ID
         type: 'path', 
@@ -390,7 +402,7 @@ const ScribbleOverlay = ({
         width: thickness, 
         points: [{ x, y }], 
         alpha: tool === 'highlighter' ? 0.35 : 1,
-        userId: currentUser?.id
+        userId: currentUser.id
       };
       currentStrokeRef.current = stroke;
       // Add to local array immediately for instant visibility
@@ -408,6 +420,11 @@ const ScribbleOverlay = ({
     } else if (['rect','circle','arrow','line'].includes(tool)) {
       previewRef.current = { shape: tool, color: myColor, width: thickness, x, y, x1:x, y1:y };
     } else if (tool === 'text') {
+      // Ensure currentUser is available before creating text stroke
+      if (!currentUser?.id) {
+        console.warn('Cannot add text: currentUser is not available');
+        return;
+      }
       const text = window.prompt('Enter text');
       if (text && text.trim()) {
         const stroke = { 
@@ -418,7 +435,7 @@ const ScribbleOverlay = ({
           y, 
           color: myColor, 
           size: Math.max(14, thickness * 3),
-          userId: currentUser?.id
+          userId: currentUser.id
         };
         emitDrawings([...strokesArray, stroke]);
         emitStroke(stroke);
@@ -436,21 +453,24 @@ const ScribbleOverlay = ({
     
     if (tool === 'pen' || tool === 'highlighter') {
       // Update current stroke for smooth continuous drawing
-      if (currentStrokeRef.current && currentStrokeRef.current.type === 'path') {
-        currentStrokeRef.current.points.push({ x, y });
+      // Capture currentStroke to avoid closure issues
+      const currentStroke = currentStrokeRef.current;
+      if (currentStroke && currentStroke.type === 'path' && currentStroke.points) {
+        currentStroke.points.push({ x, y });
         // Update in strokesArray immediately for local display (real-time feedback)
         setStrokesArray(prev => {
           const updated = [...prev];
           const lastIndex = updated.length - 1;
-          if (lastIndex >= 0 && updated[lastIndex]?.id === currentStrokeRef.current.id) {
-            updated[lastIndex] = { ...updated[lastIndex], points: [...currentStrokeRef.current.points] };
+          // Add null check for currentStroke to prevent null.id error
+          if (lastIndex >= 0 && currentStroke?.id && updated[lastIndex]?.id === currentStroke.id) {
+            updated[lastIndex] = { ...updated[lastIndex], points: [...currentStroke.points] };
           }
           return updated;
         });
         // Emit incremental update for real-time sync to other participants
         // Emit more frequently (every 2 points) for smoother real-time collaboration
-        if (currentStrokeRef.current.points.length % 2 === 0) {
-          emitStroke(currentStrokeRef.current);
+        if (currentStroke.points.length % 2 === 0 && currentStroke?.id) {
+          emitStroke(currentStroke);
         }
       }
     } else if (['rect','circle','arrow','line'].includes(tool)) {
@@ -474,30 +494,41 @@ const ScribbleOverlay = ({
     lastPointRef.current = null;
     
     // Finalize current stroke - ensure it's persisted on server and doesn't vanish
-    if (currentStrokeRef.current && currentStrokeRef.current.type === 'path') {
+    // Capture currentStrokeRef value to avoid closure issues
+    const currentStroke = currentStrokeRef.current;
+    if (currentStroke && currentStroke.type === 'path') {
       // Ensure stroke has at least 2 points (valid stroke)
-      if (currentStrokeRef.current.points.length >= 2) {
+      if (currentStroke.points && currentStroke.points.length >= 2) {
         // Finalize the stroke in local array - ensure it's permanently added
         setStrokesArray(prev => {
           const updated = [...prev];
           const lastIndex = updated.length - 1;
-          if (lastIndex >= 0 && updated[lastIndex]?.id === currentStrokeRef.current.id) {
+          // Add null check for currentStroke to prevent null.id error
+          if (lastIndex >= 0 && currentStroke?.id && updated[lastIndex]?.id === currentStroke.id) {
             // Update existing stroke with final points
-            updated[lastIndex] = { ...updated[lastIndex], points: [...currentStrokeRef.current.points] };
-          } else {
+            updated[lastIndex] = { ...updated[lastIndex], points: [...currentStroke.points] };
+          } else if (currentStroke?.id) {
             // Stroke not in array yet, add it
-            updated.push({ ...currentStrokeRef.current });
+            updated.push({ ...currentStroke });
           }
           return updated;
         });
         // Emit final stroke state to ensure server has complete data for persistence
-        emitStroke(currentStrokeRef.current);
+        if (currentStroke?.id) {
+          emitStroke(currentStroke);
+        }
       }
       // Clear current ref but stroke is already persisted in strokesArray
       currentStrokeRef.current = null;
     }
     
     if (previewRef.current) {
+      // Ensure currentUser is available before creating shape stroke
+      if (!currentUser?.id) {
+        console.warn('Cannot add shape: currentUser is not available');
+        previewRef.current = null;
+        return;
+      }
       const p = previewRef.current;
       previewRef.current = null;
       const shapeStroke = {
@@ -506,7 +537,7 @@ const ScribbleOverlay = ({
         shape: p.shape,
         color: myColor,
         width: thickness,
-        userId: currentUser?.id
+        userId: currentUser.id
       };
       
       if (p.shape === 'rect') {
@@ -554,7 +585,7 @@ const ScribbleOverlay = ({
   };
 
   const confirmImage = () => {
-    if (uploadLocked && lockedBy && lockedBy !== currentUser?.id) {
+    if (uploadLocked && lockedBy && currentUser?.id && lockedBy !== currentUser.id) {
       return;
     }
     const img = pendingImage;
@@ -590,7 +621,7 @@ const ScribbleOverlay = ({
   };
 
   const removeConfirmedImage = () => {
-    if (uploadLocked && lockedBy !== currentUser?.id) {
+    if (uploadLocked && currentUser?.id && lockedBy !== currentUser.id) {
       return; // Only locker can remove
     }
     if (window.confirm('Are you sure you want to remove the image? This will also clear all annotations.')) {
@@ -606,6 +637,8 @@ const ScribbleOverlay = ({
     const socket = socketRef?.current;
     if (socket && currentUser?.id) {
       socket.emit('scribble:userColorChange', { roomId, id: currentUser.id, color: newColor });
+    } else if (!currentUser?.id) {
+      console.warn('Cannot change color: currentUser is not available');
     }
   };
 
@@ -660,7 +693,8 @@ const ScribbleOverlay = ({
   // Get participant name for locked by
   const getLockedByName = () => {
     if (!lockedBy) return null;
-    const participant = participants.find(p => p.userId === lockedBy);
+    if (!participants || !Array.isArray(participants)) return 'Another user';
+    const participant = participants.find(p => p?.userId === lockedBy);
     return participant?.username || 'Another user';
   };
 
@@ -713,12 +747,12 @@ const ScribbleOverlay = ({
               type="file"
               accept="image/*"
               onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
-              disabled={uploadLocked && lockedBy !== currentUser?.id}
+              disabled={uploadLocked && currentUser?.id && lockedBy !== currentUser.id}
               style={{ display: 'none' }}
             />
             Upload Image
           </label>
-          {uploadLocked && lockedBy && lockedBy !== currentUser?.id && (
+          {uploadLocked && lockedBy && currentUser?.id && lockedBy !== currentUser.id && (
             <div className="scribble-upload-locked">
               Image locked by {getLockedByName()}. Wait or request removal.
             </div>
@@ -727,7 +761,7 @@ const ScribbleOverlay = ({
             <div className="scribble-upload-actions">
               <button onClick={() => setPendingImage(null)} className="scribble-action-btn">Cancel</button>
               <button 
-                disabled={uploadLocked && lockedBy && lockedBy !== currentUser?.id} 
+                disabled={uploadLocked && lockedBy && currentUser?.id && lockedBy !== currentUser.id} 
                 onClick={confirmImage}
                 className="scribble-action-btn primary"
               >
@@ -803,7 +837,8 @@ const ScribbleOverlay = ({
           <div className="scribble-legend-header">Participants</div>
           <div className="scribble-legend-items">
             {Object.entries(userColors).map(([socketId, color]) => {
-              const participant = participants.find(p => p.userId === socketId);
+              if (!participants || !Array.isArray(participants)) return null;
+              const participant = participants.find(p => p?.userId === socketId);
               if (!participant) return null;
               const isCurrentUser = currentUser?.id === socketId;
               return (
@@ -816,7 +851,7 @@ const ScribbleOverlay = ({
                       border: isCurrentUser ? `2px solid ${color}` : 'none'
                     }} 
                   />
-                  <span className="scribble-legend-name">{participant.username}</span>
+                  <span className="scribble-legend-name">{participant?.username || 'Unknown'}</span>
                   {isCurrentUser && <span className="scribble-legend-you">(You)</span>}
                 </div>
               );

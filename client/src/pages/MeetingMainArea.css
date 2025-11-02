@@ -290,7 +290,7 @@
   transform: translateY(0);
 }
 
-/* Processing Layout - Show uploaded files directly */
+/* Processing Layout - Show uploaded files together (before response) */
 .pro-ai-processing-layout {
   width: 100%;
   height: 100%;
@@ -299,32 +299,50 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  gap: 20px;
+  gap: 16px;
   position: relative;
   z-index: 1;
+  background: #ffffff;
 }
 
-.pro-ai-uploaded-media-container {
+.pro-ai-uploaded-content-wrapper {
   width: 100%;
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.pro-ai-uploaded-media-container {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
   overflow: hidden;
 }
 
 .pro-ai-uploaded-image-full {
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
 .pro-ai-uploaded-audio-container {
   width: 90%;
+  max-width: 500px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .pro-ai-uploaded-audio-full {
@@ -384,29 +402,40 @@
   align-items: center;
   justify-content: center;
   min-height: 0;
-  margin: 8px 0;
+  margin: 12px 0;
+  flex-shrink: 0;
 }
 
 .pro-ai-response-image {
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
-/* Response Audio Container */
+/* Response Audio Container - Below image */
 .pro-ai-response-audio-container {
   width: 90%;
+  max-width: 500px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 8px 0;
+  margin: 12px 0;
+  flex-shrink: 0;
 }
 
 .pro-ai-response-audio {
   width: 100%;
   border-radius: 8px;
+}
+
+/* Ensure smooth layout transitions */
+.pro-ai-processing-layout,
+.pro-ai-response-layout {
+  transition: all 0.3s ease;
 }
 
 /* Answer Text - White, no background, below image */

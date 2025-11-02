@@ -156,46 +156,48 @@ const MeetingMainArea = ({
                 </button>
               )}
               
-              {/* Processing Layout: Show uploaded files directly */}
+              {/* Processing Layout: Show uploaded files together (before response) */}
               {isAIProcessingLayout && !aiResponse && (aiUploadedImage || aiUploadedAudio) ? (
                 <div className="pro-ai-processing-layout">
-                  {aiUploadedImage && (
-                    <div className="pro-ai-uploaded-media-container">
-                      <img src={aiUploadedImage} alt="Uploaded image" className="pro-ai-uploaded-image-full" />
-                    </div>
-                  )}
-                  {aiUploadedAudio && (
-                    <div className="pro-ai-uploaded-audio-container">
-                      <audio controls src={aiUploadedAudio} className="pro-ai-uploaded-audio-full" />
-                    </div>
-                  )}
+                  <div className="pro-ai-uploaded-content-wrapper">
+                    {aiUploadedImage && (
+                      <div className="pro-ai-uploaded-media-container">
+                        <img src={aiUploadedImage} alt="Uploaded image" className="pro-ai-uploaded-image-full" />
+                      </div>
+                    )}
+                    {aiUploadedAudio && (
+                      <div className="pro-ai-uploaded-audio-container">
+                        <audio controls src={aiUploadedAudio} className="pro-ai-uploaded-audio-full" />
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : isAIProcessingLayout && aiResponse ? (
-                /* Response Layout: Question → Image → Answer */
+                /* Response Layout: Question → Image → Audio → AI Response */
                 (() => {
                   const { question, answer } = extractAIQuestionAndAnswer(aiResponse);
                   return (
                     <div className="pro-ai-response-layout">
-                      {/* Question above image */}
+                      {/* 1. Question above image */}
                       {question && (
                         <div className="pro-ai-question-text">{question}</div>
                       )}
                       
-                      {/* Image in center */}
+                      {/* 2. Image in center */}
                       {aiUploadedImage && (
                         <div className="pro-ai-response-image-container">
                           <img src={aiUploadedImage} alt="AI processed content" className="pro-ai-response-image" />
                         </div>
                       )}
                       
-                      {/* Audio if present */}
-                      {aiUploadedAudio && !aiUploadedImage && (
+                      {/* 3. Audio below image */}
+                      {aiUploadedAudio && (
                         <div className="pro-ai-response-audio-container">
                           <audio controls src={aiUploadedAudio} className="pro-ai-response-audio" />
                         </div>
                       )}
                       
-                      {/* Answer below image */}
+                      {/* 4. AI Response below audio */}
                       {answer && (
                         <div className="pro-ai-answer-text">
                           <span className="pro-ai-answer-label">AI Response:</span> {answer}

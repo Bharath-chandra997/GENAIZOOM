@@ -134,13 +134,15 @@ const ScribbleOverlay = ({
     };
   }, [socketRef, roomId, currentUser]);
 
-  // Draw image to static canvas (only once when image loads/changes)
+  // Draw image to static canvas (responsive, maintains aspect ratio)
   const drawImageToCanvas = () => {
     const canvas = canvasImageRef.current;
     if (!canvas || !imageRef.current) return;
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const { clientWidth, clientHeight } = canvas;
+    
+    // Use requestAnimationFrame to batch resize operations and prevent flicker
     if (canvas.width !== clientWidth * dpr || canvas.height !== clientHeight * dpr) {
       canvas.width = clientWidth * dpr;
       canvas.height = clientHeight * dpr;
@@ -149,12 +151,18 @@ const ScribbleOverlay = ({
     ctx.clearRect(0, 0, clientWidth, clientHeight);
     
     const img = imageRef.current;
-    const maxW = clientWidth * 0.7;
-    const scale = Math.min(maxW / img.width, (clientHeight * 0.7) / img.height);
-    const drawW = img.width * scale * zoom;
-    const drawH = img.height * scale * zoom;
+    // Calculate scale to fit within 90% of container while maintaining aspect ratio
+    const maxW = clientWidth * 0.9;
+    const maxH = clientHeight * 0.9;
+    const scale = Math.min(maxW / img.width, maxH / img.height, 1) * zoom;
+    const drawW = img.width * scale;
+    const drawH = img.height * scale;
     const x = (clientWidth - drawW) / 2;
     const y = (clientHeight - drawH) / 2;
+    
+    // Enable high-quality image rendering
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, x, y, drawW, drawH);
   };
 
@@ -166,7 +174,7 @@ const ScribbleOverlay = ({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  // Draw loop: composite strokes onto drawing canvas
+  // Draw loop: composite strokes onto drawing canvas (optimized for smooth resize)
   const drawLoop = () => {
     const canvas = canvasDrawRef.current;
     if (!canvas) {
@@ -178,12 +186,18 @@ const ScribbleOverlay = ({
     const { clientWidth, clientHeight } = canvas;
     const displayWidth = clientWidth * dpr;
     const displayHeight = clientHeight * dpr;
+    
+    // Only resize if dimensions changed (prevents unnecessary redraws)
     if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
       canvas.width = displayWidth;
       canvas.height = displayHeight;
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, clientWidth, clientHeight);
+    
+    // Enable high-quality rendering for smooth drawings
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     
     // Draw all persisted strokes from strokesArray (server-synced)
     // strokesBufferRef is for temporary strokes during drawing, but they should already be in strokesArray
@@ -270,9 +284,37 @@ const ScribbleOverlay = ({
   // Update image canvas when zoom or image changes
   useEffect(() => {
     if (imageRef.current) {
-      drawImageToCanvas();
+      // Use requestAnimationFrame for smooth updates
+      const frameId = requestAnimationFrame(() => {
+        drawImageToCanvas();
+      });
+      return () => cancelAnimationFrame(frameId);
     }
   }, [zoom, image]);
+
+  // Handle window resize smoothly
+  useEffect(() => {
+    if (!image) return;
+    
+    let resizeTimeout;
+    const handleResize = () => {
+      // Debounce resize to prevent excessive redraws
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (imageRef.current) {
+          requestAnimationFrame(() => {
+            drawImageToCanvas();
+          });
+        }
+      }, 100);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimeout);
+    };
+  }, [image]);
 
   const emitDrawings = (updated) => {
     setStrokesArray(updated);

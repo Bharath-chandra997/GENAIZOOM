@@ -26,6 +26,12 @@
   inset: 0 0 80px 0; /* leave space for bottom controls */
   transition: backdrop-filter 0.4s ease;
   pointer-events: none;
+  /* Ensure stage doesn't blur canvas content */
+  filter: none;
+  -webkit-filter: none;
+  /* Force GPU acceleration for smooth rendering */
+  will-change: contents;
+  transform: translateZ(0);
 }
 
 .scribble-canvas-image,
@@ -33,14 +39,31 @@
   width: 100%;
   height: 100%;
   user-select: none;
+  /* Prevent blur - ensure crisp rendering */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  /* Override above for smooth scaling */
+  image-rendering: auto;
+  /* Ensure canvas is not affected by backdrop blur */
+  filter: none;
+  -webkit-filter: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .scribble-canvas-image {
   pointer-events: none; /* Image layer never receives events */
+  /* Ensure image canvas is clear and not blurred */
+  will-change: contents;
+  transform: translateZ(0); /* Force GPU acceleration */
 }
 
 .scribble-canvas-draw {
   pointer-events: auto; /* Drawing layer receives all events */
+  /* Ensure drawing canvas is clear and responsive */
+  will-change: contents;
+  transform: translateZ(0); /* Force GPU acceleration */
 }
 
 /* Upload Container - Animated, centered */

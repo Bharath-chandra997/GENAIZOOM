@@ -1051,7 +1051,6 @@ const ScribbleOverlay = ({
     const maxW = clientWidth * 0.95;
     const maxH = clientHeight * 0.95;
     
-    // **FIX:** Removed ', 1' to allow images to scale UP
     const scale = Math.min(maxW / img.width, maxH / img.height) * zoom;
     
     const drawW = img.width * scale;
@@ -1098,8 +1097,6 @@ const ScribbleOverlay = ({
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    // **FIX:** Only draw from strokesArray.
-    // The pointer handlers are responsible for updating this array in real-time.
     const allStrokes = [...strokesArray];
 
     allStrokes.forEach((s) => {
@@ -1303,6 +1300,9 @@ const ScribbleOverlay = ({
     }
   };
 
+  // #################################################################
+  // ###   THIS FUNCTION IS FIXED TO PREVENT RACE CONDITIONS       ###
+  // #################################################################
   const handlePointerMove = (e) => {
     if (!isDrawing) return;
     const rect = canvasDrawRef.current.getBoundingClientRect();
@@ -1310,34 +1310,27 @@ const ScribbleOverlay = ({
     const y = e.clientY - rect.top;
 
     if (tool === 'pen' || tool === 'highlighter') {
-      // **FIX:** This is the new, stable logic
+      // Get the stroke we are currently drawing from its ref
       const currentStroke = currentStrokeRef.current;
       if (!currentStroke || currentStroke.type !== 'path') return;
 
       const newPoint = { x, y };
-      let emitted = false;
 
-      // Update the stroke in the state array
-      setStrokesArray((prev) =>
-        prev.map((s) => {
-          if (s.id === currentStroke.id) {
-            const updatedPoints = [...s.points, newPoint];
-            const updatedStroke = { ...s, points: updatedPoints };
-            
-            // Update the ref as well for the next move/emit
-            currentStrokeRef.current = updatedStroke;
-            
-            // Emit throttle
-            if (updatedPoints.length % 2 === 0) {
-              emitStroke(updatedStroke);
-              emitted = true;
-            }
-            return updatedStroke;
-          }
-          return s;
-        })
+      // 1. Mutate the ref's data. This is safe and its intended purpose.
+      currentStroke.points.push(newPoint);
+
+      // 2. Update the state array immutably for the local draw loop to re-render.
+      // We map the array and replace the old stroke with the updated one from the ref.
+      setStrokesArray(prev => 
+        prev.map(s => 
+          s.id === currentStroke.id ? { ...currentStroke } : s
+        )
       );
 
+      // 3. Emit the updated stroke to the server (throttled)
+      if (currentStroke.points.length % 2 === 0) {
+        emitStroke(currentStroke);
+      }
     } else if (['rect', 'circle', 'arrow', 'line'].includes(tool)) {
       const p = previewRef.current;
       if (!p) return;
@@ -1358,6 +1351,9 @@ const ScribbleOverlay = ({
       }
     }
   };
+  // #################################################################
+  // ###                 END OF FIXED FUNCTION                     ###
+  // #################################################################
 
   const handlePointerUp = () => {
     if (!isDrawing) return;
@@ -1657,7 +1653,7 @@ const ScribbleOverlay = ({
         </motion.div>
       )}
 
-      {/* --- 2. WRAP TOOLBAR IN DRAGGABLE --- */}
+      {/* --- WRAP TOOLBAR IN DRAGGABLE --- */}
       {image && (
         <Draggable handle=".scribble-toolbar-handle">
           <motion.div
@@ -1802,7 +1798,7 @@ const ScribbleOverlay = ({
                 className="tool-size-input"
               />
               <div className="tool-separator"></div>
-              {/* --- 2. REUPLOAD BUTTON FIX --- */}
+              {/* --- REUPLOAD BUTTON FIX --- */}
               <button
                 className="tool tool-reupload"
                 onClick={handleReupload}
@@ -1815,7 +1811,7 @@ const ScribbleOverlay = ({
               >
                 Reupload
               </button>
-              {/* --- 2. REMOVE BUTTON FIX --- */}
+              {/* --- REMOVE BUTTON FIX --- */}
               <button
                 className="tool tool-remove"
                 onClick={removeConfirmedImage}

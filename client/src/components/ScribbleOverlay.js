@@ -46,7 +46,13 @@ const ScribbleOverlay = ({
         const imgEl = new Image();
         imgEl.onload = () => {
           imageRef.current = imgEl;
-          drawImageToCanvas();
+          // Use requestAnimationFrame for smooth rendering
+          requestAnimationFrame(() => {
+            drawImageToCanvas();
+          });
+        };
+        imgEl.onerror = () => {
+          console.error('Failed to load image from socket');
         };
         imgEl.src = img;
       } else {
@@ -291,29 +297,38 @@ const ScribbleOverlay = ({
     };
   }, []);
 
-  // Update image canvas when zoom or image changes
+  // Update image canvas when zoom or image state changes
   useEffect(() => {
-    if (imageRef.current) {
+    if (image && imageRef.current) {
       // Use requestAnimationFrame for smooth updates
       const frameId = requestAnimationFrame(() => {
         drawImageToCanvas();
       });
       return () => cancelAnimationFrame(frameId);
+    } else if (!image) {
+      // Clear image canvas when image is removed
+      const canvas = canvasImageRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
     }
   }, [zoom, image]);
 
-  // Handle window resize smoothly
+  // Handle window resize smoothly - redraw image and maintain drawings
   useEffect(() => {
-    if (!image) return;
+    if (!image || !imageRef.current) return;
     
     let resizeTimeout;
     const handleResize = () => {
       // Debounce resize to prevent excessive redraws
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
-        if (imageRef.current) {
+        if (imageRef.current && canvasImageRef.current) {
           requestAnimationFrame(() => {
             drawImageToCanvas();
+            // Drawing canvas will automatically resize and redraw via drawLoop
           });
         }
       }, 100);
@@ -517,6 +532,23 @@ const ScribbleOverlay = ({
     const img = pendingImage;
     setPendingImage(null);
     setImage(img);
+    
+    // Load image immediately for instant display
+    if (img) {
+      const imgEl = new Image();
+      imgEl.onload = () => {
+        imageRef.current = imgEl;
+        // Draw immediately after image loads
+        requestAnimationFrame(() => {
+          drawImageToCanvas();
+        });
+      };
+      imgEl.onerror = () => {
+        console.error('Failed to load image');
+      };
+      imgEl.src = img;
+    }
+    
     const socket = socketRef?.current;
     if (socket) socket.emit('scribble:image', { roomId, img });
     // Server will clear drawings when new image is confirmed
@@ -611,17 +643,29 @@ const ScribbleOverlay = ({
     <div className="scribble-root">
       <div className="scribble-backdrop" />
       <div className="scribble-stage" ref={containerRef}>
-        {/* Image layer (static) */}
+        {/* Image layer (static) - White background with image */}
         <canvas
           ref={canvasImageRef}
           className="scribble-canvas-image"
-          style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+          style={{ 
+            position: 'absolute', 
+            inset: 0, 
+            pointerEvents: 'none',
+            width: '100%',
+            height: '100%'
+          }}
         />
-        {/* Drawing layer (overlay) */}
+        {/* Drawing layer (overlay) - Interactive drawing surface */}
         <canvas
           ref={canvasDrawRef}
           className="scribble-canvas-draw"
-          style={{ position: 'absolute', inset: 0, cursor: tool === 'pen' || tool === 'highlighter' ? 'crosshair' : 'default' }}
+          style={{ 
+            position: 'absolute', 
+            inset: 0, 
+            cursor: tool === 'pen' || tool === 'highlighter' ? 'crosshair' : 'default',
+            width: '100%',
+            height: '100%'
+          }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}

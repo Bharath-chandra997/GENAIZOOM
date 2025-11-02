@@ -3,6 +3,9 @@
   inset: 0;
   z-index: 2000;
   pointer-events: none;
+  /* Ensure root covers entire screen */
+  width: 100vw;
+  height: 100vh;
 }
 
 .scribble-backdrop {
@@ -14,7 +17,7 @@
   background: #ffffff;
   transition: all 0.3s ease;
   animation: scribbleFade 0.3s ease forwards;
-  z-index: 1999;
+  z-index: 1998; /* Below stage */
   pointer-events: auto;
 }
 
@@ -31,6 +34,7 @@
   will-change: contents;
   transform: translateZ(0);
   background: transparent;
+  z-index: 1999; /* Above backdrop, below toolbar */
 }
 
 .scribble-canvas-image,
@@ -58,6 +62,10 @@
   transform: translateZ(0); /* Force GPU acceleration */
   background: #ffffff;
   opacity: 1;
+  /* Ensure canvas is visible and not hidden */
+  visibility: visible;
+  display: block;
+  z-index: 1;
 }
 
 .scribble-canvas-draw {
@@ -66,6 +74,10 @@
   will-change: contents;
   transform: translateZ(0); /* Force GPU acceleration */
   background: transparent;
+  /* Ensure canvas is visible and above image */
+  visibility: visible;
+  display: block;
+  z-index: 2;
 }
 
 /* Upload Container - Animated, centered on white background */
@@ -241,9 +253,12 @@
   border-radius: 16px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
-  z-index: 2001;
+  z-index: 2001; /* Above everything */
   min-width: 300px;
   border: 1px solid rgba(0, 0, 0, 0.06);
+  /* Ensure toolbar is always visible */
+  visibility: visible;
+  opacity: 1;
 }
 
 .scribble-toolbar-row {
@@ -421,10 +436,13 @@
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
   color: #1f2937;
   pointer-events: auto;
-  z-index: 2001;
+  z-index: 2001; /* Above everything */
   min-width: 180px;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.06);
+  /* Ensure legend is always visible */
+  visibility: visible;
+  opacity: 1;
 }
 
 .scribble-legend-header {

@@ -106,71 +106,38 @@ const Home = () => {
   }
 
   const handleCreateMeeting = async () => {
-    console.log('handleCreateMeeting called', { meetingTitle, user: user ? 'present' : 'null' });
-    
     if (!meetingTitle.trim()) {
       toast.error('Please enter a meeting title');
       return;
     }
-    
-    if (!user || !user.token) {
-      console.error('Create meeting: User or token missing', { user: user ? 'present' : 'null', token: user?.token ? 'present' : 'missing' });
+    if (!user?.token) {
       toast.error('Session invalid. Please log in again.');
       navigate('/login');
       return;
     }
 
     setLoading(true);
-    console.log('Creating meeting with:', { title: meetingTitle.trim(), serverUrl: SERVER_URL });
-    
     try {
       const response = await axios.post(
         `${SERVER_URL}/api/meetings`,
         { title: meetingTitle.trim() },
-        { 
-          headers: { Authorization: `Bearer ${user.token}` },
-          timeout: 10000 // 10 second timeout
-        }
+        { headers: { Authorization: `Bearer ${user.token}` } }
       );
 
-      console.log('Create meeting response:', response.data);
-      
-      if (!response.data || !response.data.meeting || !response.data.meeting.roomId) {
-        console.error('Invalid response structure:', response.data);
-        toast.error('Invalid response from server. Please try again.');
-        return;
-      }
-
       const { roomId } = response.data.meeting;
-      console.log('Navigating to meeting room:', roomId);
-      
       toast.success('Meeting created successfully!');
       setIsModalOpen(false);
       setMeetingTitle('');
       navigate(`/meeting/${roomId}`);
     } catch (error) {
-      console.error('Create meeting error:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        code: error.code
-      });
-      
-      let message = 'Failed to create meeting. Please try again.';
-      
-      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-        message = 'Request timed out. Please check your connection and try again.';
-      } else if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error')) {
-        message = 'Network error. Please check your internet connection and try again.';
-      } else if (error.response?.status === 401) {
-        message = 'Session expired. Please log in again.';
+      console.error('Create meeting error:', error);
+      const message = error.response?.data?.error || 'Failed to create meeting. Please try again.';
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please log in again.');
         navigate('/login');
-      } else if (error.response?.data?.error) {
-        message = error.response.data.error;
+      } else {
+        toast.error(message);
       }
-      
-      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -178,23 +145,11 @@ const Home = () => {
 
   const handleJoinMeeting = (e) => {
     e.preventDefault();
-    console.log('handleJoinMeeting called', { joinRoomId });
-    
-    const trimmedRoomId = joinRoomId.trim();
-    
-    if (!trimmedRoomId) {
+    if (!joinRoomId.trim()) {
       toast.error('Please enter a meeting ID');
       return;
     }
-    
-    // Basic validation for room ID format (should be UUID-like)
-    if (trimmedRoomId.length < 10) {
-      toast.error('Invalid meeting ID format. Please check and try again.');
-      return;
-    }
-    
-    console.log('Navigating to join meeting:', trimmedRoomId);
-    navigate(`/join/${trimmedRoomId}`);
+    navigate(`/join/${joinRoomId.trim()}`);
   };
 
   const quickActions = [

@@ -49,13 +49,6 @@ const AIPopup = ({
   };
 
   const handleSubmit = async () => {
-    if (!user || !user.username) {
-      toast.error('User session invalid. Please log in again.', {
-        position: "bottom-center"
-      });
-      return;
-    }
-    
     if (aiBotInUse && currentAIUser !== user.username) {
       toast.error('AI Bot is currently in use by another user', {
         position: "bottom-center"
@@ -193,7 +186,7 @@ const AIPopup = ({
                     <strong>AI Answer:</strong> {safeAIText(aiResponse)}
                   </div>
 
-                  {user?.username && currentAIUser === user.username && (
+                  {currentAIUser === user.username && (
                     <button 
                       onClick={handleComplete}
                       className="pro-ai-complete-btn"

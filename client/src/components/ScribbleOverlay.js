@@ -869,18 +869,23 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import Draggable from 'react-draggable'; // <-- 1. IMPORT DRAGGABLE
 import {
   FiX,
-  FiEdit3,
+  FiEdit3, // Pen
   FiRotateCcw,
   FiRotateCw,
   FiTrash2,
-  FiMinusCircle,
+  FiMinusCircle, // Eraser
   FiSquare,
   FiCircle,
   FiArrowUpRight,
   FiZoomIn,
   FiMove,
+  FiEdit, // Using FiEdit for Highlighter
+  FiMinus, // Using FiMinus for Line
+  FiZoomOut,
+  FiDownload, // Using FiDownload for Save
 } from 'react-icons/fi';
 import { extractAIQuestionAndAnswer } from '../utils/aiResponseHelpers';
 import './ScribbleOverlay.css';
@@ -1652,158 +1657,200 @@ const ScribbleOverlay = ({
         </motion.div>
       )}
 
+      {/* --- 2. WRAP TOOLBAR IN DRAGGABLE --- */}
       {image && (
-        <motion.div
-          className="scribble-toolbar-professional"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: 'easeOut' }}
-        >
-          {/* Top Row - Drawing Tools */}
-          <div className="scribble-toolbar-row">
-            <button
-              className={`tool ${tool === 'pen' ? 'active' : ''}`}
-              onClick={() => setTool('pen')}
-              title="Pen"
+        <Draggable handle=".scribble-toolbar-handle">
+          <motion.div
+            className="scribble-toolbar-professional"
+            initial={{ opacity: 0 }} // Remove y-animation
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+          >
+            {/* --- ADDED DRAG HANDLE --- */}
+            <div
+              className="scribble-toolbar-handle"
+              style={{
+                cursor: 'move',
+                padding: '4px',
+                textAlign: 'center',
+                backgroundColor: 'rgba(0,0,0,0.1)',
+                borderTopLeftRadius: '8px',
+                borderTopRightRadius: '8px',
+              }}
             >
-              <FiEdit3 />
-            </button>
-            <button
-              className={`tool ${tool === 'eraser' ? 'active' : ''}`}
-              onClick={() => setTool('eraser')}
-              title="Eraser (Undo last)"
-            >
-              <FiMinusCircle />
-            </button>
-            <button
-              className={`tool ${tool === 'highlighter' ? 'active' : ''}`}
-              onClick={() => setTool('highlighter')}
-              title="Highlighter"
-            >
-              H
-            </button>
-            <button
-              className={`tool ${tool === 'rect' ? 'active' : ''}`}
-              onClick={() => setTool('rect')}
-              title="Rectangle"
-            >
-              <FiSquare />
-            </button>
-            <button
-              className={`tool ${tool === 'circle' ? 'active' : ''}`}
-              onClick={() => setTool('circle')}
-              title="Circle"
-            >
-              <FiCircle />
-            </button>
-            <button
-              className={`tool ${tool === 'arrow' ? 'active' : ''}`}
-              onClick={() => setTool('arrow')}
-              title="Arrow"
-            >
-              <FiArrowUpRight />
-            </button>
-            <button
-              className={`tool ${tool === 'line' ? 'active' : ''}`}
-              onClick={() => setTool('line')}
-              title="Line"
-            >
-              /
-            </button>
-            <div className="tool-separator"></div>
-            <button
-              className="tool"
-              onClick={undo}
-              title="Undo"
-              disabled={
-                !strokesArray.some((s) => s.userId === currentUser?.id)
-              }
-            >
-              <FiRotateCcw />
-            </button>
-            <button
-              className="tool"
-              onClick={redo}
-              title="Redo"
-              disabled={undoStackRef.current.length === 0}
-            >
-              <FiRotateCw />
-            </button>
-            <button
-              className="tool"
-              onClick={() => emitDrawings([])}
-              title="Clear All"
-            >
-              <FiTrash2 />
-            </button>
-            <button
-              className="tool"
-              onClick={() => setZoom(Math.min(2, zoom + 0.1))}
-              title="Zoom In"
-            >
-              <FiZoomIn />
-            </button>
-            <button
-              className="tool"
-              onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
-              title="Zoom Out"
-            >
-              −
-            </button>
-            <button className="tool" onClick={savePng} title="Save PNG">
-              ⬇️
-            </button>
-          </div>
+              <FiMove title="Drag Toolbar" />
+            </div>
 
-          {/* Second Row - Color, Size, Reupload, Close */}
-          <div className="scribble-toolbar-row">
-            <input
-              type="color"
-              value={myColor}
-              onChange={(e) => handleColorChange(e.target.value)}
-              title="Change Color"
-              className="tool-color-input"
-            />
-            <input
-              type="range"
-              min="1"
-              max="20"
-              value={thickness}
-              onChange={(e) => setThickness(parseInt(e.target.value, 10))}
-              title="Brush Size"
-              className="tool-size-input"
-            />
-            <div className="tool-separator"></div>
-            <button
-              className="tool tool-reupload"
-              onClick={handleReupload}
-              title="Reupload Image"
+            {/* Top Row - Drawing Tools */}
+            <div className="scribble-toolbar-row">
+              <button
+                className={`tool ${tool === 'pen' ? 'active' : ''}`}
+                onClick={() => setTool('pen')}
+                title="Pen"
+              >
+                <FiEdit3 />
+              </button>
+              <button
+                className={`tool ${tool === 'eraser' ? 'active' : ''}`}
+                onClick={() => setTool('eraser')}
+                title="Eraser (Undo last)"
+              >
+                <FiMinusCircle />
+              </button>
+              <button
+                className={`tool ${tool === 'highlighter' ? 'active' : ''}`}
+                onClick={() => setTool('highlighter')}
+                title="Highlighter"
+              >
+                <FiEdit />
+              </button>
+              <button
+                className={`tool ${tool === 'rect' ? 'active' : ''}`}
+                onClick={() => setTool('rect')}
+                title="Rectangle"
+              >
+                <FiSquare />
+              </button>
+              <button
+                className={`tool ${tool === 'circle' ? 'active' : ''}`}
+                onClick={() => setTool('circle')}
+                title="Circle"
+              >
+                <FiCircle />
+              </button>
+              <button
+                className={`tool ${tool === 'arrow' ? 'active' : ''}`}
+                onClick={() => setTool('arrow')}
+                title="Arrow"
+              >
+                <FiArrowUpRight />
+              </button>
+              <button
+                className={`tool ${tool === 'line' ? 'active' : ''}`}
+                onClick={() => setTool('line')}
+                title="Line"
+              >
+                <FiMinus />
+              </button>
+              <div className="tool-separator"></div>
+              <button
+                className="tool"
+                onClick={undo}
+                title="Undo"
+                disabled={
+                  !strokesArray.some((s) => s.userId === currentUser?.id)
+                }
+              >
+                <FiRotateCcw />
+              </button>
+              <button
+                className="tool"
+                onClick={redo}
+                title="Redo"
+                disabled={undoStackRef.current.length === 0}
+              >
+                <FiRotateCw />
+              </button>
+              <button
+                className="tool"
+                onClick={() => emitDrawings([])}
+                title="Clear All"
+              >
+                <FiTrash2 />
+              </button>
+              <button
+                className="tool"
+                onClick={() => setZoom(Math.min(2, zoom + 0.1))}
+                title="Zoom In"
+              >
+                <FiZoomIn />
+              </button>
+              <button
+                className="tool"
+                onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
+                title="Zoom Out"
+              >
+                <FiZoomOut />
+              </button>
+              <button className="tool" onClick={savePng} title="Save PNG">
+                <FiDownload />
+              </button>
+            </div>
+
+            {/* Second Row - Color, Size, Reupload, Close */}
+            <div
+              className="scribble-toolbar-row"
+              style={{
+                borderBottomLeftRadius: '8px',
+                borderBottomRightRadius: '8px',
+              }}
             >
-              Reupload
-            </button>
-            <button
-              className="tool tool-remove"
-              onClick={removeConfirmedImage}
-              title="Remove Image"
-            >
-              <FiTrash2 />
-            </button>
-            <button
-              className="tool tool-close"
-              onClick={handleClose}
-              title="Close Scribble"
-            >
-              <FiX />
-            </button>
-          </div>
-        </motion.div>
+              <input
+                type="color"
+                value={myColor}
+                onChange={(e) => handleColorChange(e.target.value)}
+                title="Change Color"
+                className="tool-color-input"
+              />
+              <input
+                type="range"
+                min="1"
+                max="20"
+                value={thickness}
+                onChange={(e) => setThickness(parseInt(e.target.value, 10))}
+                title="Brush Size"
+                className="tool-size-input"
+              />
+              <div className="tool-separator"></div>
+              {/* --- 2. REUPLOAD BUTTON FIX --- */}
+              <button
+                className="tool tool-reupload"
+                onClick={handleReupload}
+                title="Reupload Image"
+                disabled={
+                  uploadLocked &&
+                  currentUser?.id &&
+                  lockedBy !== currentUser.id
+                }
+              >
+                Reupload
+              </button>
+              {/* --- 2. REMOVE BUTTON FIX --- */}
+              <button
+                className="tool tool-remove"
+                onClick={removeConfirmedImage}
+                title="Remove Image"
+                disabled={
+                  uploadLocked &&
+                  currentUser?.id &&
+                  lockedBy !== currentUser.id
+                }
+              >
+                <FiTrash2 />
+              </button>
+              <button
+                className="tool tool-close"
+                onClick={handleClose}
+                title="Close Scribble"
+              >
+                <FiX />
+              </button>
+            </div>
+          </motion.div>
+        </Draggable>
       )}
 
-      {/* Enhanced Legend */}
+      {/* Enhanced Legend - (Now a Left Sidebar) */}
       {Object.keys(userColors).length > 0 && (
         <motion.div
           className="scribble-legend-enhanced"
-          initial={{ opacity: 0, x: 20 }}
+          style={{
+            position: 'absolute',
+            left: '16px', // Position on the left
+            top: '120px', // Position below the toolbar
+            zIndex: 100,
+          }}
+          initial={{ opacity: 0, x: -20 }} // Animate from left
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.3, delay: 0.2 }}
         >

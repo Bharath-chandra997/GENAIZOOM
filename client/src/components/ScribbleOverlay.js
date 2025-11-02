@@ -605,7 +605,7 @@ const ScribbleOverlay = ({
     setMyColor(newColor);
     const socket = socketRef?.current;
     if (socket && currentUser?.id) {
-      socket.emit('scribble:userColorChange', { roomId, id: currentUser.id, color: newColor });
+      socket.emit('scribble:userColorChange', { roomId, id: currentUser?.id, color: newColor });
     }
   };
 
@@ -803,7 +803,7 @@ const ScribbleOverlay = ({
           <div className="scribble-legend-header">Participants</div>
           <div className="scribble-legend-items">
             {Object.entries(userColors).map(([socketId, color]) => {
-              const participant = participants.find(p => p.userId === socketId);
+              const participant = participants.find(p => p?.userId === socketId);
               if (!participant) return null;
               const isCurrentUser = currentUser?.id === socketId;
               return (

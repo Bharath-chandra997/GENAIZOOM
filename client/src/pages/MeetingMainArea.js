@@ -96,6 +96,11 @@ const MeetingMainArea = ({
 
   // Render participant video frame
   const renderParticipantVideo = (participant, index) => {
+    // Guard against null participant
+    if (!participant || !participant.userId) {
+      return null;
+    }
+    
     const isAI = participant.userId === 'ai-assistant';
     const isPinned = localPinnedParticipant === participant.userId;
     const hasVideo = participant.videoEnabled && participant.stream;
@@ -232,7 +237,7 @@ const MeetingMainArea = ({
                   return (
                     <img 
                       src={participant.profilePicture} 
-                      alt={participant.username}
+                      alt={participant?.username || 'Participant'}
                       style={{
                         width: '120px',
                         height: '120px',
@@ -256,20 +261,20 @@ const MeetingMainArea = ({
 
         <div className="pro-participant-info">
           <div className="pro-participant-name">
-            {participant.username}
-            {participant.isLocal && !isAI && ' (You)'}
-            {participant.isHost && ' 👑'}
+            {participant?.username || 'Unknown'}
+            {participant?.isLocal && !isAI && ' (You)'}
+            {participant?.isHost && ' 👑'}
             {isAI && ' 🤖'}
             {isScreenSharing && ' 📺'}
           </div>
 
           <div className="pro-status-indicators">
-            {!participant.audioEnabled && !isAI && (
+            {participant && !participant.audioEnabled && !isAI && (
               <div className="pro-status-icon pro-status-icon--muted" title="Audio muted">
                 🔇
               </div>
             )}
-            {!participant.videoEnabled && !isAI && (
+            {participant && !participant.videoEnabled && !isAI && (
               <div className="pro-status-icon pro-status-icon--video-off" title="Video off">
                 🚫
               </div>

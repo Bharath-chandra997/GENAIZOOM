@@ -247,11 +247,11 @@ const Meeting = () => {
       const participant = allParticipants.find((p) => p.userId === userId);
       return participant
         ? participant.isLocal
-          ? user.username
+          ? (user?.username || 'You')
           : participant.username
         : 'Another user';
     },
-    [allParticipants, user.username]
+    [allParticipants, user?.username]
   );
 
   const initializeAiAnimation = useCallback(() => {
@@ -548,6 +548,12 @@ const Meeting = () => {
     try {
       // Clear previous AI response for smooth UI updates
       setAiResponse('');
+      
+      // Guard against null user
+      if (!user || !user.userId || !user.token || !user.username) {
+        throw new Error('User session invalid. Please log in again.');
+      }
+      
       console.log('Starting AI request for user:', user.username, {
         image: imageFile?.name,
         audio: audioFile?.name,
@@ -780,18 +786,27 @@ const Meeting = () => {
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
     setIsAIProcessingLayout(false); // Revert to default layout
+    
+    // Guard against null user
+    if (!user || !user.username) {
+      toast.error('User session invalid');
+      return;
+    }
+    
     socketRef.current?.emit('shared-media-removal', { username: user.username });
 
     try {
-      await axios.post(
-        `${SERVER_URL}/api/ai/unlock/${roomId}`,
-        { userId: user.userId },
-        {
-          headers: { Authorization: `Bearer ${user.token}` },
-          timeout: 5000,
-        }
-      );
-      console.log('AI unlocked on manual complete');
+      if (user?.userId && user?.token) {
+        await axios.post(
+          `${SERVER_URL}/api/ai/unlock/${roomId}`,
+          { userId: user.userId },
+          {
+            headers: { Authorization: `Bearer ${user.token}` },
+            timeout: 5000,
+          }
+        );
+        console.log('AI unlocked on manual complete');
+      }
     } catch (e) {
       console.warn('Manual unlock failed (non-critical):', e.message);
     }
@@ -1010,6 +1025,12 @@ const Meeting = () => {
   const setupSocketListeners = useCallback(
     (socket) => {
       const onConnect = () => {
+        // Guard against null user
+        if (!user || !user.username) {
+          console.error('Cannot join room: user not initialized');
+          return;
+        }
+        
         socket.emit(
           'join-room',
           { roomId, username: user.username, isReconnect: false },
@@ -1017,7 +1038,7 @@ const Meeting = () => {
             const isHost = otherUsers.length === 0;
             
             // Show join notification for current user
-            toast.success(`Welcome to the meeting, ${user.username}!`, { 
+            toast.success(`Welcome to the meeting, ${user?.username || 'User'}!`, { 
               position: 'top-center',
               autoClose: 3000,
               hideProgressBar: false,
@@ -1039,16 +1060,16 @@ const Meeting = () => {
               profilePicture: u.profilePicture,
             }));
             const localParticipant = {
-              userId: socket.id,
-              username: `${user.username} (You)`,
+              userId: socket?.id || user?.userId || 'unknown',
+              username: `${user?.username || 'User'} (You)`,
               stream: localStreamRef.current,
               isLocal: true,
               isHost,
               videoEnabled: true,
               audioEnabled: true,
               isScreenSharing: false,
-              socketId: socket.id,
-              profilePicture: user.profilePicture,
+              socketId: socket?.id || user?.userId || 'unknown',
+              profilePicture: user?.profilePicture || null,
             };
             setParticipants([localParticipant, ...remoteParticipants]);
 
@@ -1366,13 +1387,13 @@ const Meeting = () => {
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
         setIsDrawingVisible(true);
-        socketRef.current?.emit('screen-share-start', { userId: socketRef.current.id });
+        socketRef.current?.emit('screen-share-start', { userId: socketRef.current?.id || user?.userId || 'unknown' });
         
         screenTrack.onended = async () => {
           await replaceTrack(localCameraTrackRef.current, false);
           setIsSharingScreen(false);
           setIsDrawingVisible(false);
-          socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
+          socketRef.current?.emit('screen-share-stop', { userId: socketRef.current?.id || user?.userId || 'unknown' });
         };
       } catch (e) {
         console.error('Screen share error:', e);
@@ -1401,6 +1422,15 @@ const Meeting = () => {
       userId: socketRef.current.id,
     });
   };
+
+  // Early return guards - prevent rendering with null user
+  if (!user || !user.userId || !user.token || !user.username) {
+    return (
+      <div className="pro-meeting-page flex items-center justify-center">
+        <LoadingSpinner size="large" />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -1603,7 +1633,7 @@ const Meeting = () => {
             userId: p.socketId || p.userId, 
             username: p.username.replace(' (You)', '') 
           }))}
-          currentUser={{ id: socketRef.current?.id, username: user.username }}
+          currentUser={{ id: socketRef.current?.id || null, username: user?.username || 'User' }}
           aiResponse={aiResponse}
         />
       )}

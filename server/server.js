@@ -568,7 +568,8 @@ io.on('connection', (socket) => {
   const getScribbleState = (roomId) => global.__scribbleStateByRoom.get(roomId) || { 
     image: null, 
     drawings: [], 
-    userColors: {},
+    userColors: {}, // socket.id -> color (for current session)
+    userColorsByUserId: {}, // userId -> color (for persistence across reconnects)
     uploadLockedBy: null 
   };
   const setScribbleState = (roomId, state) => global.__scribbleStateByRoom.set(roomId, state);
@@ -590,14 +591,37 @@ io.on('connection', (socket) => {
     socketToRoom[socket.id] = roomId;
     socketIdToUsername[socket.id] = username;
     
-    // Assign color for new user in Scribble
+    // Assign or restore color for user in Scribble (consistent based on userId)
+    // Use userId-based mapping for color consistency across reconnects and meeting persistence
     const scribbleState = getScribbleState(roomId);
-    if (!scribbleState.userColors[socket.id]) {
-      scribbleState.userColors[socket.id] = generateColorForUser(socket.id);
+    
+    // Create a userId-based color map if it doesn't exist (for persistence)
+    if (!scribbleState.userColorsByUserId) {
+      scribbleState.userColorsByUserId = {};
       setScribbleState(roomId, scribbleState);
-      // Broadcast updated colors to all clients in room
-      io.to(roomId).emit('scribble:userColors', scribbleState.userColors);
     }
+    
+    // Check if user already has a color assigned by userId
+    let userColor = scribbleState.userColorsByUserId[userId];
+    
+    if (!userColor) {
+      // Generate consistent color based on userId hash for persistence throughout meeting
+      let hash = 0;
+      for (let i = 0; i < userId.length; i++) {
+        hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const hue = Math.abs(hash) % 360;
+      userColor = `hsl(${hue}, 90%, 60%)`;
+      scribbleState.userColorsByUserId[userId] = userColor;
+      setScribbleState(roomId, scribbleState);
+    }
+    
+    // Map socket.id to userId-based color (for current session)
+    scribbleState.userColors[socket.id] = userColor;
+    setScribbleState(roomId, scribbleState);
+    
+    // Broadcast updated colors to all clients in room
+    io.to(roomId).emit('scribble:userColors', scribbleState.userColors);
     
     try {
       let session = await MeetingSession.findOne({ roomId });
@@ -756,10 +780,17 @@ io.on('connection', (socket) => {
     if (!roomId || !stroke) return;
     const state = getScribbleState(roomId);
     if (!state.drawings) state.drawings = [];
-    // Append stroke to existing array
-    state.drawings.push(stroke);
+    // Check if stroke already exists (prevent duplicates from updates)
+    const existingIndex = state.drawings.findIndex(s => s.id === stroke.id);
+    if (existingIndex >= 0) {
+      // Update existing stroke (for incremental updates during drawing)
+      state.drawings[existingIndex] = stroke;
+    } else {
+      // Append new stroke
+      state.drawings.push(stroke);
+    }
     setScribbleState(roomId, state);
-    // Broadcast to all other clients instantly
+    // Broadcast to all other clients instantly for real-time collaboration
     socket.to(roomId).emit('scribble:stroke', stroke);
   });
 
@@ -787,8 +818,15 @@ io.on('connection', (socket) => {
   socket.on('scribble:userColorChange', ({ roomId, id, color }) => {
     if (!roomId || !id || !color) return;
     const state = getScribbleState(roomId);
-    if (state.userColors[id]) {
-      state.userColors[id] = color;
+    // Update both socket.id mapping and userId mapping for persistence
+    if (state.userColors[socket.id]) {
+      state.userColors[socket.id] = color;
+      // Also update userId mapping if socket.id corresponds to a userId
+      const socketObj = io.sockets.sockets.get(socket.id);
+      if (socketObj && socketObj.user && socketObj.user.userId) {
+        if (!state.userColorsByUserId) state.userColorsByUserId = {};
+        state.userColorsByUserId[socketObj.user.userId] = color;
+      }
       setScribbleState(roomId, state);
       io.to(roomId).emit('scribble:userColors', state.userColors);
     }

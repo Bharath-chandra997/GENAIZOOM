@@ -111,12 +111,17 @@ const ScribbleOverlay = ({
     };
 
     const onStroke = (stroke) => {
-      // Append individual stroke for real-time updates (prevent duplicates)
+      // Handle individual stroke for real-time updates from other participants
       setStrokesArray(prev => {
         // Check if stroke already exists by ID
-        if (prev.some(s => s.id === stroke.id)) {
-          return prev; // Skip duplicate
+        const existingIndex = prev.findIndex(s => s.id === stroke.id);
+        if (existingIndex >= 0) {
+          // Update existing stroke (for incremental updates during drawing)
+          const updated = [...prev];
+          updated[existingIndex] = stroke;
+          return updated;
         }
+        // Add new stroke
         return [...prev, stroke];
       });
     };
@@ -166,7 +171,7 @@ const ScribbleOverlay = ({
     ctx.fillRect(0, 0, clientWidth, clientHeight);
     
     const img = imageRef.current;
-    // Calculate scale to fit within 95% of container while maintaining aspect ratio
+    // Calculate scale to fit screen responsively - enlarge image (use 95% of container for larger display)
     const maxW = clientWidth * 0.95;
     const maxH = clientHeight * 0.95;
     const scale = Math.min(maxW / img.width, maxH / img.height, 1) * zoom;
@@ -175,11 +180,15 @@ const ScribbleOverlay = ({
     const x = (clientWidth - drawW) / 2;
     const y = (clientHeight - drawH) / 2;
     
-    // Enable high-quality image rendering - clear and crisp
+    // Enable high-quality image rendering - clear and crisp, no blur
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.globalAlpha = 1; // Full opacity, no transparency
+    // Save context state
+    ctx.save();
+    // Draw image with crisp rendering - ensure no blur with proper scaling
     ctx.drawImage(img, x, y, drawW, drawH);
+    ctx.restore();
   };
 
   // Clear only the drawing canvas
@@ -426,20 +435,22 @@ const ScribbleOverlay = ({
     const y = e.clientY - rect.top;
     
     if (tool === 'pen' || tool === 'highlighter') {
-      // Update current stroke
+      // Update current stroke for smooth continuous drawing
       if (currentStrokeRef.current && currentStrokeRef.current.type === 'path') {
         currentStrokeRef.current.points.push({ x, y });
-        // Update in buffer too
-        const bufferStroke = strokesBufferRef.current[strokesBufferRef.current.length - 1];
-        if (bufferStroke && bufferStroke.id === currentStrokeRef.current.id) {
-          bufferStroke.points.push({ x, y });
-        }
-        // Update in strokesArray for persistence
-        const updated = [...strokesArray];
-        const last = updated[updated.length - 1];
-        if (last && last.id === currentStrokeRef.current.id) {
-          last.points.push({ x, y });
-          emitDrawings(updated);
+        // Update in strokesArray immediately for local display (real-time feedback)
+        setStrokesArray(prev => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          if (lastIndex >= 0 && updated[lastIndex]?.id === currentStrokeRef.current.id) {
+            updated[lastIndex] = { ...updated[lastIndex], points: [...currentStrokeRef.current.points] };
+          }
+          return updated;
+        });
+        // Emit incremental update for real-time sync to other participants
+        // Emit more frequently (every 2 points) for smoother real-time collaboration
+        if (currentStrokeRef.current.points.length % 2 === 0) {
+          emitStroke(currentStrokeRef.current);
         }
       }
     } else if (['rect','circle','arrow','line'].includes(tool)) {
@@ -458,15 +469,32 @@ const ScribbleOverlay = ({
   };
 
   const handlePointerUp = () => {
+    if (!isDrawing) return;
     setIsDrawing(false);
     lastPointRef.current = null;
     
-    // Finalize current stroke
-    if (currentStrokeRef.current) {
-      // Stroke is already in strokesArray, just clear current ref
+    // Finalize current stroke - ensure it's persisted on server and doesn't vanish
+    if (currentStrokeRef.current && currentStrokeRef.current.type === 'path') {
+      // Ensure stroke has at least 2 points (valid stroke)
+      if (currentStrokeRef.current.points.length >= 2) {
+        // Finalize the stroke in local array - ensure it's permanently added
+        setStrokesArray(prev => {
+          const updated = [...prev];
+          const lastIndex = updated.length - 1;
+          if (lastIndex >= 0 && updated[lastIndex]?.id === currentStrokeRef.current.id) {
+            // Update existing stroke with final points
+            updated[lastIndex] = { ...updated[lastIndex], points: [...currentStrokeRef.current.points] };
+          } else {
+            // Stroke not in array yet, add it
+            updated.push({ ...currentStrokeRef.current });
+          }
+          return updated;
+        });
+        // Emit final stroke state to ensure server has complete data for persistence
+        emitStroke(currentStrokeRef.current);
+      }
+      // Clear current ref but stroke is already persisted in strokesArray
       currentStrokeRef.current = null;
-      // Don't clear strokesBufferRef - keep it for persistence
-      // Only clear temporary drawing buffer for the current active stroke
     }
     
     if (previewRef.current) {

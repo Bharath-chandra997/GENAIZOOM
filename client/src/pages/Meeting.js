@@ -14,6 +14,7 @@ import MeetingHeader from './MeetingHeader';
 import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
+import ScribbleOverlay from '../components/ScribbleOverlay';
 import AIPopup from './AIPopup';
 import Chat from '../components/Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -127,6 +128,7 @@ const Meeting = () => {
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [scribbleActive, setScribbleActive] = useState(false);
 
 
   const [aiParticipant] = useState({
@@ -844,6 +846,15 @@ const Meeting = () => {
       socket.on('shared-ai-result', handleSharedAIResult);
       socket.on('shared-media-display', handleSharedMediaDisplay);
       socket.on('shared-media-removal', handleSharedMediaRemoval);
+      // Auto-open/close Scribble when image is uploaded/removed by anyone
+      socket.on('scribble:image', (img) => {
+        if (img) {
+          setScribbleActive(true);
+        }
+      });
+      socket.on('scribble:removeImage', () => {
+        setScribbleActive(false);
+      });
       
 
       return () => {
@@ -863,6 +874,8 @@ const Meeting = () => {
         socket.off('shared-ai-result');
         socket.off('shared-media-display');
         socket.off('shared-media-removal');
+        socket.off('scribble:image');
+        socket.off('scribble:removeImage');
       };
     },
     [
@@ -1235,8 +1248,20 @@ const Meeting = () => {
             toast.success('Invite link copied!', { position: 'bottom-center' });
           });
         }}
+        scribbleActive={scribbleActive}
+        onToggleScribble={() => setScribbleActive((v) => !v)}
       />
 
+      {scribbleActive && (
+        <ScribbleOverlay
+          socketRef={socketRef}
+          roomId={roomId}
+          onClose={() => setScribbleActive(false)}
+          participants={allParticipants}
+          currentUser={{ id: socketRef.current?.id, username: user.username }}
+          aiResponse={aiResponse}
+        />
+      )}
       <canvas
         ref={aiCanvasRef}
         style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }}

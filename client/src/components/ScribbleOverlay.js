@@ -1690,7 +1690,56 @@ const ScribbleOverlay = ({
   return (
     <div className="scribble-root">
       <div className="scribble-backdrop" />
-      <div className="scribble-stage" ref={containerRef}>
+      <div className="scribble-layout">
+        {/* Sidebar - Participants with colors */}
+        {Object.keys(userColors).length > 0 && (
+          <motion.div
+            className="scribble-legend-enhanced"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+          >
+            <div className="scribble-legend-header">Participants</div>
+            <div className="scribble-legend-items">
+              {Object.entries(userColors).map(([socketId, color]) => {
+                if (!participants || !Array.isArray(participants)) return null;
+                let participant = participants.find(
+                  (p) => p?.userId === socketId || p?.socketId === socketId
+                );
+                if (!participant && socketRef?.current?.id === socketId) {
+                  participant = {
+                    userId: socketId,
+                    username: currentUser?.username || 'You',
+                  };
+                }
+                if (!participant) return null;
+                const currentSocketId = socketRef?.current?.id;
+                const isCurrentUser = socketId === currentSocketId || socketId === currentUser?.id;
+                return (
+                  <div
+                    key={socketId}
+                    className={`scribble-legend-item ${isCurrentUser ? 'current-user' : ''}`}
+                  >
+                    <span
+                      className="scribble-legend-dot"
+                      style={{
+                        backgroundColor: color,
+                        boxShadow: `0 0 8px ${color}, 0 0 12px ${color}40`,
+                        border: isCurrentUser ? `2px solid ${color}` : 'none',
+                      }}
+                    />
+                    <span className="scribble-legend-name">
+                      {participant?.username || 'Unknown'}
+                    </span>
+                    {isCurrentUser && <span className="scribble-legend-you">(You)</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
+        <div className="scribble-stage" ref={containerRef}>
         {/* Image layer (static) - White background with image */}
         <canvas
           ref={canvasImageRef}
@@ -1726,6 +1775,7 @@ const ScribbleOverlay = ({
           onMouseUp={handlePointerUp}
           onMouseLeave={handlePointerUp}
         />
+        </div>
       </div>
 
       {!image && !hideUpload && (
@@ -1965,82 +2015,7 @@ const ScribbleOverlay = ({
         </Draggable>
       )}
 
-      {/* Enhanced Legend - (Now a Left Sidebar) */}
-      {Object.keys(userColors).length > 0 && (
-        <motion.div
-          className="scribble-legend-enhanced"
-          style={{
-            position: 'absolute',
-            left: '16px', // Position on the left
-            top: '120px', // Position below the toolbar
-            zIndex: 100,
-          }}
-          initial={{ opacity: 0, x: -20 }} // Animate from left
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
-        >
-          <div className="scribble-legend-header">Participants</div>
-          <div className="scribble-legend-items">
-            {Object.entries(userColors).map(([socketId, color]) => {
-              if (!participants || !Array.isArray(participants)) return null;
-              
-              // Try to find participant by socketId (most reliable)
-              let participant = participants.find(
-                (p) => p?.userId === socketId || p?.socketId === socketId
-              );
-              
-              // If not found, try to match by username from socket connection
-              if (!participant && socketRef?.current?.id === socketId) {
-                participant = {
-                  userId: socketId,
-                  username: currentUser?.username || 'You',
-                };
-              }
-              
-              // Skip if still no participant found
-              if (!participant) {
-                // Try to get username from socket metadata if available
-                const socket = socketRef?.current;
-                if (socket && socket.id === socketId) {
-                  participant = {
-                    userId: socketId,
-                    username: currentUser?.username || 'Unknown',
-                  };
-                } else {
-                  return null;
-                }
-              }
-              
-              const currentSocketId = socketRef?.current?.id;
-              const isCurrentUser = socketId === currentSocketId || socketId === currentUser?.id;
-              
-              return (
-                <div
-                  key={socketId}
-                  className={`scribble-legend-item ${
-                    isCurrentUser ? 'current-user' : ''
-                  }`}
-                >
-                  <span
-                    className="scribble-legend-dot"
-                    style={{
-                      backgroundColor: color,
-                      boxShadow: `0 0 8px ${color}, 0 0 12px ${color}40`,
-                      border: isCurrentUser ? `2px solid ${color}` : 'none',
-                    }}
-                  />
-                  <span className="scribble-legend-name">
-                    {participant?.username || 'Unknown'}
-                  </span>
-                  {isCurrentUser && (
-                    <span className="scribble-legend-you">(You)</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
-      )}
+      {/* Sidebar rendered within layout above */}
     </div>
   );
 };

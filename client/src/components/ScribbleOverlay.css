@@ -448,12 +448,12 @@
 .scribble-legend-header {
   padding: 12px 16px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #6b7280;
+  letter-spacing: 0.6px;
+  color: #1f2937; /* darker text for contrast */
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.02);
+  background: linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%); /* subtle gray gradient */
 }
 
 .scribble-legend-items {

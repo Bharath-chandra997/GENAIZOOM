@@ -919,6 +919,8 @@ const ScribbleOverlay = ({
   const undoStackRef = useRef([]); // This will now store strokes removed by the current user
   const animationFrameRef = useRef(null);
   const currentStrokeRef = useRef(null); // Current stroke being drawn
+  const strokesArrayRef = useRef([]); // Keep ref for reactive drawing
+  const isDrawingRef = useRef(false); // Keep ref for reactive drawing
 
   // Socket subscriptions
   useEffect(() => {
@@ -948,7 +950,9 @@ const ScribbleOverlay = ({
     const onDrawings = (data) => {
       if (Array.isArray(data)) {
         // Full state update from server
-        setStrokesArray(data.filter(Boolean)); // Just take the server's state
+        const filtered = data.filter(Boolean);
+        setStrokesArray(filtered); // Just take the server's state
+        strokesArrayRef.current = filtered; // Update ref for drawLoop
       }
     };
 
@@ -960,6 +964,7 @@ const ScribbleOverlay = ({
     const onRemoveImage = () => {
       setImage(null);
       setStrokesArray([]);
+      strokesArrayRef.current = []; // Update ref
       setUploadLocked(false);
       setLockedBy(null);
       imageRef.current = null;
@@ -998,22 +1003,26 @@ const ScribbleOverlay = ({
       
       setStrokesArray((prev) => {
         const existingIndex = prev.findIndex((s) => s?.id === stroke.id);
+        let updated;
         if (existingIndex >= 0) {
           // Update existing stroke (for incremental updates during drawing)
-          const updated = [...prev];
+          updated = [...prev];
           updated[existingIndex] = { ...stroke };
-          return updated;
+        } else {
+          // Add new stroke (from other users or finalized local stroke)
+          // If it's a local stroke being finalized, make sure we have the complete data
+          if (isLocalStroke && currentStrokeRef.current?.id === stroke.id) {
+            // This is our own stroke being finalized, use the server version
+            updated = prev.map(s => s.id === stroke.id ? { ...stroke } : s).concat(
+              prev.some(s => s.id === stroke.id) ? [] : [stroke]
+            ).filter(Boolean);
+          } else {
+            // For other users' strokes, add them immediately
+            updated = [...prev, { ...stroke }];
+          }
         }
-        // Add new stroke (from other users or finalized local stroke)
-        // If it's a local stroke being finalized, make sure we have the complete data
-        if (isLocalStroke && currentStrokeRef.current?.id === stroke.id) {
-          // This is our own stroke being finalized, use the server version
-          return prev.map(s => s.id === stroke.id ? { ...stroke } : s).concat(
-            prev.some(s => s.id === stroke.id) ? [] : [stroke]
-          ).filter(Boolean);
-        }
-        // For other users' strokes, add them immediately
-        return [...prev, { ...stroke }];
+        strokesArrayRef.current = updated; // Update ref
+        return updated;
       });
     };
 
@@ -1064,13 +1073,13 @@ const ScribbleOverlay = ({
     ctx.fillRect(0, 0, clientWidth, clientHeight);
 
     const img = imageRef.current;
-    // Calculate scale to fit screen responsively - ENLARGED (use 98% of container for larger display)
-    const maxW = clientWidth * 0.98;
-    const maxH = clientHeight * 0.98;
+    // Calculate scale to fit screen responsively - Reduced size (use 90% of container)
+    const maxW = clientWidth * 0.90;
+    const maxH = clientHeight * 0.90;
     
-    // Use a larger scale factor - prioritize width if image is wide, height if tall
+    // Use a reasonable scale factor
     let scale = Math.min(maxW / img.width, maxH / img.height) * zoom;
-    // If zoom allows, make it even larger (but not exceeding container)
+    // Cap at container size
     if (zoom > 1) {
       scale = Math.min(scale, Math.min(clientWidth / img.width, clientHeight / img.height));
     }
@@ -1119,15 +1128,24 @@ const ScribbleOverlay = ({
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    const allStrokes = [...strokesArray];
+    // Read from refs for latest values (reactive to state updates)
+    const allStrokes = [...strokesArrayRef.current];
+    const currentlyDrawing = isDrawingRef.current;
+    
+    // IMPORTANT: Also draw the current stroke being drawn (for real-time pencil visibility)
+    const currentStroke = currentStrokeRef.current;
+    if (currentStroke && currentStroke.type === 'path' && currentlyDrawing) {
+      // Add current stroke to be drawn (but don't add to array yet)
+      allStrokes.push(currentStroke);
+    }
 
     allStrokes.forEach((s) => {
       if (!s) return; // Safety check
       if (s.type === 'path') {
         ctx.save();
         ctx.globalAlpha = s.alpha ?? 1;
-        ctx.strokeStyle = s.color;
-        ctx.lineWidth = s.width;
+        ctx.strokeStyle = s.color || '#000000';
+        ctx.lineWidth = s.width || 4;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -1140,8 +1158,11 @@ const ScribbleOverlay = ({
         }
         ctx.restore();
       } else if (s.type === 'shape') {
-        ctx.strokeStyle = s.color;
-        ctx.lineWidth = s.width;
+        ctx.save();
+        ctx.strokeStyle = s.color || '#000000';
+        ctx.lineWidth = s.width || 4;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
         if (s.shape === 'rect') {
           ctx.strokeRect(s.x, s.y, s.w, s.h);
         } else if (s.shape === 'circle') {
@@ -1154,16 +1175,19 @@ const ScribbleOverlay = ({
           ctx.lineTo(s.x2, s.y2);
           ctx.stroke();
         }
+        ctx.restore();
       } else if (s.type === 'text') {
-        ctx.fillStyle = s.color;
+        ctx.save();
+        ctx.fillStyle = s.color || '#000000';
         ctx.font = `${
           s.size || 18
         }px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
         ctx.fillText(s.text, s.x, s.y);
+        ctx.restore();
       }
     });
 
-    // Draw preview if any
+    // Draw preview if any (for shapes being drawn)
     const p = previewRef.current;
     if (p) {
       ctx.save();
@@ -1187,15 +1211,15 @@ const ScribbleOverlay = ({
     animationFrameRef.current = requestAnimationFrame(drawLoop);
   };
 
-  // Start draw loop on mount
+  // Start draw loop on mount - Continuously redraws (reads current state/reactively)
   useEffect(() => {
-    animationFrameRef.current = requestAnimationFrame(drawLoop);
+    drawLoop();
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, []); // Empty dependency array ensures it runs once
+  }, []); // Only run once, drawLoop reads current state each frame
 
   // Update image canvas when zoom or image state changes
   useEffect(() => {
@@ -1241,6 +1265,7 @@ const ScribbleOverlay = ({
   // Emit full drawing array
   const emitDrawings = (updated) => {
     setStrokesArray(updated);
+    strokesArrayRef.current = updated; // Update ref
     const socket = socketRef?.current;
     if (socket) socket.emit('scribble:drawings', { roomId, data: updated });
   };
@@ -1259,6 +1284,7 @@ const ScribbleOverlay = ({
     e.stopPropagation(); // Stop event bubbling
     
     setIsDrawing(true);
+    isDrawingRef.current = true; // Update ref immediately
     const rect = canvasDrawRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -1282,7 +1308,9 @@ const ScribbleOverlay = ({
       setStrokesArray((prev) => {
         // Prevent duplicates
         if (prev.some(s => s.id === stroke.id)) return prev;
-        return [...prev, stroke];
+        const updated = [...prev, stroke];
+        strokesArrayRef.current = updated; // Update ref immediately
+        return updated;
       });
       // Emit to server immediately for real-time sync
       emitStroke(stroke);
@@ -1301,6 +1329,7 @@ const ScribbleOverlay = ({
         updated.splice(myLastStrokeIndex, 1);
         
         undoStackRef.current.push(strokeToRemove); // Add to user's local undo
+        strokesArrayRef.current = updated; // Update ref
         emitDrawings(updated); // Send full update
         redoStackRef.current = [];
       }
@@ -1334,6 +1363,7 @@ const ScribbleOverlay = ({
         };
         const newStrokes = [...strokesArray, stroke];
         setStrokesArray(newStrokes);
+        strokesArrayRef.current = newStrokes; // Update ref
         emitStroke(stroke); // Emit just the new stroke
         redoStackRef.current = [];
       }
@@ -1364,17 +1394,20 @@ const ScribbleOverlay = ({
 
       // 2. Update the state array immutably for the local draw loop to re-render.
       // We map the array and replace the old stroke with the updated one from the ref.
-      setStrokesArray(prev => {
-        const existingIndex = prev.findIndex(s => s.id === currentStroke.id);
-        if (existingIndex >= 0) {
-          // Update existing stroke
-          const updated = [...prev];
-          updated[existingIndex] = { ...currentStroke, points: [...currentStroke.points] };
+        setStrokesArray(prev => {
+          const existingIndex = prev.findIndex(s => s.id === currentStroke.id);
+          if (existingIndex >= 0) {
+            // Update existing stroke
+            const updated = [...prev];
+            updated[existingIndex] = { ...currentStroke, points: [...currentStroke.points] };
+            strokesArrayRef.current = updated; // Update ref
+            return updated;
+          }
+          // If not found, add it
+          const updated = [...prev, { ...currentStroke, points: [...currentStroke.points] }];
+          strokesArrayRef.current = updated; // Update ref
           return updated;
-        }
-        // If not found, add it
-        return [...prev, { ...currentStroke, points: [...currentStroke.points] }];
-      });
+        });
 
       // 3. Emit the updated stroke to the server (throttled for performance)
       // Emit more frequently for smoother real-time collaboration
@@ -1412,6 +1445,7 @@ const ScribbleOverlay = ({
       e.stopPropagation();
     }
     setIsDrawing(false);
+    isDrawingRef.current = false; // Update ref immediately
     lastPointRef.current = null;
 
     // **FIX:** Finalize pen/highlighter stroke
@@ -1424,15 +1458,22 @@ const ScribbleOverlay = ({
           if (existingIndex >= 0) {
             const updated = [...prev];
             updated[existingIndex] = { ...currentStroke, points: [...currentStroke.points] };
+            strokesArrayRef.current = updated; // Update ref
             return updated;
           }
-          return [...prev, { ...currentStroke, points: [...currentStroke.points] }];
+          const updated = [...prev, { ...currentStroke, points: [...currentStroke.points] }];
+          strokesArrayRef.current = updated; // Update ref
+          return updated;
         });
         // Emit the final version to ensure server has complete data for all users
         emitStroke({ ...currentStroke, points: [...currentStroke.points] });
       } else {
         // If stroke has less than 2 points, remove it
-        setStrokesArray(prev => prev.filter(s => s.id !== currentStroke.id));
+        setStrokesArray(prev => {
+          const filtered = prev.filter(s => s.id !== currentStroke.id);
+          strokesArrayRef.current = filtered; // Update ref
+          return filtered;
+        });
       }
       // Clear the ref
       currentStrokeRef.current = null;
@@ -1467,15 +1508,23 @@ const ScribbleOverlay = ({
       } else if (p.shape === 'circle') {
         shapeStroke.cx = p.cx;
         shapeStroke.cy = p.cy;
-        shapeStroke.r = p.r;
+        shapeStroke.r = p.r || 0;
       } else if (p.shape === 'arrow' || p.shape === 'line') {
         shapeStroke.x1 = p.x1;
         shapeStroke.y1 = p.y1;
-        shapeStroke.x2 = p.x2;
-        shapeStroke.y2 = p.y2;
+        shapeStroke.x2 = p.x2 || p.x1;
+        shapeStroke.y2 = p.y2 || p.y1;
       }
 
-      setStrokesArray((prev) => [...prev, shapeStroke]);
+      // CRITICAL: Add shape to strokesArray IMMEDIATELY before clearing preview
+      setStrokesArray((prev) => {
+        // Prevent duplicates
+        if (prev.some(s => s.id === shapeStroke.id)) return prev;
+        const updated = [...prev, shapeStroke];
+        strokesArrayRef.current = updated; // Update ref immediately
+        return updated;
+      });
+      // Emit to server for all users to see
       emitStroke(shapeStroke);
       redoStackRef.current = [];
     }
@@ -1581,6 +1630,7 @@ const ScribbleOverlay = ({
     
     const updated = [...strokesArray];
     updated.splice(myLastStrokeIndex, 1); // Remove it
+    strokesArrayRef.current = updated; // Update ref
     
     emitDrawings(updated); // Sync full state
     redoStackRef.current = []; // Clear redo
@@ -1589,7 +1639,9 @@ const ScribbleOverlay = ({
   const redo = () => {
     if (undoStackRef.current.length === 0) return;
     const last = undoStackRef.current.pop();
-    emitDrawings([...strokesArray, last]); // Add it back and sync
+    const updated = [...strokesArray, last];
+    strokesArrayRef.current = updated; // Update ref
+    emitDrawings(updated); // Add it back and sync
   };
 
   const savePng = () => {
@@ -1930,11 +1982,37 @@ const ScribbleOverlay = ({
           <div className="scribble-legend-items">
             {Object.entries(userColors).map(([socketId, color]) => {
               if (!participants || !Array.isArray(participants)) return null;
-              const participant = participants.find(
-                (p) => p?.userId === socketId
+              
+              // Try to find participant by socketId (most reliable)
+              let participant = participants.find(
+                (p) => p?.userId === socketId || p?.socketId === socketId
               );
-              if (!participant) return null;
-              const isCurrentUser = currentUser?.id === socketId;
+              
+              // If not found, try to match by username from socket connection
+              if (!participant && socketRef?.current?.id === socketId) {
+                participant = {
+                  userId: socketId,
+                  username: currentUser?.username || 'You',
+                };
+              }
+              
+              // Skip if still no participant found
+              if (!participant) {
+                // Try to get username from socket metadata if available
+                const socket = socketRef?.current;
+                if (socket && socket.id === socketId) {
+                  participant = {
+                    userId: socketId,
+                    username: currentUser?.username || 'Unknown',
+                  };
+                } else {
+                  return null;
+                }
+              }
+              
+              const currentSocketId = socketRef?.current?.id;
+              const isCurrentUser = socketId === currentSocketId || socketId === currentUser?.id;
+              
               return (
                 <div
                   key={socketId}

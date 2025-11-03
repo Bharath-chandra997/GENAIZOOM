@@ -1289,6 +1289,7 @@ const Meeting = () => {
           participants={allParticipants}
           currentUser={{ id: socketRef.current?.id, username: user.username }}
           aiResponse={aiResponse}
+          hideUpload={true}
         />
       )}
 

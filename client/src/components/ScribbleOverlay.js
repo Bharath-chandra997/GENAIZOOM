@@ -897,6 +897,7 @@ const ScribbleOverlay = ({
   participants = [],
   currentUser,
   aiResponse = null, // AI response object with sent_from_csv
+  hideUpload = false,
 }) => {
   const [image, setImage] = useState(null);
   const [pendingImage, setPendingImage] = useState(null);
@@ -1727,7 +1728,7 @@ const ScribbleOverlay = ({
         />
       </div>
 
-      {!image && (
+      {!image && !hideUpload && (
         <motion.div
           className="scribble-upload-container"
           initial={{ opacity: 0, scale: 0.9, y: 20 }}

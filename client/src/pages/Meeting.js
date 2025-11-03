@@ -15,6 +15,7 @@ import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import ScribbleOverlay from '../components/ScribbleOverlay';
+import ParticipantColorLegend from '../components/ParticipantColorLegend';
 import AIPopup from './AIPopup';
 import Chat from '../components/Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -129,6 +130,7 @@ const Meeting = () => {
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [scribbleActive, setScribbleActive] = useState(false);
+  const [scribbleUserColors, setScribbleUserColors] = useState({});
 
 
   const [aiParticipant] = useState({
@@ -855,6 +857,12 @@ const Meeting = () => {
       socket.on('scribble:removeImage', () => {
         setScribbleActive(false);
       });
+      // Live participant colors for sidebar and overlay
+      socket.on('scribble:userColors', (colors) => {
+        if (colors && typeof colors === 'object') {
+          setScribbleUserColors(colors);
+        }
+      });
       
 
       return () => {
@@ -876,6 +884,7 @@ const Meeting = () => {
         socket.off('shared-media-removal');
         socket.off('scribble:image');
         socket.off('scribble:removeImage');
+        socket.off('scribble:userColors');
       };
     },
     [
@@ -1250,6 +1259,13 @@ const Meeting = () => {
         }}
         scribbleActive={scribbleActive}
         onToggleScribble={() => setScribbleActive((v) => !v)}
+      />
+
+      {/* Always-visible participant color legend (outside overlay) */}
+      <ParticipantColorLegend
+        userColors={scribbleUserColors}
+        participants={allParticipants}
+        currentUserId={socketRef.current?.id}
       />
 
       {scribbleActive && (

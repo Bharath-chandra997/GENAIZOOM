@@ -888,6 +888,7 @@ import {
   FiDownload, // Using FiDownload for Save
 } from 'react-icons/fi';
 import { extractAIQuestionAndAnswer } from '../utils/aiResponseHelpers';
+import ParticipantColorLegend from './ParticipantColorLegend';
 import './ScribbleOverlay.css';
 
 const ScribbleOverlay = ({
@@ -1917,53 +1918,11 @@ const ScribbleOverlay = ({
 
       {/* Enhanced Legend - (Now a Left Sidebar) */}
       {Object.keys(userColors).length > 0 && (
-        <motion.div
-          className="scribble-legend-enhanced"
-          style={{
-            position: 'absolute',
-            left: '16px', // Position on the left
-            top: '120px', // Position below the toolbar
-            zIndex: 100,
-          }}
-          initial={{ opacity: 0, x: -20 }} // Animate from left
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
-        >
-          <div className="scribble-legend-header">Participants</div>
-          <div className="scribble-legend-items">
-            {Object.entries(userColors).map(([socketId, color]) => {
-              if (!participants || !Array.isArray(participants)) return null;
-              const participant = participants.find(
-                (p) => p?.userId === socketId
-              );
-              if (!participant) return null;
-              const isCurrentUser = currentUser?.id === socketId;
-              return (
-                <div
-                  key={socketId}
-                  className={`scribble-legend-item ${
-                    isCurrentUser ? 'current-user' : ''
-                  }`}
-                >
-                  <span
-                    className="scribble-legend-dot"
-                    style={{
-                      backgroundColor: color,
-                      boxShadow: `0 0 8px ${color}, 0 0 12px ${color}40`,
-                      border: isCurrentUser ? `2px solid ${color}` : 'none',
-                    }}
-                  />
-                  <span className="scribble-legend-name">
-                    {participant?.username || 'Unknown'}
-                  </span>
-                  {isCurrentUser && (
-                    <span className="scribble-legend-you">(You)</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
+        <ParticipantColorLegend
+          userColors={userColors}
+          participants={participants}
+          currentUserId={socketRef.current?.id}
+        />
       )}
     </div>
   );

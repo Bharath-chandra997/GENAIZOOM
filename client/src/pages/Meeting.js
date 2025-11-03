@@ -14,7 +14,6 @@ import MeetingHeader from './MeetingHeader';
 import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
-import ScribbleOverlay from '../components/ScribbleOverlay';
 import AIPopup from './AIPopup';
 import Chat from '../components/Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -128,7 +127,6 @@ const Meeting = () => {
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
-  const [scribbleActive, setScribbleActive] = useState(false);
 
 
   const [aiParticipant] = useState({
@@ -1237,8 +1235,6 @@ const Meeting = () => {
             toast.success('Invite link copied!', { position: 'bottom-center' });
           });
         }}
-        scribbleActive={scribbleActive}
-        onToggleScribble={() => setScribbleActive((v) => !v)}
       />
 
       <canvas
@@ -1246,19 +1242,6 @@ const Meeting = () => {
         style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }}
       />
 
-      {/* Scribble Overlay */}
-      {scribbleActive && (
-        <ScribbleOverlay
-          socketRef={socketRef}
-          roomId={roomId}
-          onClose={() => {
-            setScribbleActive(false);
-          }}
-          participants={allParticipants}
-          currentUser={{ id: socketRef.current?.id, username: user.username }}
-          aiResponse={aiResponse}
-        />
-      )}
 
     </div>
   );

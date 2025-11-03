@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 2000;
-  pointer-events: none;
+  pointer-events: auto; /* Allow interactions across the overlay */
   /* Ensure root covers entire screen */
   width: 100vw;
   height: 100vh;
@@ -21,20 +21,12 @@
   pointer-events: auto;
 }
 
-.scribble-layout {
+.scribble-stage {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: row;
   width: 100vw;
   height: 100vh;
-}
-
-.scribble-stage {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  pointer-events: none;
+  pointer-events: auto; /* Enable events to reach canvases */
   /* Ensure stage doesn't blur canvas content */
   filter: none;
   -webkit-filter: none;
@@ -432,18 +424,25 @@
 
 /* Enhanced Legend */
 .scribble-legend-enhanced {
-  position: relative;
-  width: 260px;
-  max-width: 40vw;
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
   background: #ffffff;
-  border-radius: 0;
-  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.06);
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
   color: #1f2937;
   pointer-events: auto;
   z-index: 2001; /* Above everything */
-  min-width: 200px;
-  overflow: auto;
-  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  min-width: 180px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  /* Ensure legend is always visible */
+  visibility: visible;
+  opacity: 1;
 }
 
 .scribble-legend-header {
@@ -553,10 +552,6 @@
 
 /* Responsive Design - Clean white workspace across all screen sizes */
 @media (max-width: 768px) {
-  .scribble-legend-enhanced {
-    width: 180px;
-    min-width: 160px;
-  }
   .scribble-toolbar-professional {
     top: 12px;
     right: 12px;
@@ -585,7 +580,9 @@
   }
   
   .scribble-legend-enhanced {
-    width: 160px;
+    left: 12px;
+    bottom: 12px;
+    min-width: 160px;
   }
   
   .scribble-upload-container {
@@ -600,9 +597,6 @@
 }
 
 @media (max-width: 640px) {
-  .scribble-legend-enhanced {
-    display: none; /* Hide sidebar on very small screens for space */
-  }
   .scribble-toolbar-professional {
     top: 8px;
     right: 8px;

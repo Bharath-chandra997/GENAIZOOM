@@ -1502,6 +1502,20 @@ const ScribbleOverlay = ({
     input.click();
   };
 
+  // Auto-prompt for image upload when overlay opens without an image (only if not locked by another user)
+  const didAutoPromptRef = useRef(false);
+  useEffect(() => {
+    if (!image && !pendingImage && !didAutoPromptRef.current) {
+      // If upload is locked by another user, do not prompt
+      if (uploadLocked && lockedBy && currentUser?.id && lockedBy !== currentUser.id) {
+        didAutoPromptRef.current = true; // avoid re-prompting repeatedly
+        return;
+      }
+      didAutoPromptRef.current = true;
+      handleReupload();
+    }
+  }, [image, pendingImage, uploadLocked, lockedBy, currentUser]);
+
   const confirmImage = () => {
     if (
       uploadLocked &&

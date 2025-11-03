@@ -5,6 +5,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
   const [image, setImage] = useState(null);
   const [pendingImage, setPendingImage] = useState(null);
   const [userColors, setUserColors] = useState({});
+  const [strokesArray, setStrokesArray] = useState([]); // keep all strokes to support clear/erase and redraw
   const [tool, setTool] = useState('pen');
   const [thickness, setThickness] = useState(4);
   const [myColor, setMyColor] = useState('#2b6cb0');
@@ -42,18 +43,38 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     };
 
     const onStroke = (stroke) => {
-      drawStroke(stroke);
+      if (!stroke || !stroke.id) return;
+      // upsert into strokes array
+      setStrokesArray((prev) => {
+        const idx = prev.findIndex((s) => s.id === stroke.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = stroke;
+          return next;
+        }
+        return [...prev, stroke];
+      });
+      redrawAll();
+    };
+
+    const onDrawings = (data) => {
+      if (Array.isArray(data)) {
+        setStrokesArray(data.filter(Boolean));
+        redrawAll(data);
+      }
     };
 
     socket.on('scribble:image', onImage);
     socket.on('scribble:userColors', onUserColors);
     socket.on('scribble:stroke', onStroke);
+    socket.on('scribble:drawings', onDrawings);
     socket.emit('scribble:request-state', { roomId });
 
     return () => {
       socket.off('scribble:image', onImage);
       socket.off('scribble:userColors', onUserColors);
       socket.off('scribble:stroke', onStroke);
+      socket.off('scribble:drawings', onDrawings);
     };
   }, [roomId, socketRef]);
 
@@ -129,6 +150,19 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     }
   };
 
+  const clearDraw = () => {
+    const c = canvasDrawRef.current;
+    if (!c) return;
+    const { clientWidth, clientHeight } = c;
+    c.getContext('2d').clearRect(0, 0, clientWidth, clientHeight);
+  };
+
+  const redrawAll = (source) => {
+    clearDraw();
+    const list = source || strokesArray;
+    list.forEach((s) => drawStroke(s));
+  };
+
   // Upload flow
   const handleUploadClick = () => {
     const input = document.createElement('input');
@@ -138,15 +172,21 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       const file = e.target.files?.[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => setPendingImage(reader.result);
+      reader.onload = () => {
+        // set and immediately confirm to streamline UX
+        setPendingImage(reader.result);
+        setImage(reader.result);
+        const socket = socketRef?.current;
+        if (socket) socket.emit('scribble:image', { roomId, img: reader.result });
+      };
       reader.readAsDataURL(file);
     };
     input.click();
   };
 
   const confirmImage = () => {
+    // kept for UI button; now no-op if already confirmed automatically
     if (!pendingImage) return;
-    setImage(pendingImage);
     const socket = socketRef?.current;
     if (socket) socket.emit('scribble:image', { roomId, img: pendingImage });
     setPendingImage(null);
@@ -166,19 +206,33 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     if (tool === 'pen') {
       const stroke = { id: Date.now() + Math.random(), type: 'path', color: myColor, width: thickness, alpha: 1, points: [{ x, y }], userId: socketRef.current?.id };
       currentStrokeRef.current = stroke;
+      setStrokesArray((prev) => [...prev, stroke]);
       drawStroke(stroke);
       socketRef.current?.emit('scribble:stroke', { roomId, stroke });
+    } else if (tool === 'rect' || tool === 'circle') {
+      // start shape preview as a stroke with dimensions evolving
+      const stroke = { id: Date.now() + Math.random(), type: 'shape', shape: tool, color: myColor, width: thickness, userId: socketRef.current?.id, x, y, w: 0, h: 0, cx: x, cy: y, r: 0, x1: x, y1: y, x2: x, y2: y };
+      currentStrokeRef.current = stroke;
     }
   };
   const onMove = (e) => {
     if (!isDrawing) return;
+    const { x, y } = getXY(e);
     if (tool === 'pen' && currentStrokeRef.current) {
-      const { x, y } = getXY(e);
       currentStrokeRef.current.points.push({ x, y });
       drawStroke(currentStrokeRef.current);
       if (currentStrokeRef.current.points.length % 3 === 0) {
         socketRef.current?.emit('scribble:stroke', { roomId, stroke: { ...currentStrokeRef.current } });
       }
+    } else if ((tool === 'rect' || tool === 'circle') && currentStrokeRef.current) {
+      if (tool === 'rect') {
+        currentStrokeRef.current.w = x - currentStrokeRef.current.x;
+        currentStrokeRef.current.h = y - currentStrokeRef.current.y;
+      } else {
+        currentStrokeRef.current.r = Math.sqrt((x - currentStrokeRef.current.cx) ** 2 + (y - currentStrokeRef.current.cy) ** 2);
+      }
+      redrawAll();
+      drawStroke(currentStrokeRef.current);
     }
   };
   const onUp = () => {
@@ -187,7 +241,19 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     if (tool === 'pen' && currentStrokeRef.current) {
       socketRef.current?.emit('scribble:stroke', { roomId, stroke: { ...currentStrokeRef.current } });
       currentStrokeRef.current = null;
+    } else if ((tool === 'rect' || tool === 'circle') && currentStrokeRef.current) {
+      // finalize shape
+      socketRef.current?.emit('scribble:stroke', { roomId, stroke: { ...currentStrokeRef.current } });
+      setStrokesArray((prev) => [...prev, currentStrokeRef.current]);
+      currentStrokeRef.current = null;
     }
+  };
+
+  const clearAll = () => {
+    setStrokesArray([]);
+    clearDraw();
+    drawImage();
+    socketRef.current?.emit('scribble:drawings', { roomId, data: [] });
   };
 
   return (
@@ -196,6 +262,9 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       <div className="scribble-stage" onClick={(e) => e.stopPropagation()}>
         <div className="scribble-toolbar">
           <button className={`tool ${tool === 'pen' ? 'active' : ''}`} onClick={() => setTool('pen')} title="Pen">✏️</button>
+          <button className={`tool ${tool === 'rect' ? 'active' : ''}`} onClick={() => setTool('rect')} title="Rectangle">▭</button>
+          <button className={`tool ${tool === 'circle' ? 'active' : ''}`} onClick={() => setTool('circle')} title="Circle">◯</button>
+          <button className="tool" onClick={clearAll} title="Eraser (Clear)">🧽</button>
           <input type="color" value={myColor} onChange={(e) => setMyColor(e.target.value)} className="tool-color-input" />
           <input type="range" min="1" max="20" value={thickness} onChange={(e) => setThickness(parseInt(e.target.value, 10))} className="tool-size-input" />
           {!image && (

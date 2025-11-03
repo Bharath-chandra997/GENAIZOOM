@@ -1,81 +1,23 @@
-.scribble-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(8px);
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  font-family: system-ui, sans-serif;
-}
+.scribble-root { position: fixed; inset: 0; z-index: 2000; }
+.scribble-backdrop { position: fixed; inset: 0; background: #ffffff; opacity: 1; }
+.scribble-stage { position: fixed; inset: 0; pointer-events: none; }
+.scribble-toolbar { position: fixed; top: 20px; right: 20px; background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); padding: 10px; display: flex; gap: 8px; pointer-events: auto; }
+.tool { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); background: rgba(0,0,0,0.04); cursor: pointer; }
+.tool.active { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); color: #fff; border-color: transparent; }
+.tool-color-input { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); padding: 0; }
+.tool-size-input { width: 120px; }
+.scribble-upload-btn { padding: 8px 12px; background: linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+.scribble-upload-actions { display: flex; gap: 8px; }
+.scribble-action-btn { padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); background: #fff; cursor: pointer; }
+.scribble-action-btn.primary { background: linear-gradient(135deg,#10b981 0%,#059669 100%); color: #fff; border-color: transparent; }
+.scribble-canvas-wrap { position: absolute; inset: 0; pointer-events: none; }
+.scribble-canvas-image { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.scribble-canvas-draw { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: auto; touch-action: none; }
+.scribble-legend { position: fixed; left: 16px; top: 120px; background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); min-width: 200px; pointer-events: auto; }
+.scribble-legend-header { padding: 12px 16px; font-size: 13px; font-weight: 700; color: #1f2937; background: linear-gradient(180deg,#f3f4f6 0%,#e5e7eb 100%); border-bottom: 1px solid rgba(0,0,0,0.08); }
+.scribble-legend-items { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.scribble-legend-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; }
+.scribble-legend-item.current-user { background: rgba(102,126,234,0.1); }
+.scribble-legend-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.scribble-legend-name { font-size: 13px; color: #374151; }
 
-.scribble-toolbar {
-  background: #111;
-  padding: 12px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  border-bottom: 2px solid #333;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-}
-
-.tool-group {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.scribble-btn {
-  background: #333;
-  border: none;
-  color: white;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  font-size: 20px;
-  cursor: pointer;
-  transition: 0.2s;
-}
-
-.scribble-btn:hover { background: #555; }
-.scribble-btn.active { background: #6200ee; box-shadow: 0 0 15px #6200ee; }
-.scribble-btn.close { background: #c62828; }
-.scribble-btn.danger { background: #b00020; }
-
-.scribble-canvas {
-  flex: 1;
-  background: #000;
-  cursor: crosshair;
-  touch-action: none;
-}
-
-.scribble-canvas:active { cursor: grabbing; }
-
-.ai-banner {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(30, 58, 138, 0.95);
-  color: white;
-  padding: 16px 32px;
-  border-radius: 16px;
-  font-size: 18px;
-  max-width: 90%;
-  text-align: center;
-  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4);
-  backdrop-filter: blur(12px);
-  border: 1px solid #3b82f6;
-}
-
-label {
-  background: #6200ee;
-  color: white;
-  padding: 10px 16px;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 14px;
-}
-label input { display: none; }

@@ -15,7 +15,6 @@ import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import ScribbleOverlay from '../components/ScribbleOverlay';
-import ParticipantColorLegend from '../components/ParticipantColorLegend';
 import AIPopup from './AIPopup';
 import Chat from '../components/Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -130,7 +129,7 @@ const Meeting = () => {
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [scribbleActive, setScribbleActive] = useState(false);
-  const [scribbleUserColors, setScribbleUserColors] = useState({});
+  // const [scribbleUserColors, setScribbleUserColors] = useState({});
 
 
   const [aiParticipant] = useState({
@@ -850,19 +849,9 @@ const Meeting = () => {
       socket.on('shared-media-removal', handleSharedMediaRemoval);
       // Auto-open/close Scribble when image is uploaded/removed by anyone
       socket.on('scribble:image', (img) => {
-        if (img) {
-          setScribbleActive(true);
-        }
+        if (img) setScribbleActive(true);
       });
-      socket.on('scribble:removeImage', () => {
-        setScribbleActive(false);
-      });
-      // Live participant colors for sidebar and overlay
-      socket.on('scribble:userColors', (colors) => {
-        if (colors && typeof colors === 'object') {
-          setScribbleUserColors(colors);
-        }
-      });
+      socket.on('scribble:removeImage', () => setScribbleActive(false));
       
 
       return () => {
@@ -884,7 +873,6 @@ const Meeting = () => {
         socket.off('shared-media-removal');
         socket.off('scribble:image');
         socket.off('scribble:removeImage');
-        socket.off('scribble:userColors');
       };
     },
     [
@@ -1261,13 +1249,6 @@ const Meeting = () => {
         onToggleScribble={() => setScribbleActive((v) => !v)}
       />
 
-      {/* Always-visible participant color legend (outside overlay) */}
-      <ParticipantColorLegend
-        userColors={scribbleUserColors}
-        participants={allParticipants}
-        currentUserId={socketRef.current?.id}
-      />
-
       {scribbleActive && (
         <ScribbleOverlay
           socketRef={socketRef}
@@ -1275,7 +1256,6 @@ const Meeting = () => {
           onClose={() => setScribbleActive(false)}
           participants={allParticipants}
           currentUser={{ id: socketRef.current?.id, username: user.username }}
-          aiResponse={aiResponse}
         />
       )}
       <canvas

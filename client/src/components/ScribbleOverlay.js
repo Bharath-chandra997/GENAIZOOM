@@ -919,6 +919,25 @@ const ScribbleOverlay = ({
   const undoStackRef = useRef([]); // This will now store strokes removed by the current user
   const animationFrameRef = useRef(null);
   const currentStrokeRef = useRef(null); // Current stroke being drawn
+  const hashColor = (id) => {
+    if (!id) return '#3B82F6';
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = id.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 90%, 60%)`;
+  };
+
+  // Set an optimistic color immediately to avoid initial black
+  useEffect(() => {
+    const sid = socketRef?.current?.id || currentUser?.id;
+    if (sid && (!myColor || myColor === '#000000')) {
+      const c = hashColor(sid);
+      setMyColor(c);
+      setUserColors(prev => ({ ...prev, [sid]: prev[sid] || c }));
+    }
+  }, [socketRef, currentUser]);
 
   // Socket subscriptions
   useEffect(() => {

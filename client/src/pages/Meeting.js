@@ -15,7 +15,6 @@ import MeetingMainArea from './MeetingMainArea';
 import MeetingSidebar from './MeetingSidebar';
 import MeetingControls from './MeetingControls';
 import ScribbleOverlay from '../components/ScribbleOverlay';
-import ScribbleUploadModal from '../components/ScribbleUploadModal';
 import AIPopup from './AIPopup';
 import Chat from '../components/Chat';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -130,8 +129,6 @@ const Meeting = () => {
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [scribbleActive, setScribbleActive] = useState(false);
-  const [scribbleUploadOpen, setScribbleUploadOpen] = useState(false);
-  const [scribbleImageReady, setScribbleImageReady] = useState(false);
 
 
   const [aiParticipant] = useState({
@@ -1241,17 +1238,7 @@ const Meeting = () => {
           });
         }}
         scribbleActive={scribbleActive}
-        onToggleScribble={() => {
-          if (!scribbleActive) {
-            // Open centered upload modal first
-            setScribbleUploadOpen(true);
-            setScribbleImageReady(false);
-          } else {
-            // Close overlay
-            setScribbleActive(false);
-            setScribbleImageReady(false);
-          }
-        }}
+        onToggleScribble={() => setScribbleActive((v) => !v)}
       />
 
       <canvas
@@ -1259,37 +1246,17 @@ const Meeting = () => {
         style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }}
       />
 
-      {/* Scribble Upload Modal */}
-      <ScribbleUploadModal
-        isOpen={scribbleUploadOpen}
-        onClose={() => setScribbleUploadOpen(false)}
-        onConfirm={(imgDataUrl) => {
-          // Emit image to room, then open overlay
-          try {
-            socketRef.current?.emit('scribble:image', { roomId, img: imgDataUrl });
-            setScribbleUploadOpen(false);
-            setScribbleImageReady(true);
-            setScribbleActive(true);
-            toast.success('Image shared to room', { position: 'bottom-center' });
-          } catch (e) {
-            toast.error('Failed to share image. Please try again.');
-          }
-        }}
-      />
-
-      {/* Scribble Overlay (only after image uploaded/confirmed) */}
-      {scribbleActive && scribbleImageReady && (
+      {/* Scribble Overlay */}
+      {scribbleActive && (
         <ScribbleOverlay
           socketRef={socketRef}
           roomId={roomId}
           onClose={() => {
             setScribbleActive(false);
-            setScribbleImageReady(false);
           }}
           participants={allParticipants}
           currentUser={{ id: socketRef.current?.id, username: user.username }}
           aiResponse={aiResponse}
-          hideUpload={true}
         />
       )}
 

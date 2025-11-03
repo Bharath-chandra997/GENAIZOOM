@@ -1,753 +1,97 @@
-.scribble-root {
+.scribble-overlay {
   position: fixed;
-  inset: 0;
-  z-index: 2000;
-  pointer-events: auto; /* Allow interactions across the overlay */
-  /* Ensure root covers entire screen */
-  width: 100vw;
-  height: 100vh;
-}
-
-.scribble-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: #ffffff;
-  transition: all 0.3s ease;
-  animation: scribbleFade 0.3s ease forwards;
-  z-index: 1998; /* Below stage */
-  pointer-events: auto;
-}
-
-.scribble-stage {
-  position: absolute;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  pointer-events: auto; /* Enable events to reach canvases */
-  /* Ensure stage doesn't blur canvas content */
-  filter: none;
-  -webkit-filter: none;
-  /* Force GPU acceleration for smooth rendering */
-  will-change: contents;
-  transform: translateZ(0);
-  background: transparent;
-  z-index: 1999; /* Above backdrop, below toolbar */
-}
-
-.scribble-canvas-image,
-.scribble-canvas-draw {
-  width: 100%;
-  height: 100%;
-  user-select: none;
-  /* Prevent blur - ensure crisp rendering */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-  image-rendering: pixelated;
-  /* Override above for smooth scaling */
-  image-rendering: auto;
-  /* Ensure canvas is not affected by backdrop blur */
-  filter: none;
-  -webkit-filter: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-.scribble-canvas-image {
-  pointer-events: none; /* Image layer never receives events */
-  /* Ensure image canvas is clear and not blurred */
-  will-change: contents;
-  transform: translateZ(0); /* Force GPU acceleration */
-  background: #ffffff;
-  opacity: 1;
-  /* Ensure canvas is visible and not hidden */
-  visibility: visible;
-  display: block;
-  z-index: 1;
-}
-
-.scribble-canvas-draw {
-  pointer-events: auto; /* Drawing layer receives all events */
-  /* Ensure drawing canvas is clear and responsive */
-  will-change: contents;
-  transform: translateZ(0); /* Force GPU acceleration */
-  background: transparent;
-  /* Ensure canvas is visible and above image */
-  visibility: visible;
-  display: block;
-  z-index: 2;
-}
-
-/* Upload Container - Animated, centered on white background */
-.scribble-upload-container {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 2001;
-  pointer-events: auto;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
   display: flex;
   flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.scribble-toolbar {
+  background: #1a1a1a;
+  padding: 12px 16px;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
-  min-width: 280px;
-}
-
-.scribble-upload-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #ffffff;
-  padding: 16px 32px;
-  border-radius: 12px;
-  font-size: 18px;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
-  transition: all 0.3s ease;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  text-align: center;
-  display: inline-block;
-}
-
-.scribble-upload-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(102, 126, 234, 0.5);
-}
-
-.scribble-upload-button:active {
-  transform: translateY(0);
-}
-
-.scribble-upload-locked {
-  color: #ffcc00;
-  font-size: 14px;
-  text-align: center;
-  padding: 8px 16px;
-  background: rgba(255, 204, 0, 0.1);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 204, 0, 0.3);
-}
-
-.scribble-upload-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.scribble-action-btn {
-  padding: 10px 20px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.scribble-action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateY(-1px);
-}
-
-.scribble-action-btn.primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-color: transparent;
-}
-
-.scribble-action-btn.primary:hover {
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.scribble-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-@keyframes modalFadeInScale {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
-}
-
-@keyframes fadeInScale {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
-}
-
-.scribble-modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 36px;
-  height: 36px;
-  border-radius: 9999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.24);
-  color: #ffffff;
-  cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  font-size: 20px;
-  font-weight: bold;
-  line-height: 1;
-}
-
-.scribble-modal-close:hover {
-  transform: scale(1.08);
-  box-shadow: 0 0 10px rgba(255,255,255,0.3);
-}
-
-.scribble-modal-close:active {
-  transform: scale(0.95);
-}
-
-.scribble-actions {
-  margin-top: 12px;
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-
-.scribble-actions button {
-  padding: 8px 12px;
-  border: 1px solid rgba(255,255,255,0.3);
-  background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.08));
-  color: #fff;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.3s ease;
-}
-
-.scribble-actions button:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
-.scribble-actions button:active { transform: scale(0.95); }
-
-/* Professional Toolbar - Top Right */
-.scribble-toolbar-professional {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
-  pointer-events: auto;
-  z-index: 2001; /* Above everything */
-  min-width: 300px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  /* Ensure toolbar is always visible */
-  visibility: visible;
-  opacity: 1;
-}
-
-.scribble-toolbar-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.tool-separator {
-  width: 1px;
-  height: 28px;
-  background: rgba(0, 0, 0, 0.1);
-  margin: 0 4px;
-}
-
-.tool-color-input {
-  width: 42px;
-  height: 42px;
-  border-radius: 8px;
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  padding: 0;
-  overflow: hidden;
-}
-
-.tool-size-input {
-  width: 120px;
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.tool-size-input::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #667eea;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-.tool-size-input::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #667eea;
-  cursor: pointer;
-  border: none;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-.tool-reupload {
-  padding: 8px 16px !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  color: #ffffff !important;
-  border: none !important;
-  border-radius: 8px !important;
-}
-
-.tool-reupload:hover {
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4) !important;
-}
-
-.tool-close {
-  background: rgba(239, 68, 68, 0.9) !important;
-  color: #ffffff !important;
-  border: none !important;
-}
-
-.tool-close:hover {
-  background: rgba(239, 68, 68, 1) !important;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4) !important;
+  justify-content: space-between;
+  border-bottom: 1px solid #333;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  flex-shrink: 0;
 }
 
 .scribble-close {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  width: 40px;
-  height: 40px;
-  border-radius: 9999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.24);
-  color: #ffffff;
-  cursor: pointer;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-  pointer-events: auto;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-.scribble-close:hover { transform: scale(1.08); box-shadow: 0 0 10px rgba(255,255,255,0.3); }
-.scribble-close:active { transform: scale(0.95); }
-
-.scribble-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.tool {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  color: #374151;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 18px;
-}
-
-.tool:hover {
-  background: rgba(0, 0, 0, 0.08);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.tool:active {
-  transform: translateY(0);
-}
-
-.tool.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #ffffff;
-  border-color: transparent;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.tool:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.tool.danger {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
-}
-.scribble-dropzone {
-  margin-top: 12px;
-  border: 2px dashed rgba(255,255,255,0.4);
-  border-radius: 16px;
-  padding: 20px;
-  color: #fff;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 20px;
-}
-
-.scribble-dropzone:hover { box-shadow: 0 0 20px rgba(255,255,255,0.15); }
-
-/* Enhanced Legend */
-.scribble-legend-enhanced {
-  position: fixed;
-  left: 20px;
-  bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
-  color: #1f2937;
-  pointer-events: auto;
-  z-index: 2001; /* Above everything */
-  min-width: 180px;
-  overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  /* Ensure legend is always visible */
-  visibility: visible;
-  opacity: 1;
-}
-
-.scribble-legend-header {
-  padding: 12px 16px;
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: #1f2937; /* darker text for contrast */
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%); /* subtle gray gradient */
-}
-
-.scribble-legend-items {
-  display: flex;
-  flex-direction: column;
-  padding: 8px;
-  gap: 6px;
-}
-
-.scribble-legend-item { 
-  display: flex; 
-  align-items: center; 
-  gap: 10px; 
-  padding: 8px 12px;
-  font-size: 14px; 
-  color: #374151;
-  border-radius: 8px;
-  transition: background 0.2s ease;
-}
-
-.scribble-legend-item:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-.scribble-legend-item.current-user {
-  background: rgba(102, 126, 234, 0.1);
-  font-weight: 500;
-}
-
-.scribble-legend-dot { 
-  width: 18px; 
-  height: 18px; 
-  border-radius: 50%; 
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.scribble-legend-name {
-  flex: 1;
-  font-weight: 400;
-}
-
-.scribble-legend-you {
-  font-size: 12px;
-  color: #667eea;
-  font-weight: 500;
-  font-style: italic;
-}
-
-/* AI Q&A Display */
-.ai-qa-container {
-  position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  max-width: 80%;
-  pointer-events: none;
-}
-
-.ai-question {
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: #e6eef8;
-  text-align: center;
-  margin-bottom: 10px;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
-}
-
-.ai-answer {
-  font-size: 1.4rem;
-  color: #cfd8e3;
-  line-height: 1.6;
-  text-align: justify;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  background: rgba(0,0,0,0.3);
-  padding: 12px 16px;
-  border-radius: 12px;
-  backdrop-filter: blur(8px);
-}
-
-
-.scribble-user .dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 9999px;
-  border: 1px solid rgba(0,0,0,0.2);
-  display: inline-block;
-}
-
-@keyframes scribbleFade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* Responsive Design - Clean white workspace across all screen sizes */
-@media (max-width: 768px) {
-  .scribble-toolbar-professional {
-    top: 12px;
-    right: 12px;
-    padding: 12px;
-    min-width: auto;
-    gap: 8px;
-  }
-  
-  .scribble-toolbar-row {
-    gap: 6px;
-  }
-  
-  .tool {
-    width: 36px;
-    height: 36px;
-    font-size: 16px;
-  }
-  
-  .tool-color-input {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .tool-size-input {
-    width: 100px;
-  }
-  
-  .scribble-legend-enhanced {
-    left: 12px;
-    bottom: 12px;
-    min-width: 160px;
-  }
-  
-  .scribble-upload-container {
-    min-width: 240px;
-    padding: 0 20px;
-  }
-  
-  .scribble-upload-button {
-    padding: 14px 28px;
-    font-size: 16px;
-  }
-}
-
-@media (max-width: 640px) {
-  .scribble-toolbar-professional {
-    top: 8px;
-    right: 8px;
-    padding: 10px;
-    gap: 6px;
-  }
-  
-  .tool {
-    width: 32px;
-    height: 32px;
-    font-size: 14px;
-  }
-  
-  .tool-color-input {
-    width: 32px;
-    height: 32px;
-  }
-  
-  .tool-size-input {
-    width: 80px;
-  }
-  
-  .scribble-legend-enhanced {
-    left: 8px;
-    bottom: 8px;
-    min-width: 140px;
-    font-size: 12px;
-  }
-  
-  .scribble-legend-header {
-    padding: 10px 12px;
-    font-size: 11px;
-  }
-  
-  .scribble-legend-item {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-  
-  .scribble-upload-container {
-    min-width: 200px;
-  }
-  
-  .scribble-upload-button {
-    padding: 12px 24px;
-    font-size: 15px;
-  }
-}
-
-@media (max-width: 480px) {
-  .scribble-toolbar-professional {
-    top: 6px;
-    right: 6px;
-    padding: 8px;
-    gap: 4px;
-    min-width: auto;
-  }
-  
-  .scribble-toolbar-row {
-    gap: 4px;
-    flex-wrap: wrap;
-  }
-  
-  .tool {
-    width: 28px;
-    height: 28px;
-    font-size: 12px;
-  }
-  
-  .tool-color-input {
-    width: 28px;
-    height: 28px;
-  }
-  
-  .tool-size-input {
-    width: 60px;
-  }
-  
-  .tool-reupload {
-    padding: 6px 12px !important;
-    font-size: 11px !important;
-  }
-  
-  .scribble-legend-enhanced {
-    left: 6px;
-    bottom: 6px;
-    min-width: 120px;
-  }
-  
-  .scribble-legend-header {
-    padding: 8px 10px;
-    font-size: 10px;
-  }
-  
-  .scribble-legend-item {
-    padding: 5px 8px;
-    font-size: 11px;
-  }
-  
-  .scribble-legend-dot {
-    width: 14px;
-    height: 14px;
-  }
-  
-  .scribble-upload-container {
-    min-width: 180px;
-  }
-  
-  .scribble-upload-button {
-    padding: 10px 20px;
-    font-size: 14px;
-  }
-}
-
-.scribble-image-controls {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 2001;
-  pointer-events: auto;
-}
-
-.scribble-remove-image-btn {
-  background: rgba(239, 68, 68, 0.9);
+  background: #333;
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 20px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  transition: 0.2s;
+}
+.scribble-close:hover { background: #e91e63; }
+
+.scribble-tools {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.scribble-tools input[type="color"] {
+  width: 40px; height: 40px;
+  border: none; border-radius: 8px;
+  cursor: pointer;
+}
+.scribble-tools input[type="range"] {
+  width: 100px;
+}
+.scribble-upload {
+  background: #6200ee;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.scribble-upload input { display: none; }
+.scribble-remove {
+  background: #d32f2f;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
 }
 
-.scribble-remove-image-btn:hover {
-  background: rgba(239, 68, 68, 1);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+.scribble-lock {
+  background: #1b5e20;
+  color: #a5d6a7;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
-.scribble-remove-image-btn:active {
-  transform: translateY(0);
+.scribble-canvas {
+  flex: 1;
+  background: #000;
+  touch-action: none;
+  cursor: crosshair;
 }
 
-@media (max-width: 640px) {
-  .scribble-toolbar {
-    gap: 6px;
-    padding: 10px;
-  }
-  .tool { width: 38px; height: 38px; }
+.scribble-ai-response {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 58, 138, 0.9);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 12px;
+  max-width: 80%;
+  font-size: 16px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+  backdrop-filter: blur(8px);
 }
-
-

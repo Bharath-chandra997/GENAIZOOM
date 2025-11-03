@@ -922,6 +922,25 @@ const ScribbleOverlay = ({
   const currentStrokeRef = useRef(null); // Current stroke being drawn
   const strokesArrayRef = useRef([]); // Keep ref for reactive drawing
   const isDrawingRef = useRef(false); // Keep ref for reactive drawing
+  const canvasSizeRef = useRef({ w: 1, h: 1 }); // For normalization
+
+  // Helpers: normalization for cross-device scaling
+  const updateCanvasSizeRef = () => {
+    const c = canvasDrawRef.current;
+    if (!c) return;
+    const { clientWidth, clientHeight } = c;
+    canvasSizeRef.current = { w: Math.max(1, clientWidth), h: Math.max(1, clientHeight) };
+  };
+
+  const toNorm = (x, y) => {
+    const { w, h } = canvasSizeRef.current;
+    return { x: x / w, y: y / h };
+  };
+
+  const fromNorm = (nx, ny) => {
+    const { w, h } = canvasSizeRef.current;
+    return { x: nx * w, y: ny * h };
+  };
 
   // Socket subscriptions
   useEffect(() => {
@@ -996,6 +1015,48 @@ const ScribbleOverlay = ({
       if (!stroke || !stroke.id) {
         console.warn('Received invalid stroke from server');
         return;
+      }
+      // Back-compat: if stroke not normalized, convert once
+      if (!stroke.norm) {
+        if (stroke.type === 'path' && Array.isArray(stroke.points)) {
+          updateCanvasSizeRef();
+          const converted = stroke.points.map(p => {
+            // if values look like pixels, normalize; else keep
+            if (p.x > 1 || p.y > 1) {
+              const n = toNorm(p.x, p.y);
+              return { x: n.x, y: n.y };
+            }
+            return p;
+          });
+          stroke.points = converted;
+          stroke.norm = true;
+        } else if (stroke.type === 'shape') {
+          updateCanvasSizeRef();
+          if (typeof stroke.x === 'number' && typeof stroke.w === 'number') {
+            if (stroke.x > 1 || stroke.y > 1 || stroke.w > 1 || stroke.h > 1) {
+              const nxy = toNorm(stroke.x, stroke.y);
+              stroke.x = nxy.x; stroke.y = nxy.y;
+              stroke.w = stroke.w / canvasSizeRef.current.w;
+              stroke.h = stroke.h / canvasSizeRef.current.h;
+              stroke.norm = true;
+            }
+          } else if (typeof stroke.cx === 'number') {
+            if (stroke.cx > 1 || stroke.cy > 1 || stroke.r > 1) {
+              const nc = toNorm(stroke.cx, stroke.cy);
+              stroke.cx = nc.x; stroke.cy = nc.y;
+              stroke.r = stroke.r / Math.min(canvasSizeRef.current.w, canvasSizeRef.current.h);
+              stroke.norm = true;
+            }
+          } else if (typeof stroke.x1 === 'number') {
+            if (stroke.x1 > 1 || stroke.y1 > 1 || stroke.x2 > 1 || stroke.y2 > 1) {
+              const n1 = toNorm(stroke.x1, stroke.y1);
+              const n2 = toNorm(stroke.x2, stroke.y2);
+              stroke.x1 = n1.x; stroke.y1 = n1.y;
+              stroke.x2 = n2.x; stroke.y2 = n2.y;
+              stroke.norm = true;
+            }
+          }
+        }
       }
       
       // Check if this stroke is from the current user (to avoid conflicts with local drawing)
@@ -1113,6 +1174,7 @@ const ScribbleOverlay = ({
       animationFrameRef.current = requestAnimationFrame(drawLoop);
       return;
     }
+    updateCanvasSizeRef();
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     const { clientWidth, clientHeight } = canvas;
@@ -1152,8 +1214,10 @@ const ScribbleOverlay = ({
         ctx.beginPath();
         if (s.points && s.points.length > 0) {
           s.points.forEach((p, idx) => {
-            if (idx === 0) ctx.moveTo(p.x, p.y);
-            else ctx.lineTo(p.x, p.y);
+            const px = s.norm ? fromNorm(p.x, p.y).x : p.x;
+            const py = s.norm ? fromNorm(p.x, p.y).y : p.y;
+            if (idx === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
           });
           ctx.stroke();
         }
@@ -1165,15 +1229,24 @@ const ScribbleOverlay = ({
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         if (s.shape === 'rect') {
-          ctx.strokeRect(s.x, s.y, s.w, s.h);
+          const x = s.norm ? fromNorm(s.x, s.y).x : s.x;
+          const y = s.norm ? fromNorm(s.x, s.y).y : s.y;
+          const w = s.norm ? (s.w * canvasSizeRef.current.w) : s.w;
+          const h = s.norm ? (s.h * canvasSizeRef.current.h) : s.h;
+          ctx.strokeRect(x, y, w, h);
         } else if (s.shape === 'circle') {
+          const cx = s.norm ? fromNorm(s.cx, s.cy).x : s.cx;
+          const cy = s.norm ? fromNorm(s.cx, s.cy).y : s.cy;
+          const r = s.norm ? (s.r * Math.min(canvasSizeRef.current.w, canvasSizeRef.current.h)) : s.r;
           ctx.beginPath();
-          ctx.arc(s.cx, s.cy, s.r, 0, Math.PI * 2);
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
           ctx.stroke();
         } else if (s.shape === 'arrow' || s.shape === 'line') {
+          const p1 = s.norm ? fromNorm(s.x1, s.y1) : { x: s.x1, y: s.y1 };
+          const p2 = s.norm ? fromNorm(s.x2, s.y2) : { x: s.x2, y: s.y2 };
           ctx.beginPath();
-          ctx.moveTo(s.x1, s.y1);
-          ctx.lineTo(s.x2, s.y2);
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
           ctx.stroke();
         }
         ctx.restore();
@@ -1183,7 +1256,8 @@ const ScribbleOverlay = ({
         ctx.font = `${
           s.size || 18
         }px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
-        ctx.fillText(s.text, s.x, s.y);
+        const tp = s.norm ? fromNorm(s.x, s.y) : { x: s.x, y: s.y };
+        ctx.fillText(s.text, tp.x, tp.y);
         ctx.restore();
       }
     });
@@ -1295,14 +1369,16 @@ const ScribbleOverlay = ({
     const socketId = socketRef?.current?.id || currentUser?.id || 'unknown';
     
     if (tool === 'pen' || tool === 'highlighter') {
+      const np = toNorm(x, y);
       const stroke = {
         id: Date.now() + Math.random(), // Unique ID
         type: 'path',
         color: myColor || '#000000', // Fallback color
         width: thickness,
-        points: [{ x, y }],
+        points: [{ x: np.x, y: np.y }],
         alpha: tool === 'highlighter' ? 0.35 : 1,
         userId: socketId, // Use socketId for consistency
+        norm: true,
       };
       currentStrokeRef.current = stroke;
       // Add to local array immediately for instant visual feedback
@@ -1335,14 +1411,16 @@ const ScribbleOverlay = ({
         redoStackRef.current = [];
       }
     } else if (['rect', 'circle', 'arrow', 'line'].includes(tool)) {
+      const n0 = toNorm(x, y);
       previewRef.current = {
         shape: tool,
         color: myColor,
         width: thickness,
-        x,
-        y,
-        x1: x,
-        y1: y,
+        x: n0.x,
+        y: n0.y,
+        x1: n0.x,
+        y1: n0.y,
+        norm: true,
       };
     } else if (tool === 'text') {
       const socketId = socketRef?.current?.id || currentUser?.id;
@@ -1352,15 +1430,17 @@ const ScribbleOverlay = ({
       }
       const text = window.prompt('Enter text');
       if (text && text.trim()) {
+        const np = toNorm(x, y);
         const stroke = {
           id: Date.now() + Math.random(),
           type: 'text',
           text,
-          x,
-          y,
+          x: np.x,
+          y: np.y,
           color: myColor || '#000000',
           size: Math.max(14, thickness * 3),
           userId: socketId, // Use socketId for consistency
+          norm: true,
         };
         const newStrokes = [...strokesArray, stroke];
         setStrokesArray(newStrokes);
@@ -1388,7 +1468,8 @@ const ScribbleOverlay = ({
       const currentStroke = currentStrokeRef.current;
       if (!currentStroke || currentStroke.type !== 'path') return;
 
-      const newPoint = { x, y };
+      const np = toNorm(x, y);
+      const newPoint = { x: np.x, y: np.y };
 
       // 1. Mutate the ref's data. This is safe and its intended purpose.
       currentStroke.points.push(newPoint);
@@ -1412,26 +1493,30 @@ const ScribbleOverlay = ({
 
       // 3. Emit the updated stroke to the server (throttled for performance)
       // Emit more frequently for smoother real-time collaboration
-      if (currentStroke.points.length % 3 === 0) {
+      if (currentStroke.points.length % 5 === 0) {
         emitStroke({ ...currentStroke, points: [...currentStroke.points] });
       }
     } else if (['rect', 'circle', 'arrow', 'line'].includes(tool)) {
       const p = previewRef.current;
       if (!p) return;
       if (tool === 'rect') {
-        p.w = x - p.x;
-        p.h = y - p.y;
+        const nx = toNorm(x, y);
+        p.w = nx.x - p.x;
+        p.h = nx.y - p.y;
       }
       if (tool === 'circle') {
-        const dx = x - p.x;
-        const dy = y - p.y;
+        const nx = toNorm(x, y);
+        const dx = nx.x - p.x;
+        const dy = nx.y - p.y;
         p.cx = p.x;
         p.cy = p.y;
+        // radius in normalized units: use min of width/height scaling
         p.r = Math.sqrt(dx * dx + dy * dy);
       }
       if (tool === 'arrow' || tool === 'line') {
-        p.x2 = x;
-        p.y2 = y;
+        const nx = toNorm(x, y);
+        p.x2 = nx.x;
+        p.y2 = nx.y;
       }
     }
   };

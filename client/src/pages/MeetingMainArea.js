@@ -41,12 +41,10 @@ const MeetingMainArea = ({
   const annotationCanvasRef = useRef(null);
   const videoRefs = useRef(new Map());
 
-  // Update local pinned participant when prop changes
   useEffect(() => {
     setLocalPinnedParticipant(pinnedParticipantId);
   }, [pinnedParticipantId]);
 
-  // Handle pin/unpin participant
   const handlePinParticipant = (participantId) => {
     if (localPinnedParticipant === participantId) {
       setLocalPinnedParticipant(null);
@@ -57,24 +55,13 @@ const MeetingMainArea = ({
     }
   };
 
-  // Get participants for current grid page
   const getCurrentPageParticipants = () => {
-    // Calculate start and end indices for current page
     const startIndex = gridPage * 3;
     const endIndex = startIndex + 3;
-    
-    // Get the participants for the current page
     const pageParticipants = participants.slice(startIndex, endIndex);
-    
-    // Ensure we don't exceed 3 participants per page
-    if (pageParticipants.length > 3) {
-      return pageParticipants.slice(0, 3);
-    }
-    
-    return pageParticipants;
+    return pageParticipants.length > 3 ? pageParticipants.slice(0, 3) : pageParticipants;
   };
 
-  // Handle video element reference
   const setVideoRef = (participant, element) => {
     if (element) {
       videoRefs.current.set(participant.userId, element);
@@ -84,7 +71,6 @@ const MeetingMainArea = ({
     }
   };
 
-  // Update video streams when participants change
   useEffect(() => {
     participants.forEach(participant => {
       const videoElement = videoRefs.current.get(participant.userId);
@@ -94,14 +80,21 @@ const MeetingMainArea = ({
     });
   }, [participants]);
 
-  // Render participant video frame
+  // === NEW: Parse full AI JSON ===
+  const parseAIResult = (raw) => {
+    try {
+      return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch {
+      return { text: raw || '' };
+    }
+  };
+
   const renderParticipantVideo = (participant, index) => {
     const isAI = participant.userId === 'ai-assistant';
     const isPinned = localPinnedParticipant === participant.userId;
     const hasVideo = participant.videoEnabled && participant.stream;
     const isScreenSharing = participant.isScreenSharing;
 
-    // No mirroring - all videos appear in natural orientation
     let videoClass = 'pro-video-element';
 
     return (
@@ -142,74 +135,102 @@ const MeetingMainArea = ({
             />
           ) : isAI ? (
             <div className="pro-ai-visualization">
-              {/* Wrong Button - Top Right Corner */}
+              {/* Revert Button */}
               {isAIProcessingLayout && (
                 <button
                   className="pro-ai-wrong-btn"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onRevertAILayout && onRevertAILayout();
+                    onRevertAILayout?.();
                   }}
                   title="Revert to previous layout"
                 >
                   Wrong
                 </button>
               )}
-              
-              {/* Processing Layout: Show uploaded files together (before response) */}
+
+              {/* 1. Processing: Show uploaded media */}
               {isAIProcessingLayout && !aiResponse && (aiUploadedImage || aiUploadedAudio) ? (
                 <div className="pro-ai-processing-layout">
                   <div className="pro-ai-uploaded-content-wrapper">
                     {aiUploadedImage && (
                       <div className="pro-ai-uploaded-media-container">
-                        <img src={aiUploadedImage} alt="Uploaded image" className="pro-ai-uploaded-image-full" />
+                        <img
+                          src={aiUploadedImage}
+                          alt="Uploaded"
+                          className="pro-ai-uploaded-image-full"
+                        />
                       </div>
                     )}
                     {aiUploadedAudio && (
                       <div className="pro-ai-uploaded-audio-container">
-                        <audio controls src={aiUploadedAudio} className="pro-ai-uploaded-audio-full" />
+                        <audio
+                          controls
+                          src={aiUploadedAudio}
+                          className="pro-ai-uploaded-audio-full"
+                        />
                       </div>
                     )}
                   </div>
                 </div>
-              ) : isAIProcessingLayout && aiResponse ? (
-                /* Response Layout: Question → Image → AI Response */
+              ) : /* 2. Result: Show full AI response */ isAIProcessingLayout && aiResponse ? (
                 (() => {
-                  const { question, answer } = extractAIQuestionAndAnswer(aiResponse);
+                  const result = parseAIResult(aiResponse);
+                  const question = result.sent_from_csv || '';
+                  const answer = result.text || '';
+                  const hasCSV = !!question;
+
                   return (
                     <div className="pro-ai-response-layout">
-                      {/* 1. Question above image - white text, no background, centered */}
-                      {question && (
-                        <div className="pro-ai-question-text">{question}</div>
+                      {/* Question (CSV) */}
+                      {hasCSV && (
+                        <div className="pro-ai-question-text">
+                          {question}
+                          <span className="csv-badge">[CSV]</span>
+                        </div>
                       )}
-                      
-                      {/* 2. Image in center */}
+
+                      {/* Image */}
                       {aiUploadedImage && (
                         <div className="pro-ai-response-image-container">
-                          <img src={aiUploadedImage} alt="AI processed content" className="pro-ai-response-image" />
+                          <img
+                            src={aiUploadedImage}
+                            alt="AI input"
+                            className="pro-ai-response-image"
+                          />
                         </div>
                       )}
-                      
-                      {/* 3. AI Response below image - white text, no background */}
+
+                      {/* Answer */}
                       {answer && (
                         <div className="pro-ai-answer-text">
-                          <span className="pro-ai-answer-label">AI Response:</span> {answer}
+                          <span className="pro-ai-answer-label">AI:</span> {answer}
                         </div>
                       )}
+
+                      {/* Metadata */}
+                      <div className="pro-ai-meta">
+                        {result.confidence !== undefined && (
+                          <span>
+                            Confidence: {(result.confidence * 100).toFixed(2)}%
+                          </span>
+                        )}
+                        {result.latency_ms && (
+                          <span>Latency: {result.latency_ms} ms</span>
+                        )}
+                        {result.device && <span>Device: {result.device.toUpperCase()}</span>}
+                        {result.type && <span>Type: {result.type}</span>}
+                      </div>
                     </div>
                   );
                 })()
               ) : (
-                /* Default Layout: AI Logo/Avatar Display */
+                /* 3. Idle: AI Avatar + Canvas */
                 <>
                   <div className="pro-ai-logo-container">
                     <AIAvatar size={120} />
-                    <div className="pro-ai-ready-text">
-                      Ready to help
-                    </div>
+                    <div className="pro-ai-ready-text">Ready to help</div>
                   </div>
-                  
-                  {/* Canvas for animations */}
                   <canvas ref={aiCanvasRef} className="pro-ai-canvas" />
                 </>
               )}
@@ -217,21 +238,10 @@ const MeetingMainArea = ({
           ) : (
             <div className="pro-video-placeholder">
               {(() => {
-                // Debug: Log participant data
-                console.log('Participant data:', {
-                  userId: participant.userId,
-                  username: participant.username,
-                  isLocal: participant.isLocal,
-                  profilePicture: participant.profilePicture,
-                  hasVideo: hasVideo,
-                  videoEnabled: participant.videoEnabled
-                });
-                
-                // Check if participant has a profilePicture URL string
                 if (participant.profilePicture && typeof participant.profilePicture === 'string') {
                   return (
-                    <img 
-                      src={participant.profilePicture} 
+                    <img
+                      src={participant.profilePicture}
                       alt={participant.username}
                       style={{
                         width: '120px',
@@ -247,7 +257,6 @@ const MeetingMainArea = ({
                     />
                   );
                 }
-                // Otherwise use the avatar generation function
                 return getUserAvatar(participant, 80);
               })()}
             </div>
@@ -258,26 +267,25 @@ const MeetingMainArea = ({
           <div className="pro-participant-name">
             {participant.username}
             {participant.isLocal && !isAI && ' (You)'}
-            {participant.isHost && ' 👑'}
-            {isAI && ' 🤖'}
-            {isScreenSharing && ' 📺'}
+            {participant.isHost && ' (Host)'}
+            {isAI && ' (AI)'}
+            {isScreenSharing && ' (Screen)'}
           </div>
 
           <div className="pro-status-indicators">
             {!participant.audioEnabled && !isAI && (
               <div className="pro-status-icon pro-status-icon--muted" title="Audio muted">
-                🔇
+                Muted
               </div>
             )}
             {!participant.videoEnabled && !isAI && (
               <div className="pro-status-icon pro-status-icon--video-off" title="Video off">
-                🚫
+                Video Off
               </div>
             )}
-            
             {isPinned && !isAI && (
               <div className="pro-status-icon pro-status-icon--pinned" title="Pinned">
-                📌
+                Pinned
               </div>
             )}
           </div>
@@ -286,7 +294,6 @@ const MeetingMainArea = ({
     );
   };
 
-  // Render screen share view
   const renderScreenShareView = () => {
     const screenSharer = participants.find((p) => p.isScreenSharing);
     const otherParticipants = participants.filter((p) => !p.isScreenSharing && p.userId !== screenSharer?.userId);
@@ -300,15 +307,15 @@ const MeetingMainArea = ({
           {drawingCanvasComponent && <div className="drawing-canvas-wrapper">{drawingCanvasComponent}</div>}
         </div>
         {otherParticipants.length > 0 && (
-          <motion.div 
+          <motion.div
             className="pro-screenshare-participants"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
           >
             {otherParticipants.slice(0, 4).map((participant, index) => (
-              <motion.div 
-                key={participant.userId} 
+              <motion.div
+                key={participant.userId}
                 className="pro-screenshare-participant"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -323,64 +330,27 @@ const MeetingMainArea = ({
     );
   };
 
-  // Get responsive grid layout based on participant count - Fill entire container
   const getGridLayout = (participantCount) => {
-    if (participantCount <= 0) {
-      return {
-        gridTemplateColumns: '1fr',
-        gridTemplateRows: '1fr',
-        width: '100vw',
-      };
-    } else if (participantCount === 1) {
-      return {
-        gridTemplateColumns: '1fr',
-        gridTemplateRows: '1fr',
-        width: '100vw',
-        maxWidth: '100vw',
-      };
-    } else if (participantCount === 2) {
-      return {
-        gridTemplateColumns: '1fr 1fr',
-        gridTemplateRows: '1fr',
-        width: '100vw',
-        gap: '4px',
-      };
-    } else if (participantCount === 3) {
-      return {
-        gridTemplateColumns: '1fr 1fr 1fr',
-        gridTemplateRows: '1fr',
-        width: '100vw',
-        gap: '4px',
-      };
-    } else {
-      // For 4+ participants, use 3 columns with pagination
-      return {
-        gridTemplateColumns: '1fr 1fr 1fr',
-        gridTemplateRows: '1fr',
-        width: '100vw',
-        gap: '4px',
-      };
-    }
+    if (participantCount <= 0) return { gridTemplateColumns: '1fr', gridTemplateRows: '1fr', width: '100vw' };
+    if (participantCount === 1) return { gridTemplateColumns: '1fr', gridTemplateRows: '1fr', width: '100vw' };
+    if (participantCount === 2) return { gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr', width: '100vw', gap: '4px' };
+    if (participantCount === 3) return { gridTemplateColumns: '1fr 1fr 1fr', gridTemplateRows: '1fr', width: '100vw', gap: '4px' };
+    return { gridTemplateColumns: '1fr 1fr 1fr', gridTemplateRows: '1fr', width: '100vw', gap: '4px' };
   };
 
-  // Render responsive grid view
   const renderGridView = () => {
     const currentPageParticipants = getCurrentPageParticipants();
-    
-    // Sort participants: AI first (on the left), then real users
     const sortedParticipants = [...currentPageParticipants].sort((a, b) => {
-      if (a.userId === 'ai-assistant') return -1; // AI goes first
+      if (a.userId === 'ai-assistant') return -1;
       if (b.userId === 'ai-assistant') return 1;
       return 0;
     });
-    
-    // Count total participants including AI for layout
+
     const totalParticipantCount = sortedParticipants.length;
     const gridLayout = getGridLayout(totalParticipantCount);
 
-    
     return (
-      <motion.div 
+      <motion.div
         className={`pro-video-grid-responsive pro-video-grid--${totalParticipantCount}`}
         style={{
           ...gridLayout,
@@ -401,8 +371,8 @@ const MeetingMainArea = ({
               initial={{ opacity: 0, scale: 0.8, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.8, y: -20 }}
-              transition={{ 
-                duration: 0.4, 
+              transition={{
+                duration: 0.4,
                 delay: index * 0.1,
                 ease: "easeOut"
               }}
@@ -418,21 +388,21 @@ const MeetingMainArea = ({
   };
 
   return (
-    <motion.div 
+    <motion.div
       className="pro-mainarea"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
-      <motion.div 
+      <motion.div
         className="pro-mainarea-grid"
         layout
         transition={{ duration: 0.3 }}
       >
         {isSomeoneScreenSharing ? renderScreenShareView() : renderGridView()}
       </motion.div>
-      
-      {/* Pagination Controls */}
+
+      {/* Pagination */}
       {!isSomeoneScreenSharing && totalGridPages > 1 && participants.length > 3 && (
         <div className="pro-grid-pagination">
           <button
@@ -440,7 +410,7 @@ const MeetingMainArea = ({
             onClick={() => setGridPage((prev) => Math.max(0, prev - 1))}
             disabled={gridPage === 0}
           >
-            ← Previous
+            Previous
           </button>
           <div className="pro-grid-dots">
             {Array.from({ length: totalGridPages }).map((_, index) => (
@@ -456,7 +426,7 @@ const MeetingMainArea = ({
             onClick={() => setGridPage((prev) => Math.min(totalGridPages - 1, prev + 1))}
             disabled={gridPage === totalGridPages - 1}
           >
-            Next →
+            Next
           </button>
         </div>
       )}

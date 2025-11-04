@@ -27,12 +27,20 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
         el.onload = () => {
           imageRef.current = el;
           drawImage();
+          // Redraw all existing strokes when image loads
+          setTimeout(() => {
+            redrawAll();
+          }, 100);
+        };
+        el.onerror = () => {
+          console.error('Failed to load image from socket');
         };
         el.src = img;
       } else {
         imageRef.current = null;
         const c = canvasImageRef.current;
         if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+        setStrokesArray([]); // Clear strokes when image is removed
       }
     };
 
@@ -44,23 +52,42 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
 
     const onStroke = (stroke) => {
       if (!stroke || !stroke.id) return;
-      // upsert into strokes array
+      // upsert into strokes array and immediately redraw
+      // This handles strokes from ALL users (including our own if server echoes back)
       setStrokesArray((prev) => {
         const idx = prev.findIndex((s) => s.id === stroke.id);
+        let updated;
         if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = stroke;
-          return next;
+          updated = [...prev];
+          updated[idx] = { ...stroke }; // Deep copy to ensure updates
+        } else {
+          updated = [...prev, { ...stroke }];
         }
-        return [...prev, stroke];
+        // Redraw immediately with the new array (all strokes visible to all users)
+        setTimeout(() => {
+          const canvas = canvasDrawRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            const { clientWidth, clientHeight } = canvas;
+            ctx.clearRect(0, 0, clientWidth, clientHeight);
+            updated.forEach((s) => {
+              if (s) drawStroke(s);
+            });
+          }
+        }, 0);
+        return updated;
       });
-      redrawAll();
     };
 
     const onDrawings = (data) => {
       if (Array.isArray(data)) {
-        setStrokesArray(data.filter(Boolean));
-        redrawAll(data);
+        const filtered = data.filter(Boolean);
+        setStrokesArray(filtered);
+        // Redraw immediately with the received data
+        setTimeout(() => {
+          clearDraw();
+          filtered.forEach((s) => drawStroke(s));
+        }, 0);
       }
     };
 
@@ -68,6 +95,9 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     socket.on('scribble:userColors', onUserColors);
     socket.on('scribble:stroke', onStroke);
     socket.on('scribble:drawings', onDrawings);
+    
+    // Request current state when component mounts or overlay opens
+    // This ensures we get the image and all existing strokes from other users
     socket.emit('scribble:request-state', { roomId });
 
     return () => {
@@ -91,6 +121,16 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     list.forEach((s) => drawStroke(s));
   };
 
+  // Redraw all strokes whenever strokesArray changes
+  useEffect(() => {
+    if (strokesArray.length > 0 && image) {
+      setTimeout(() => {
+        clearDraw();
+        strokesArray.forEach((s) => drawStroke(s));
+      }, 0);
+    }
+  }, [strokesArray.length, image]); // Redraw when strokes count changes or image changes
+
   // Canvas sizing
   useEffect(() => {
     const resize = () => {
@@ -106,7 +146,11 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       ctxI.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctxD.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawImage();
-      redrawAll();
+      // Redraw all strokes after resize
+      setTimeout(() => {
+        clearDraw();
+        strokesArray.forEach((s) => drawStroke(s));
+      }, 0);
     };
     resize();
     window.addEventListener('resize', resize);
@@ -218,12 +262,28 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
   };
   const onMove = (e) => {
     if (!isDrawing) return;
+    e.preventDefault();
     const { x, y } = getXY(e);
     if (tool === 'pen' && currentStrokeRef.current) {
       currentStrokeRef.current.points.push({ x, y });
-      drawStroke(currentStrokeRef.current);
+      // Update local state for immediate visual feedback
+      setStrokesArray((prev) => {
+        const idx = prev.findIndex((s) => s.id === currentStrokeRef.current.id);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...currentStrokeRef.current };
+          // Redraw immediately
+          setTimeout(() => {
+            clearDraw();
+            updated.forEach((s) => drawStroke(s));
+          }, 0);
+          return updated;
+        }
+        return prev;
+      });
+      // Emit to server for real-time sync (throttled)
       if (currentStrokeRef.current.points.length % 3 === 0) {
-        socketRef.current?.emit('scribble:stroke', { roomId, stroke: { ...currentStrokeRef.current } });
+        socketRef.current?.emit('scribble:stroke', { roomId, stroke: { ...currentStrokeRef.current, points: [...currentStrokeRef.current.points] } });
       }
     } else if ((tool === 'rect' || tool === 'circle') && currentStrokeRef.current) {
       if (tool === 'rect') {
@@ -232,20 +292,53 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       } else {
         currentStrokeRef.current.r = Math.sqrt((x - currentStrokeRef.current.cx) ** 2 + (y - currentStrokeRef.current.cy) ** 2);
       }
-      redrawAll();
-      drawStroke(currentStrokeRef.current);
+      // Redraw all strokes plus current preview
+      setTimeout(() => {
+        clearDraw();
+        strokesArray.forEach((s) => drawStroke(s));
+        drawStroke(currentStrokeRef.current);
+      }, 0);
     }
   };
   const onUp = () => {
     if (!isDrawing) return;
     setIsDrawing(false);
     if (tool === 'pen' && currentStrokeRef.current) {
-      socketRef.current?.emit('scribble:stroke', { roomId, stroke: { ...currentStrokeRef.current } });
+      // Finalize pen stroke - ensure it's in the array and broadcast
+      const finalStroke = { ...currentStrokeRef.current, points: [...currentStrokeRef.current.points] };
+      setStrokesArray((prev) => {
+        const idx = prev.findIndex((s) => s.id === finalStroke.id);
+        let updated;
+        if (idx >= 0) {
+          updated = [...prev];
+          updated[idx] = finalStroke;
+        } else {
+          updated = [...prev, finalStroke];
+        }
+        // Redraw immediately
+        setTimeout(() => {
+          clearDraw();
+          updated.forEach((s) => drawStroke(s));
+        }, 0);
+        return updated;
+      });
+      // Broadcast final stroke to all users
+      socketRef.current?.emit('scribble:stroke', { roomId, stroke: finalStroke });
       currentStrokeRef.current = null;
     } else if ((tool === 'rect' || tool === 'circle') && currentStrokeRef.current) {
-      // finalize shape
-      socketRef.current?.emit('scribble:stroke', { roomId, stroke: { ...currentStrokeRef.current } });
-      setStrokesArray((prev) => [...prev, currentStrokeRef.current]);
+      // Finalize shape - add to array and broadcast
+      const finalShape = { ...currentStrokeRef.current };
+      setStrokesArray((prev) => {
+        const updated = [...prev, finalShape];
+        // Redraw immediately
+        setTimeout(() => {
+          clearDraw();
+          updated.forEach((s) => drawStroke(s));
+        }, 0);
+        return updated;
+      });
+      // Broadcast shape to all users
+      socketRef.current?.emit('scribble:stroke', { roomId, stroke: finalShape });
       currentStrokeRef.current = null;
     }
   };

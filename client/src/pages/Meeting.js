@@ -21,8 +21,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import './Meeting.css';
 
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
-// const VQA_API_URL = 'https://genaizoom-1.onrender.com/predict';
-const VQA_API_URL = `${SERVER_URL}/predict`;  // Use proxy, not direct FastAPI
+const VQA_API_URL = `${SERVER_URL}/predict`;
 
 const getColorForId = (id) => {
   if (!id) return '#FFFFFF';
@@ -82,7 +81,6 @@ const AIAvatar = ({ size = 40 }) => {
         textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)',
       }}
     >
-      🤖
       <div
         style={{
           position: 'absolute',
@@ -101,7 +99,7 @@ const AIAvatar = ({ size = 40 }) => {
           fontWeight: 'bold',
         }}
       >
-        ✓
+        
       </div>
     </div>
   );
@@ -124,13 +122,15 @@ const Meeting = () => {
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
   const [toolbarPosition] = useState({ x: 20, y: 20 });
   const [gridPage, setGridPage] = useState(0);
+  const [scribbleActive, setScribbleActive] = useState(false);
+
+  // === AI STATE ===
   const [aiResponse, setAiResponse] = useState('');
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiSentFromCSV, setAiSentFromCSV] = useState(false);
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessing, setIsAIProcessing] = useState(false);
-  const [scribbleActive, setScribbleActive] = useState(false);
-  // const [scribbleUserColors, setScribbleUserColors] = useState({});
-
 
   const [aiParticipant] = useState({
     userId: 'ai-assistant',
@@ -300,7 +300,6 @@ const Meeting = () => {
           image: imageFile?.name,
           audio: audioFile?.name,
           endpoint: VQA_API_URL,
-          token: user.token.substring(0, 20) + '...',
         });
 
         const lockResponse = await axios.post(
@@ -339,16 +338,7 @@ const Meeting = () => {
           throw new Error('Invalid audio file. Must be MP3/WAV and less than 100 MB.');
         }
 
-        console.log('Uploading files:', {
-          image: { name: imageFile.name, type: imageFile.type, size: imageFile.size },
-          audio: { name: audioFile.name, type: audioFile.type, size: audioFile.size },
-        });
-
         const upload = async (formData, type) => {
-          console.log(`Uploading ${type}:`, {
-            filename: formData.get('file').name,
-            size: formData.get('file').size,
-          });
           const res = await axios.post(
             `${SERVER_URL}/upload/${type}`,
             formData,
@@ -360,7 +350,6 @@ const Meeting = () => {
               timeout: 30000,
             }
           );
-          console.log(`${type} uploaded:`, res.data.url);
           return res.data.url;
         };
 
@@ -372,42 +361,74 @@ const Meeting = () => {
         audioForm.append('file', audioFile);
         const audioUrl = await upload(audioForm, 'audio');
 
+        setAiUploadedImage(imageUrl);
+        setAiUploadedAudio(audioUrl);
+
         socketRef.current?.emit('shared-media-display', {
           imageUrl,
           audioUrl,
           username: user.username,
         });
-        setAiUploadedImage(imageUrl);
-        setAiUploadedAudio(audioUrl);
 
         const formData = new FormData();
         formData.append('image', imageFile);
         formData.append('audio', audioFile);
-        console.log('Sending to FastAPI:', VQA_API_URL);
+
         const response = await axios.post(VQA_API_URL, formData, {
           headers: {
             Authorization: `Bearer ${user.token}`,
             'Content-Type': 'multipart/form-data',
           },
+          timeout: 60000,
         });
-        console.log('FastAPI response:', response.data);
 
-        const prediction = response.data.prediction;
-        if (!prediction || prediction.trim() === '') {
-          throw new Error('No prediction received from AI model');
+        console.log('FastAPI raw response:', response.data);
+
+        // === SAFE PARSING ===
+        let raw = response.data.prediction || response.data.result || response.data;
+        let answerText = '';
+        let questionText = '';
+        let sentFromCSV = false;
+
+        if (typeof raw === 'string') {
+          answerText = raw;
+        } else if (raw && typeof raw === 'object') {
+          answerText = raw.text || raw.answer || '';
+          questionText = raw.sent_from_csv || '';
+          sentFromCSV = !!raw.sent_from_csv;
+        } else {
+          throw new Error('Invalid prediction format');
         }
 
-        setAiResponse(prediction);
+        if (!answerText?.trim()) {
+          throw new Error('Empty answer from AI');
+        }
+
+        // === UPDATE STATE ===
+        setAiResponse(answerText);
+        setAiQuestion(questionText);
+        setAiSentFromCSV(sentFromCSV);
+
+        // === BROADCAST TO ALL ===
         socketRef.current?.emit('shared-ai-result', {
-          response: prediction,
+          answer: answerText,
+          question: questionText,
+          sentFromCSV,
+          imageUrl,
+          audioUrl,
           username: user.username,
         });
 
+        // === SAVE TO DB ===
         await axios.post(
           `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
           {
             isProcessing: false,
-            output: prediction,
+            output: answerText,
+            question: questionText,
+            sentFromCSV,
+            imageUrl,
+            audioUrl,
             completedAt: new Date().toISOString(),
             currentUploader: null,
             uploaderUsername: null,
@@ -428,28 +449,14 @@ const Meeting = () => {
             timeout: 5000,
           }
         );
-        console.log('AI unlocked on success');
       } catch (error) {
-        console.error('AI request error:', {
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data,
-          code: error.code,
-          stack: error.stack,
-          url: VQA_API_URL,
-        });
-
+        console.error('AI request error:', error);
         let errorMessage = error.message;
         if (error.response) {
           const { status, data } = error.response;
-          if (status === 409) errorMessage = 'AI Bot is already in use by another participant.';
-          else if (status === 503) errorMessage = 'AI service unavailable. Try again later.';
-          else if (status === 401) errorMessage = 'Authentication failed. Please log in again.';
-          else if (status === 400) errorMessage = 'Invalid file format or missing files.';
-          else if (status === 403) errorMessage = 'Not authorized to access AI.';
-          else errorMessage = data?.error || data?.detail || error.message;
-        } else if (error.code === 'ERR_NETWORK') {
-          errorMessage = 'Network error: Unable to reach AI server. Please try again.';
+          if (status === 409) errorMessage = 'AI Bot is already in use.';
+          else if (status === 400) errorMessage = 'Invalid file format.';
+          else errorMessage = data?.error || error.message;
         }
         toast.error(errorMessage, { position: 'bottom-center' });
 
@@ -458,15 +465,9 @@ const Meeting = () => {
             await axios.post(
               `${SERVER_URL}/api/ai/unlock/${roomId}`,
               { userId: user.userId },
-              {
-                headers: { Authorization: `Bearer ${user.token}` },
-                timeout: 5000,
-              }
+              { headers: { Authorization: `Bearer ${user.token}` } }
             );
-            console.log('AI unlocked on error');
-          } catch (unlockError) {
-            console.warn('Failed to unlock AI:', unlockError.message);
-          }
+          } catch (e) {}
         }
       } finally {
         setIsAIProcessing(false);
@@ -477,6 +478,8 @@ const Meeting = () => {
 
   const handleAIComplete = useCallback(async () => {
     setAiResponse('');
+    setAiQuestion('');
+    setAiSentFromCSV(false);
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
     socketRef.current?.emit('shared-media-removal', { username: user.username });
@@ -485,22 +488,30 @@ const Meeting = () => {
       await axios.post(
         `${SERVER_URL}/api/ai/unlock/${roomId}`,
         { userId: user.userId },
-        {
-          headers: { Authorization: `Bearer ${user.token}` },
-          timeout: 5000,
-        }
+        { headers: { Authorization: `Bearer ${user.token}` } }
       );
-      console.log('AI unlocked on manual complete');
-    } catch (e) {
-      console.warn('Manual unlock failed (non-critical):', e.message);
-    }
+    } catch (e) {}
     toast.info('AI session completed', { position: 'bottom-center' });
   }, [roomId, user]);
 
-  const handleSharedAIResult = useCallback(({ response, username }) => {
-    setAiResponse(response);
-    toast.info(`${username} shared an AI result`, { position: 'bottom-center' });
-  }, []);
+  const handleSharedAIResult = useCallback(
+    ({ answer, question, sentFromCSV, imageUrl, audioUrl, username }) => {
+      setAiResponse(answer);
+      setAiQuestion(question);
+      setAiSentFromCSV(sentFromCSV);
+      if (imageUrl) setAiUploadedImage(imageUrl);
+      if (audioUrl) setAiUploadedAudio(audioUrl);
+
+      toast.info(
+        <div>
+          <strong>{username}</strong> shared AI result
+          {sentFromCSV && <span style={{ color: '#10b981', marginLeft: 6 }}>[CSV]</span>}
+        </div>,
+        { position: 'bottom-center' }
+      );
+    },
+    []
+  );
 
   const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username }) => {
     if (imageUrl) setAiUploadedImage(imageUrl);
@@ -511,8 +522,6 @@ const Meeting = () => {
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
   }, []);
-
-
 
   const getIceServers = useCallback(async () => {
     const now = Date.now();
@@ -682,15 +691,10 @@ const Meeting = () => {
   }, []);
 
   const handleUserLeft = useCallback(({ userId, username }) => {
-    // Show leave notification
     if (username) {
       toast.info(`${username} left the meeting`, { 
         position: 'top-center',
         autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
       });
     }
     
@@ -713,14 +717,9 @@ const Meeting = () => {
           (otherUsers, sessionData) => {
             const isHost = otherUsers.length === 0;
             
-            // Show join notification for current user
             toast.success(`Welcome to the meeting, ${user.username}!`, { 
               position: 'top-center',
               autoClose: 3000,
-              hideProgressBar: false,
-              closeOnClick: true,
-              pauseOnHover: true,
-              draggable: true,
             });
             
             const remoteParticipants = otherUsers.map((u) => ({
@@ -752,12 +751,10 @@ const Meeting = () => {
             if (sessionData?.chatMessages) setMessages(sessionData.chatMessages);
             if (sessionData?.aiState) {
               setAiResponse(sessionData.aiState.output || '');
-              if (sessionData.uploadedFiles) {
-                const img = sessionData.uploadedFiles.find((f) => f.type === 'image');
-                const aud = sessionData.uploadedFiles.find((f) => f.type === 'audio');
-                setAiUploadedImage(img?.url || null);
-                setAiUploadedAudio(aud?.url || null);
-              }
+              setAiQuestion(sessionData.aiState.question || '');
+              setAiSentFromCSV(!!sessionData.aiState.sentFromCSV);
+              setAiUploadedImage(sessionData.aiState.imageUrl || null);
+              setAiUploadedAudio(sessionData.aiState.audioUrl || null);
             }
             setIsLoading(false);
           }
@@ -768,14 +765,9 @@ const Meeting = () => {
       socket.on('user-joined', async ({ userId, username, isHost, profilePicture }) => {
         if (userId === socket.id) return;
         
-        // Show join notification
         toast.success(`${username} joined the meeting`, { 
           position: 'top-center',
           autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
         });
         
         setParticipants((prev) => {
@@ -847,12 +839,10 @@ const Meeting = () => {
       socket.on('shared-ai-result', handleSharedAIResult);
       socket.on('shared-media-display', handleSharedMediaDisplay);
       socket.on('shared-media-removal', handleSharedMediaRemoval);
-      // Auto-open/close Scribble when image is uploaded/removed by anyone
       socket.on('scribble:image', (img) => {
         if (img) setScribbleActive(true);
       });
       socket.on('scribble:removeImage', () => setScribbleActive(false));
-      
 
       return () => {
         socket.off('connect', onConnect);
@@ -893,7 +883,6 @@ const Meeting = () => {
     let mounted = true;
     let socketCleanup = () => {};
 
-    // === WAKE UP FASTAPI ON MOUNT ===
     const wakeFastAPI = async () => {
       if (!user?.token) return;
       try {
@@ -901,10 +890,7 @@ const Meeting = () => {
           method: 'GET',
           headers: { Authorization: `Bearer ${user.token}` },
         });
-        console.log('FastAPI backend is awake');
-      } catch (e) {
-        console.warn('FastAPI wake-up failed (will retry on AI call):', e);
-      }
+      } catch (e) {}
     };
     wakeFastAPI();
 
@@ -1130,18 +1116,15 @@ const Meeting = () => {
             aiCanvasRef={aiCanvasRef}
             setGridPage={setGridPage}
             aiResponse={aiResponse}
+            aiQuestion={aiQuestion}
+            aiSentFromCSV={aiSentFromCSV}
             aiUploadedImage={aiUploadedImage}
             aiUploadedAudio={aiUploadedAudio}
             getUserAvatar={getUserAvatar}
             AIAvatar={AIAvatar}
             onPinParticipant={(uid) => socketRef.current?.emit('pin-participant', { userId: uid })}
             onUnpinParticipant={() => socketRef.current?.emit('unpin-participant')}
-            onAIReset={() => {
-              setAiResponse('');
-              setAiUploadedImage(null);
-              setAiUploadedAudio(null);
-              socketRef.current?.emit('shared-media-removal', { username: user.username });
-            }}
+            onAIReset={handleAIComplete}
           />
         </div>
 
@@ -1262,8 +1245,6 @@ const Meeting = () => {
         ref={aiCanvasRef}
         style={{ position: 'absolute', top: -1000, left: -1000, width: 640, height: 480 }}
       />
-
-
     </div>
   );
 };

@@ -5,7 +5,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
   const [image, setImage] = useState(null);
   const [pendingImage, setPendingImage] = useState(null);
   const [userColors, setUserColors] = useState({});
-  const [strokesArray, setStrokesArray] = useState([]); // keep all strokes to support clear/erase and redraw
+  const [strokesArray, setStrokesArray] = useState([]); // keep all strokes
   const [tool, setTool] = useState('pen');
   const [thickness, setThickness] = useState(4);
   const [myColor, setMyColor] = useState('#2b6cb0');
@@ -27,20 +27,14 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
         el.onload = () => {
           imageRef.current = el;
           drawImage();
-          // Redraw all existing strokes when image loads
-          setTimeout(() => {
-            redrawAll();
-          }, 100);
+          redrawAll(); // Redraw strokes after image loads
         };
-        el.onerror = () => {
-          console.error('Failed to load image from socket');
-        };
+        el.onerror = () => console.error('Failed to load image');
         el.src = img;
       } else {
         imageRef.current = null;
-        const c = canvasImageRef.current;
-        if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
-        setStrokesArray([]); // Clear strokes when image is removed
+        clearCanvas(canvasImageRef.current);
+        setStrokesArray([]);
       }
     };
 
@@ -50,44 +44,48 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       if (sid && colors && colors[sid]) setMyColor(colors[sid]);
     };
 
+    // ROBUST: Guard against null/invalid stroke
     const onStroke = (stroke) => {
-      if (!stroke || !stroke.id) return;
-      // upsert into strokes array and immediately redraw
-      // This handles strokes from ALL users (including our own if server echoes back)
+      if (!stroke || typeof stroke !== 'object' || !stroke.id) {
+        console.warn('Invalid stroke received:', stroke);
+        return;
+      }
+
       setStrokesArray((prev) => {
-        const idx = prev.findIndex((s) => s.id === stroke.id);
+        const idx = prev.findIndex((s) => s && s.id === stroke.id);
         let updated;
+
         if (idx >= 0) {
           updated = [...prev];
-          updated[idx] = { ...stroke }; // Deep copy to ensure updates
+          updated[idx] = { ...stroke };
         } else {
-          updated = [...prev, { ...stroke }];
+          updated = [...prev, stroke];
         }
-        // Redraw immediately with the new array (all strokes visible to all users)
-        setTimeout(() => {
-          const canvas = canvasDrawRef.current;
-          if (canvas) {
-            const ctx = canvas.getContext('2d');
-            const { clientWidth, clientHeight } = canvas;
-            ctx.clearRect(0, 0, clientWidth, clientHeight);
-            updated.forEach((s) => {
-              if (s) drawStroke(s);
-            });
-          }
-        }, 0);
+
+        // INSTANT REDRAW: No setTimeout
+        const canvas = canvasDrawRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+          updated.forEach((s) => s && drawStroke(s));
+        }
+
         return updated;
       });
     };
 
     const onDrawings = (data) => {
-      if (Array.isArray(data)) {
-        const filtered = data.filter(Boolean);
-        setStrokesArray(filtered);
-        // Redraw immediately with the received data
-        setTimeout(() => {
-          clearDraw();
-          filtered.forEach((s) => drawStroke(s));
-        }, 0);
+      if (!Array.isArray(data)) return;
+      const filtered = data.filter((s) => s && s.id);
+      if (filtered.length === 0) return;
+
+      setStrokesArray(filtered);
+
+      const canvas = canvasDrawRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+        filtered.forEach((s) => drawStroke(s));
       }
     };
 
@@ -95,9 +93,8 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     socket.on('scribble:userColors', onUserColors);
     socket.on('scribble:stroke', onStroke);
     socket.on('scribble:drawings', onDrawings);
-    
-    // Request current state when component mounts or overlay opens
-    // This ensures we get the image and all existing strokes from other users
+
+    // Request current state
     socket.emit('scribble:request-state', { roomId });
 
     return () => {
@@ -108,65 +105,57 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     };
   }, [roomId, socketRef]);
 
-  const clearDraw = () => {
-    const c = canvasDrawRef.current;
-    if (!c) return;
-    const { clientWidth, clientHeight } = c;
-    c.getContext('2d').clearRect(0, 0, clientWidth, clientHeight);
+  const clearCanvas = (canvas) => {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
   };
 
-  const redrawAll = (source) => {
-    clearDraw();
-    const list = source || strokesArray;
-    list.forEach((s) => drawStroke(s));
+  const redrawAll = () => {
+    const canvas = canvasDrawRef.current;
+    if (!canvas || strokesArray.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    strokesArray.forEach((s) => s && drawStroke(s));
   };
 
-  // Redraw all strokes whenever strokesArray changes
-  useEffect(() => {
-    if (strokesArray.length > 0 && image) {
-      setTimeout(() => {
-        clearDraw();
-        strokesArray.forEach((s) => drawStroke(s));
-      }, 0);
-    }
-  }, [strokesArray.length, image]); // Redraw when strokes count changes or image changes
-
-  // Canvas sizing
+  // Canvas resize
   useEffect(() => {
     const resize = () => {
       const ci = canvasImageRef.current;
       const cd = canvasDrawRef.current;
       if (!ci || !cd) return;
+
       const dpr = window.devicePixelRatio || 1;
       const { clientWidth, clientHeight } = ci;
       ci.width = clientWidth * dpr; ci.height = clientHeight * dpr;
       cd.width = clientWidth * dpr; cd.height = clientHeight * dpr;
+
       const ctxI = ci.getContext('2d');
       const ctxD = cd.getContext('2d');
       ctxI.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctxD.setTransform(dpr, 0, 0, dpr, 0, 0);
+
       drawImage();
-      // Redraw all strokes after resize
-      setTimeout(() => {
-        clearDraw();
-        strokesArray.forEach((s) => drawStroke(s));
-      }, 0);
+      redrawAll();
     };
+
     resize();
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
-  }, []);
+  }, [image]);
 
   const drawImage = () => {
     const c = canvasImageRef.current;
     const img = imageRef.current;
     if (!c || !img) return;
+
     const ctx = c.getContext('2d');
     const { clientWidth, clientHeight } = c;
     ctx.clearRect(0, 0, clientWidth, clientHeight);
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, clientWidth, clientHeight);
-    // Enlarge to ~94% of container
+
     const maxW = clientWidth * 0.94;
     const maxH = clientHeight * 0.94;
     const scale = Math.min(maxW / img.width, maxH / img.height);
@@ -174,6 +163,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     const drawH = img.height * scale;
     const x = (clientWidth - drawW) / 2;
     const y = (clientHeight - drawH) / 2;
+
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, x, y, drawW, drawH);
@@ -183,6 +173,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     const c = canvasDrawRef.current;
     if (!c || !s) return;
     const ctx = c.getContext('2d');
+
     if (s.type === 'path') {
       ctx.save();
       ctx.globalAlpha = s.alpha ?? 1;
@@ -202,13 +193,22 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       ctx.strokeStyle = s.color;
       ctx.lineWidth = s.width;
       if (s.shape === 'rect') ctx.strokeRect(s.x, s.y, s.w, s.h);
-      if (s.shape === 'circle') { ctx.beginPath(); ctx.arc(s.cx, s.cy, s.r, 0, Math.PI * 2); ctx.stroke(); }
-      if (s.shape === 'line' || s.shape === 'arrow') { ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke(); }
+      if (s.shape === 'circle') {
+        ctx.beginPath();
+        ctx.arc(s.cx, s.cy, s.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (s.shape === 'line' || s.shape === 'arrow') {
+        ctx.beginPath();
+        ctx.moveTo(s.x1, s.y1);
+        ctx.lineTo(s.x2, s.y2);
+        ctx.stroke();
+      }
       ctx.restore();
     }
   };
 
-  // Upload flow
+  // Upload
   const handleUploadClick = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -218,11 +218,10 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        // set and immediately confirm to streamline UX
-        setPendingImage(reader.result);
-        setImage(reader.result);
-        const socket = socketRef?.current;
-        if (socket) socket.emit('scribble:image', { roomId, img: reader.result });
+        const img = reader.result;
+        setImage(img);
+        setPendingImage(img);
+        socketRef.current?.emit('scribble:image', { roomId, img });
       };
       reader.readAsDataURL(file);
     };
@@ -230,14 +229,12 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
   };
 
   const confirmImage = () => {
-    // kept for UI button; now no-op if already confirmed automatically
     if (!pendingImage) return;
-    const socket = socketRef?.current;
-    if (socket) socket.emit('scribble:image', { roomId, img: pendingImage });
+    socketRef.current?.emit('scribble:image', { roomId, img: pendingImage });
     setPendingImage(null);
   };
 
-  // Drawing handlers
+  // Drawing
   const getXY = (e) => {
     const rect = canvasDrawRef.current.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -248,96 +245,103 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     e.preventDefault();
     setIsDrawing(true);
     const { x, y } = getXY(e);
+
     if (tool === 'pen') {
-      const stroke = { id: Date.now() + Math.random(), type: 'path', color: myColor, width: thickness, alpha: 1, points: [{ x, y }], userId: socketRef.current?.id };
+      const stroke = {
+        id: Date.now() + Math.random(),
+        type: 'path',
+        color: myColor,
+        width: thickness,
+        alpha: 1,
+        points: [{ x, y }],
+        userId: socketRef.current?.id,
+      };
       currentStrokeRef.current = stroke;
       setStrokesArray((prev) => [...prev, stroke]);
-      drawStroke(stroke);
+      drawStroke(stroke); // immediate
       socketRef.current?.emit('scribble:stroke', { roomId, stroke });
     } else if (tool === 'rect' || tool === 'circle') {
-      // start shape preview as a stroke with dimensions evolving
-      const stroke = { id: Date.now() + Math.random(), type: 'shape', shape: tool, color: myColor, width: thickness, userId: socketRef.current?.id, x, y, w: 0, h: 0, cx: x, cy: y, r: 0, x1: x, y1: y, x2: x, y2: y };
+      const stroke = {
+        id: Date.now() + Math.random(),
+        type: 'shape',
+        shape: tool,
+        color: myColor,
+        width: thickness,
+        userId: socketRef.current?.id,
+        x, y, w: 0, h: 0, cx: x, cy: y, r: 0, x1: x, y1: y, x2: x, y2: y,
+      };
       currentStrokeRef.current = stroke;
     }
   };
+
   const onMove = (e) => {
-    if (!isDrawing) return;
+    if (!isDrawing || !image) return;
     e.preventDefault();
     const { x, y } = getXY(e);
+
     if (tool === 'pen' && currentStrokeRef.current) {
-      currentStrokeRef.current.points.push({ x, y });
-      // Update local state for immediate visual feedback
-      setStrokesArray((prev) => {
-        const idx = prev.findIndex((s) => s.id === currentStrokeRef.current.id);
-        if (idx >= 0) {
-          const updated = [...prev];
-          updated[idx] = { ...currentStrokeRef.current };
-          // Redraw immediately
-          setTimeout(() => {
-            clearDraw();
-            updated.forEach((s) => drawStroke(s));
-          }, 0);
-          return updated;
-        }
-        return prev;
-      });
-      // Emit to server for real-time sync (throttled)
-      if (currentStrokeRef.current.points.length % 3 === 0) {
-        socketRef.current?.emit('scribble:stroke', { roomId, stroke: { ...currentStrokeRef.current, points: [...currentStrokeRef.current.points] } });
+      const points = currentStrokeRef.current.points;
+      points.push({ x, y });
+
+      // INSTANT LOCAL DRAW
+      const ctx = canvasDrawRef.current.getContext('2d');
+      const len = points.length;
+      if (len >= 2) {
+        const prev = points[len - 2];
+        const curr = points[len - 1];
+        ctx.save();
+        ctx.strokeStyle = myColor;
+        ctx.lineWidth = thickness;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(curr.x, curr.y);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Throttled emit
+      if (points.length % 3 === 0) {
+        socketRef.current?.emit('scribble:stroke', {
+          roomId,
+          stroke: { ...currentStrokeRef.current, points: [...points] },
+        });
       }
     } else if ((tool === 'rect' || tool === 'circle') && currentStrokeRef.current) {
       if (tool === 'rect') {
         currentStrokeRef.current.w = x - currentStrokeRef.current.x;
         currentStrokeRef.current.h = y - currentStrokeRef.current.y;
       } else {
-        currentStrokeRef.current.r = Math.sqrt((x - currentStrokeRef.current.cx) ** 2 + (y - currentStrokeRef.current.cy) ** 2);
+        currentStrokeRef.current.r = Math.hypot(x - currentStrokeRef.current.cx, y - currentStrokeRef.current.cy);
       }
-      // Redraw all strokes plus current preview
-      setTimeout(() => {
-        clearDraw();
-        strokesArray.forEach((s) => drawStroke(s));
-        drawStroke(currentStrokeRef.current);
-      }, 0);
+
+      // Redraw all + preview
+      const canvas = canvasDrawRef.current;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      strokesArray.forEach((s) => drawStroke(s));
+      drawStroke(currentStrokeRef.current);
     }
   };
+
   const onUp = () => {
     if (!isDrawing) return;
     setIsDrawing(false);
+
     if (tool === 'pen' && currentStrokeRef.current) {
-      // Finalize pen stroke - ensure it's in the array and broadcast
       const finalStroke = { ...currentStrokeRef.current, points: [...currentStrokeRef.current.points] };
       setStrokesArray((prev) => {
         const idx = prev.findIndex((s) => s.id === finalStroke.id);
-        let updated;
-        if (idx >= 0) {
-          updated = [...prev];
-          updated[idx] = finalStroke;
-        } else {
-          updated = [...prev, finalStroke];
-        }
-        // Redraw immediately
-        setTimeout(() => {
-          clearDraw();
-          updated.forEach((s) => drawStroke(s));
-        }, 0);
+        const updated = idx >= 0 ? [...prev] : [...prev, finalStroke];
+        if (idx >= 0) updated[idx] = finalStroke;
         return updated;
       });
-      // Broadcast final stroke to all users
       socketRef.current?.emit('scribble:stroke', { roomId, stroke: finalStroke });
       currentStrokeRef.current = null;
     } else if ((tool === 'rect' || tool === 'circle') && currentStrokeRef.current) {
-      // Finalize shape - add to array and broadcast
       const finalShape = { ...currentStrokeRef.current };
-      setStrokesArray((prev) => {
-        const updated = [...prev, finalShape];
-        // Redraw immediately
-        setTimeout(() => {
-          clearDraw();
-          updated.forEach((s) => drawStroke(s));
-        }, 0);
-        return updated;
-      });
-      // Broadcast shape to all users
+      setStrokesArray((prev) => [...prev, finalShape]);
       socketRef.current?.emit('scribble:stroke', { roomId, stroke: finalShape });
       currentStrokeRef.current = null;
     }
@@ -345,7 +349,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
 
   const clearAll = () => {
     setStrokesArray([]);
-    clearDraw();
+    clearCanvas(canvasDrawRef.current);
     drawImage();
     socketRef.current?.emit('scribble:drawings', { roomId, data: [] });
   };
@@ -355,15 +359,13 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       <div className="scribble-backdrop" onClick={onClose} />
       <div className="scribble-stage" onClick={(e) => e.stopPropagation()}>
         <div className="scribble-toolbar">
-          <button className={`tool ${tool === 'pen' ? 'active' : ''}`} onClick={() => setTool('pen')} title="Pen">✏️</button>
-          <button className={`tool ${tool === 'rect' ? 'active' : ''}`} onClick={() => setTool('rect')} title="Rectangle">▭</button>
-          <button className={`tool ${tool === 'circle' ? 'active' : ''}`} onClick={() => setTool('circle')} title="Circle">◯</button>
-          <button className="tool" onClick={clearAll} title="Eraser (Clear)">🧽</button>
+          <button className={`tool ${tool === 'pen' ? 'active' : ''}`} onClick={() => setTool('pen')} title="Pen">Pen</button>
+          <button className={`tool ${tool === 'rect' ? 'active' : ''}`} onClick={() => setTool('rect')} title="Rectangle">Rectangle</button>
+          <button className={`tool ${tool === 'circle' ? 'active' : ''}`} onClick={() => setTool('circle')} title="Circle">Circle</button>
+          <button className="tool" onClick={clearAll} title="Clear">Clear</button>
           <input type="color" value={myColor} onChange={(e) => setMyColor(e.target.value)} className="tool-color-input" />
           <input type="range" min="1" max="20" value={thickness} onChange={(e) => setThickness(parseInt(e.target.value, 10))} className="tool-size-input" />
-          {!image && (
-            <button className="scribble-upload-btn" onClick={handleUploadClick}>Upload Image</button>
-          )}
+          {!image && <button className="scribble-upload-btn" onClick={handleUploadClick}>Upload Image</button>}
           {pendingImage && (
             <div className="scribble-upload-actions">
               <button onClick={() => setPendingImage(null)} className="scribble-action-btn">Cancel</button>
@@ -394,7 +396,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
             <div className="scribble-legend-header">Participants</div>
             <div className="scribble-legend-items">
               {Object.entries(userColors).map(([id, color]) => {
-                const p = Array.isArray(participants) ? participants.find(x => x?.userId === id) : null;
+                const p = participants.find(x => x?.userId === id);
                 const name = p?.username || id.slice(0, 6);
                 const isYou = currentUser?.id === id;
                 return (
@@ -413,5 +415,3 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
 };
 
 export default ScribbleOverlay;
-
-

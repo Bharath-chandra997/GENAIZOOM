@@ -48,15 +48,27 @@ if (!process.env.FASTAPI_KEY) {
 
 // FastAPI Server URL and Key
 const API_URL = 'https://unesteemed-trochaically-wilhelmina.ngrok-free.dev/predict';
-const API_KEY = process.env.FASTAPI_KEY; // Should be set to 'genaizoom' in .env
+const API_KEY = process.env.FASTAPI_KEY;
+
+// === ALLOWED ORIGINS (Add your local & prod URLs here) ===
+const allowedOrigins = [
+  'https://genaizoom123.onrender.com',
+  'https://genaizoomserver-0yn4.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+];
 
 // App & Server Setup
 const app = express();
 const server = http.createServer(app);
+
+// === SOCKET.IO WITH CORS ===
 const io = new Server(server, {
   cors: {
-    origin: ['https://genaizoom123.onrender.com', 'https://genaizoomserver-0yn4.onrender.com'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
     credentials: true,
   },
   maxHttpBufferSize: 1e8,
@@ -72,13 +84,31 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Middleware
+// === MIDDLEWARE ===
+// Helmet
 app.use(helmet());
-app.use(cors({
-  origin: ['https://genaizoom123.onrender.com', 'https://genaizoomserver-0yn4.onrender.com'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true,
-}));
+
+// CORS with dynamic origin
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        logError(`CORS blocked origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+    credentials: true,
+    optionsSuccessStatus: 200,
+  })
+);
+
+// Handle preflight for all routes
+app.options('*', cors());
+
 app.use(express.json());
 app.use(passport.initialize());
 
@@ -212,8 +242,7 @@ const fetchIceServers = async () => {
 app.get('/ice-servers', async (req, res) => {
   try {
     if (cachedIceServers && iceServersExpiry && Date.now() < iceServersExpiry) {
-      res.json(cachedIceServers);
-      return;
+      return res.json(cachedIceServers);
     }
 
     res.json(fastFallbackIceServers);
@@ -244,7 +273,6 @@ app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }
       return res.status(400).json({ error: 'Both image and audio files are required' });
     }
 
-    // Validate file types
     const validImageTypes = ['image/jpeg', 'image/png'];
     const validAudioTypes = ['audio/mpeg', 'audio/wav'];
     if (!validImageTypes.includes(imageFile.mimetype)) {
@@ -254,7 +282,6 @@ app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }
       return res.status(400).json({ error: 'Invalid audio format. Only MP3/WAV allowed.' });
     }
 
-    // Prepare FormData for FastAPI
     const FormData = require('form-data');
     const form = new FormData();
     form.append('image', fs.createReadStream(imageFile.path), {
@@ -275,7 +302,6 @@ app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }
       timeout: 30000,
     });
 
-    // Handle FastAPI response
     const prediction = response.data.prediction || response.data.result || response.data || 'No response from FastAPI server';
 
     if (!prediction || (typeof prediction === 'string' && prediction.trim() === '')) {
@@ -294,9 +320,53 @@ app.post('/predict', authenticate, upload.fields([{ name: 'image', maxCount: 1 }
     logError('Error in /predict:', error);
     res.status(500).json({ error: `Failed to process AI request: ${error.message}` });
   } finally {
-    // Clean up temporary files
     if (req.files?.image?.[0]) fs.unlinkSync(req.files.image[0].path);
     if (req.files?.audio?.[0]) fs.unlinkSync(req.files.audio[0].path);
+  }
+});
+
+// === FILE UPLOAD ENDPOINTS WITH CORS HEADERS ===
+app.post('/upload/image', authenticate, upload.single('file'), async (req, res) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      resource_type: 'image',
+      folder: 'genaizoom/images',
+    });
+    fs.unlinkSync(req.file.path);
+    res.json({ url: result.secure_url });
+  } catch (error) {
+    logError('Cloudinary image upload error', error);
+    if (req.file) fs.unlinkSync(req.file.path);
+    res.status(500).json({ error: 'Image upload failed' });
+  }
+});
+
+app.post('/upload/audio', authenticate, upload.single('file'), async (req, res) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      resource_type: 'video', // Required for MP3/WAV
+      folder: 'genaizoom/audio',
+    });
+    fs.unlinkSync(req.file.path);
+    res.json({ url: result.secure_url });
+  } catch (error) {
+    logError('Cloudinary audio upload error', error);
+    if (req.file) fs.unlinkSync(req.file.path);
+    res.status(500).json({ error: 'Audio upload failed' });
   }
 });
 
@@ -395,7 +465,7 @@ app.post('/api/meeting-session/:roomId/chat', authenticate, async (req, res) => 
   }
 });
 
-// AI Lock Endpoint
+// AI Lock/Unlock Endpoints
 app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -409,12 +479,10 @@ app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
       session = new MeetingSession({ roomId });
     }
 
-    // Check if already locked by someone else
     if (session.aiState?.isLocked && session.aiState.lockedBy !== userId) {
       return res.status(409).json({ error: 'AI Bot is already in use by another user' });
     }
 
-    // Set lock state
     session.aiState = {
       ...(session.aiState || {}),
       isLocked: true,
@@ -426,8 +494,6 @@ app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
     await session.save();
 
     info(`AI locked for room ${roomId} by ${req.user.username || username}`);
-
-    // Broadcast to room
     io.to(roomId).emit('ai-bot-locked', { userId, username: req.user.username || username, roomId });
 
     res.json({ success: true, message: 'AI bot locked' });
@@ -437,7 +503,6 @@ app.post('/api/ai/lock/:roomId', authenticate, async (req, res) => {
   }
 });
 
-// AI Unlock Endpoint
 app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
   try {
     const { roomId } = req.params;
@@ -450,12 +515,10 @@ app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    // Verify user is the locker
     if (session.aiState?.lockedBy !== userId) {
       return res.status(403).json({ error: 'Not authorized to unlock AI' });
     }
 
-    // Clear lock state
     session.aiState = {
       ...(session.aiState || {}),
       isLocked: false,
@@ -467,8 +530,6 @@ app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
     await session.save();
 
     info(`AI unlocked for room ${roomId} by ${userId}`);
-
-    // Broadcast to room
     io.to(roomId).emit('ai-bot-unlocked', { roomId });
 
     res.json({ success: true, message: 'AI bot unlocked' });
@@ -478,40 +539,7 @@ app.post('/api/ai/unlock/:roomId', authenticate, async (req, res) => {
   }
 });
 
-// File Upload Endpoints with Cloudinary
-app.post('/upload/image', authenticate, upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: 'image',
-      folder: 'genaizoom/images',
-    });
-    fs.unlinkSync(req.file.path);
-    res.json({ url: result.secure_url });
-  } catch (error) {
-    logError('Cloudinary image upload error', error);
-    if (req.file) fs.unlinkSync(req.file.path);
-    res.status(500).json({ error: 'Image upload failed' });
-  }
-});
-
-app.post('/upload/audio', authenticate, upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: 'video',
-      folder: 'genaizoom/audio',
-    });
-    fs.unlinkSync(req.file.path);
-    res.json({ url: result.secure_url });
-  } catch (error) {
-    logError('Cloudinary audio upload error', error);
-    if (req.file) fs.unlinkSync(req.file.path);
-    res.status(500).json({ error: 'Audio upload failed' });
-  }
-});
-
-// Pre-fetch ICE servers at startup
+// Pre-fetch ICE servers
 fetchIceServers().then(() => info('Initial ICE servers fetched'));
 
 // API Routes
@@ -519,7 +547,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/feedback', feedbackRoutes);
 
-// Socket.IO Authentication
+// === SOCKET.IO AUTH & LOGIC (Unchanged below) ===
 io.use((socket, next) => {
   const token = socket.handshake.auth.token;
   if (!token) {
@@ -545,6 +573,12 @@ io.use((socket, next) => {
     next(new Error('Authentication error: Invalid token'));
   }
 });
+
+// [All Socket.IO logic remains unchanged — copy from your original file below this line]
+// ... (same as before: join-room, scribble, offer, answer, etc.)
+
+// Error Handling
+
 
 // Socket.IO Logic
 const socketToRoom = {};

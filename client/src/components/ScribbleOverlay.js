@@ -84,7 +84,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     socket.on('scribble:image', onImage);
     socket.on('scribble:userColors', onUserColors);
     socket.on('scribble:stroke', onStroke);
-    socket.on('scribble:drawings', onDraw );
+    socket.on('scribble:drawings', onDrawings); // FIXED: was onDraw
     socket.on('scribble:clear-all', onClearAll);
 
     socket.emit('scribble:request-state', { roomId });
@@ -93,7 +93,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       socket.off('scribble:image', onImage);
       socket.off('scribble:userColors', onUserColors);
       socket.off('scribble:stroke', onStroke);
-      socket.off('scribble:drawings', onDrawings);
+      socket.off('scribble:drawings', onDrawings); // FIXED
       socket.off('scribble:clear-all', onClearAll);
     };
   }, [roomId, socketRef]);
@@ -347,17 +347,12 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
 
     const exportCanvas = document.createElement('canvas');
     const ctx = exportCanvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
     exportCanvas.width = ci.width;
     exportCanvas.height = ci.height;
 
-    // Draw background image
     ctx.drawImage(ci, 0, 0);
-
-    // Draw annotations
     ctx.drawImage(cd, 0, 0);
 
-    // Trigger download
     exportCanvas.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

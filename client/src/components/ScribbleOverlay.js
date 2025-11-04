@@ -84,7 +84,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     socket.on('scribble:image', onImage);
     socket.on('scribble:userColors', onUserColors);
     socket.on('scribble:stroke', onStroke);
-    socket.on('scribble:drawings', onDrawings); // FIXED: was onDraw
+    socket.on('scribble:drawings', onDrawings);
     socket.on('scribble:clear-all', onClearAll);
 
     socket.emit('scribble:request-state', { roomId });
@@ -93,7 +93,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       socket.off('scribble:image', onImage);
       socket.off('scribble:userColors', onUserColors);
       socket.off('scribble:stroke', onStroke);
-      socket.off('scribble:drawings', onDrawings); // FIXED
+      socket.off('scribble:drawings', onDrawings);
       socket.off('scribble:clear-all', onClearAll);
     };
   }, [roomId, socketRef]);
@@ -428,7 +428,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
           {/* Upload */}
           {!image && (
             <button className="scribble-upload-btn" onClick={handleUploadClick}>
-              Upload Image
+              Upload
             </button>
           )}
 
@@ -445,7 +445,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
           )}
 
           {/* Close */}
-          <button className="tool" onClick={onClose}>
+          <button className="tool" onClick={onClose} title="Close">
             Close
           </button>
         </div>

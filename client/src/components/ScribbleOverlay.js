@@ -78,6 +78,19 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     };
   }, [roomId, socketRef]);
 
+  const clearDraw = () => {
+    const c = canvasDrawRef.current;
+    if (!c) return;
+    const { clientWidth, clientHeight } = c;
+    c.getContext('2d').clearRect(0, 0, clientWidth, clientHeight);
+  };
+
+  const redrawAll = (source) => {
+    clearDraw();
+    const list = source || strokesArray;
+    list.forEach((s) => drawStroke(s));
+  };
+
   // Canvas sizing
   useEffect(() => {
     const resize = () => {
@@ -93,6 +106,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       ctxI.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctxD.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawImage();
+      redrawAll();
     };
     resize();
     window.addEventListener('resize', resize);

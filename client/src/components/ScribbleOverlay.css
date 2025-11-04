@@ -1,15 +1,126 @@
 .scribble-root { position: fixed; inset: 0; z-index: 2000; }
 .scribble-backdrop { position: fixed; inset: 0; background: #ffffff; opacity: 1; }
 .scribble-stage { position: fixed; inset: 0; pointer-events: none; }
-.scribble-toolbar { position: fixed; top: 20px; right: 20px; background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); padding: 10px; display: flex; gap: 8px; pointer-events: auto; }
-.tool { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); background: rgba(0,0,0,0.04); cursor: pointer; }
-.tool.active { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); color: #fff; border-color: transparent; }
-.tool-color-input { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); padding: 0; }
-.tool-size-input { width: 120px; }
-.scribble-upload-btn { padding: 8px 12px; background: linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); color: #fff; border: none; border-radius: 8px; cursor: pointer; }
-.scribble-upload-actions { display: flex; gap: 8px; }
-.scribble-action-btn { padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); background: #fff; cursor: pointer; }
-.scribble-action-btn.primary { background: linear-gradient(135deg,#10b981 0%,#059669 100%); color: #fff; border-color: transparent; }
+.scribble-toolbar { 
+  position: fixed; 
+  top: 20px; 
+  right: 20px; 
+  background: #fff; 
+  border: 1px solid rgba(0,0,0,0.08); 
+  border-radius: 12px; 
+  box-shadow: 0 6px 24px rgba(0,0,0,0.12); 
+  padding: 12px; 
+  display: flex; 
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px; 
+  pointer-events: auto; 
+  z-index: 2001;
+  min-width: 300px;
+}
+.tool { 
+  width: 40px; 
+  height: 40px; 
+  border-radius: 8px; 
+  border: 1px solid rgba(0,0,0,0.08); 
+  background: rgba(0,0,0,0.04); 
+  cursor: pointer; 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.tool:hover { 
+  background: rgba(0,0,0,0.08); 
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.tool:active { transform: translateY(0); }
+.tool.active { 
+  background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); 
+  color: #fff; 
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(102,126,234,0.3);
+}
+.tool-color-input { 
+  width: 40px; 
+  height: 40px; 
+  border-radius: 8px; 
+  border: 1px solid rgba(0,0,0,0.08); 
+  padding: 0; 
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tool-size-input { 
+  width: 120px; 
+  height: 6px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.tool-size-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+}
+.tool-size-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  border: none;
+}
+.scribble-upload-btn { 
+  padding: 10px 16px; 
+  background: linear-gradient(135deg,#3b82f6 0%,#2563eb 100%); 
+  color: #fff; 
+  border: none; 
+  border-radius: 8px; 
+  cursor: pointer; 
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.scribble-upload-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59,130,246,0.4);
+}
+.scribble-upload-actions { 
+  display: flex; 
+  gap: 8px; 
+  flex-shrink: 0;
+}
+.scribble-action-btn { 
+  padding: 10px 16px; 
+  border-radius: 8px; 
+  border: 1px solid rgba(0,0,0,0.08); 
+  background: #fff; 
+  cursor: pointer; 
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.scribble-action-btn:hover {
+  background: rgba(0,0,0,0.04);
+  transform: translateY(-1px);
+}
+.scribble-action-btn.primary { 
+  background: linear-gradient(135deg,#10b981 0%,#059669 100%); 
+  color: #fff; 
+  border-color: transparent;
+}
+.scribble-action-btn.primary:hover {
+  box-shadow: 0 4px 12px rgba(16,185,129,0.4);
+}
 .scribble-canvas-wrap { position: absolute; inset: 0; pointer-events: none; }
 .scribble-canvas-image { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .scribble-canvas-draw { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: auto; touch-action: none; }

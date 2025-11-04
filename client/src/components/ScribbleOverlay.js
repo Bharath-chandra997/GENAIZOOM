@@ -164,19 +164,6 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     }
   };
 
-  const clearDraw = () => {
-    const c = canvasDrawRef.current;
-    if (!c) return;
-    const { clientWidth, clientHeight } = c;
-    c.getContext('2d').clearRect(0, 0, clientWidth, clientHeight);
-  };
-
-  const redrawAll = (source) => {
-    clearDraw();
-    const list = source || strokesArray;
-    list.forEach((s) => drawStroke(s));
-  };
-
   // Upload flow
   const handleUploadClick = () => {
     const input = document.createElement('input');

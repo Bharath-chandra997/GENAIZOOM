@@ -125,12 +125,10 @@ const Meeting = () => {
   const [scribbleActive, setScribbleActive] = useState(false);
 
   // === AI STATE ===
-  const [aiResponse, setAiResponse] = useState('');
-  const [aiQuestion, setAiQuestion] = useState('');
-  const [aiSentFromCSV, setAiSentFromCSV] = useState(false);
+  const [aiResponse, setAiResponse] = useState(''); // Full JSON string
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
-  const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [isAIProcessingLayout, setIsAIProcessingLayout] = useState(false);
 
   const [aiParticipant] = useState({
     userId: 'ai-assistant',
@@ -291,10 +289,18 @@ const Meeting = () => {
     return cleanup;
   }, [initializeAiAnimation]);
 
+  // === REVERT AI LAYOUT ===
+  const handleRevertAILayout = useCallback(() => {
+    setAiUploadedImage(null);
+    setAiUploadedAudio(null);
+    setAiResponse('');
+    setIsAIProcessingLayout(false);
+  }, []);
+
   const handleAIRequest = useCallback(
     async (imageFile, audioFile) => {
       let isLocked = false;
-      setIsAIProcessing(true);
+      setIsAIProcessingLayout(true);
       try {
         console.log('Starting AI request for user:', user.username, {
           image: imageFile?.name,
@@ -384,49 +390,26 @@ const Meeting = () => {
 
         console.log('FastAPI raw response:', response.data);
 
-        // === SAFE PARSING ===
-        let raw = response.data.prediction || response.data.result || response.data;
-        let answerText = '';
-        let questionText = '';
-        let sentFromCSV = false;
+        const raw = response.data.prediction || response.data.result || response.data;
+        const fullResult = typeof raw === 'string' ? { text: raw } : raw;
 
-        if (typeof raw === 'string') {
-          answerText = raw;
-        } else if (raw && typeof raw === 'object') {
-          answerText = raw.text || raw.answer || '';
-          questionText = raw.sent_from_csv || '';
-          sentFromCSV = !!raw.sent_from_csv;
-        } else {
-          throw new Error('Invalid prediction format');
-        }
+        setAiResponse(JSON.stringify(fullResult));
+        setIsAIProcessingLayout(true);
 
-        if (!answerText?.trim()) {
-          throw new Error('Empty answer from AI');
-        }
-
-        // === UPDATE STATE ===
-        setAiResponse(answerText);
-        setAiQuestion(questionText);
-        setAiSentFromCSV(sentFromCSV);
-
-        // === BROADCAST TO ALL ===
         socketRef.current?.emit('shared-ai-result', {
-          answer: answerText,
-          question: questionText,
-          sentFromCSV,
+          result: fullResult,
           imageUrl,
           audioUrl,
           username: user.username,
         });
 
-        // === SAVE TO DB ===
         await axios.post(
           `${SERVER_URL}/api/meeting-session/${roomId}/ai-state`,
           {
             isProcessing: false,
-            output: answerText,
-            question: questionText,
-            sentFromCSV,
+            output: fullResult.text || '',
+            question: fullResult.sent_from_csv || '',
+            sentFromCSV: !!fullResult.sent_from_csv,
             imageUrl,
             audioUrl,
             completedAt: new Date().toISOString(),
@@ -469,43 +452,29 @@ const Meeting = () => {
             );
           } catch (e) {}
         }
-      } finally {
-        setIsAIProcessing(false);
       }
     },
     [user, roomId]
   );
 
-  const handleAIComplete = useCallback(async () => {
+  const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username }) => {
+    setAiUploadedImage(imageUrl);
+    setAiUploadedAudio(audioUrl);
     setAiResponse('');
-    setAiQuestion('');
-    setAiSentFromCSV(false);
-    setAiUploadedImage(null);
-    setAiUploadedAudio(null);
-    socketRef.current?.emit('shared-media-removal', { username: user.username });
-
-    try {
-      await axios.post(
-        `${SERVER_URL}/api/ai/unlock/${roomId}`,
-        { userId: user.userId },
-        { headers: { Authorization: `Bearer ${user.token}` } }
-      );
-    } catch (e) {}
-    toast.info('AI session completed', { position: 'bottom-center' });
-  }, [roomId, user]);
+    setIsAIProcessingLayout(true);
+  }, []);
 
   const handleSharedAIResult = useCallback(
-    ({ answer, question, sentFromCSV, imageUrl, audioUrl, username }) => {
-      setAiResponse(answer);
-      setAiQuestion(question);
-      setAiSentFromCSV(sentFromCSV);
+    ({ result, imageUrl, audioUrl, username }) => {
+      setAiResponse(JSON.stringify(result));
       if (imageUrl) setAiUploadedImage(imageUrl);
       if (audioUrl) setAiUploadedAudio(audioUrl);
+      setIsAIProcessingLayout(true);
 
       toast.info(
         <div>
           <strong>{username}</strong> shared AI result
-          {sentFromCSV && <span style={{ color: '#10b981', marginLeft: 6 }}>[CSV]</span>}
+          {result.sent_from_csv && <span style={{ color: '#10b981', marginLeft: 6 }}>[CSV]</span>}
         </div>,
         { position: 'bottom-center' }
       );
@@ -513,14 +482,11 @@ const Meeting = () => {
     []
   );
 
-  const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username }) => {
-    if (imageUrl) setAiUploadedImage(imageUrl);
-    if (audioUrl) setAiUploadedAudio(audioUrl);
-  }, []);
-
   const handleSharedMediaRemoval = useCallback(() => {
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
+    setAiResponse('');
+    setIsAIProcessingLayout(false);
   }, []);
 
   const getIceServers = useCallback(async () => {
@@ -750,11 +716,17 @@ const Meeting = () => {
 
             if (sessionData?.chatMessages) setMessages(sessionData.chatMessages);
             if (sessionData?.aiState) {
-              setAiResponse(sessionData.aiState.output || '');
-              setAiQuestion(sessionData.aiState.question || '');
-              setAiSentFromCSV(!!sessionData.aiState.sentFromCSV);
+              setAiResponse(sessionData.aiState.output ? JSON.stringify({
+                text: sessionData.aiState.output,
+                sent_from_csv: sessionData.aiState.question,
+                confidence: 0.99,
+                latency_ms: 500,
+                device: 'cpu',
+                type: 'vqa'
+              }) : '');
               setAiUploadedImage(sessionData.aiState.imageUrl || null);
               setAiUploadedAudio(sessionData.aiState.audioUrl || null);
+              setIsAIProcessingLayout(!!sessionData.aiState.imageUrl || !!sessionData.aiState.output);
             }
             setIsLoading(false);
           }
@@ -1116,15 +1088,15 @@ const Meeting = () => {
             aiCanvasRef={aiCanvasRef}
             setGridPage={setGridPage}
             aiResponse={aiResponse}
-            aiQuestion={aiQuestion}
-            aiSentFromCSV={aiSentFromCSV}
             aiUploadedImage={aiUploadedImage}
             aiUploadedAudio={aiUploadedAudio}
+            isAIProcessingLayout={isAIProcessingLayout}
+            onRevertAILayout={handleRevertAILayout}
             getUserAvatar={getUserAvatar}
             AIAvatar={AIAvatar}
             onPinParticipant={(uid) => socketRef.current?.emit('pin-participant', { userId: uid })}
             onUnpinParticipant={() => socketRef.current?.emit('unpin-participant')}
-            onAIReset={handleAIComplete}
+            onAIReset={handleRevertAILayout}
           />
         </div>
 
@@ -1192,12 +1164,12 @@ const Meeting = () => {
                 <AIPopup
                   onClose={() => setIsAIPopupOpen(false)}
                   onAIRequest={handleAIRequest}
-                  onAIComplete={handleAIComplete}
+                  onAIComplete={handleRevertAILayout}
                   aiResponse={aiResponse}
                   aiUploadedImage={aiUploadedImage}
                   aiUploadedAudio={aiUploadedAudio}
                   user={user}
-                  isAIProcessing={isAIProcessing}
+                  isAIProcessing={false}
                 />
               </div>
             )}

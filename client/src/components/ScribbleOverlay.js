@@ -76,7 +76,6 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       }
     };
 
-    // Listen for global clear
     const onClearAll = () => {
       setStrokesArray([]);
       clearCanvas(canvasDrawRef.current);
@@ -85,7 +84,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     socket.on('scribble:image', onImage);
     socket.on('scribble:userColors', onUserColors);
     socket.on('scribble:stroke', onStroke);
-    socket.on('scribble:drawings', onDrawings);
+    socket.on('scribble:drawings', onDraw );
     socket.on('scribble:clear-all', onClearAll);
 
     socket.emit('scribble:request-state', { roomId });
@@ -332,7 +331,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     }
   };
 
-  // GLOBAL CLEAR: Broadcasts to all users
+  // GLOBAL CLEAR
   const clearAll = () => {
     setStrokesArray([]);
     clearCanvas(canvasDrawRef.current);
@@ -340,44 +339,78 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     socketRef.current?.emit('scribble:clear-all', { roomId });
   };
 
+  // DOWNLOAD CANVAS
+  const downloadCanvas = () => {
+    const ci = canvasImageRef.current;
+    const cd = canvasDrawRef.current;
+    if (!ci || !cd) return;
+
+    const exportCanvas = document.createElement('canvas');
+    const ctx = exportCanvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    exportCanvas.width = ci.width;
+    exportCanvas.height = ci.height;
+
+    // Draw background image
+    ctx.drawImage(ci, 0, 0);
+
+    // Draw annotations
+    ctx.drawImage(cd, 0, 0);
+
+    // Trigger download
+    exportCanvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `scribble-${roomId}-${Date.now()}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  };
+
   return (
     <div className="scribble-root">
       <div className="scribble-backdrop" onClick={onClose} />
       <div className="scribble-stage" onClick={(e) => e.stopPropagation()}>
         <div className="scribble-toolbar">
-          {/* Pen Tool */}
+          {/* Pen */}
           <button
             className={`tool ${tool === 'pen' ? 'active' : ''}`}
             onClick={() => setTool('pen')}
             title="Pen"
           >
-            ✏️
+            Pen
           </button>
 
-          {/* Rectangle Tool */}
+          {/* Rectangle */}
           <button
             className={`tool ${tool === 'rect' ? 'active' : ''}`}
             onClick={() => setTool('rect')}
             title="Rectangle"
           >
-            ▭
+            Rectangle
           </button>
 
-          {/* Circle Tool */}
+          {/* Circle */}
           <button
             className={`tool ${tool === 'circle' ? 'active' : ''}`}
             onClick={() => setTool('circle')}
             title="Circle"
           >
-            ◯
+            Circle
           </button>
 
-          {/* Clear All (Global) */}
+          {/* Clear All */}
           <button className="tool" onClick={clearAll} title="Clear All">
-            🗑️
+            Trash
           </button>
 
-          {/* Color Picker */}
+          {/* Download */}
+          <button className="tool" onClick={downloadCanvas} title="Download">
+            Download
+          </button>
+
+          {/* Color */}
           <input
             type="color"
             value={myColor}
@@ -386,7 +419,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
             title="Color"
           />
 
-          {/* Thickness Slider */}
+          {/* Thickness */}
           <input
             type="range"
             min="1"
@@ -397,14 +430,14 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
             title="Thickness"
           />
 
-          {/* Upload Image */}
+          {/* Upload */}
           {!image && (
             <button className="scribble-upload-btn" onClick={handleUploadClick}>
               Upload Image
             </button>
           )}
 
-          {/* Confirm/Cancel Upload */}
+          {/* Confirm/Cancel */}
           {pendingImage && (
             <div className="scribble-upload-actions">
               <button onClick={() => setPendingImage(null)} className="scribble-action-btn">

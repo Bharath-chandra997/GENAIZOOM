@@ -367,17 +367,14 @@ const Meeting = () => {
         audioForm.append('file', audioFile);
         const audioUrl = await upload(audioForm, 'audio');
 
-        // Extract question text from audio filename or prepare for extraction
-        // Question will be set after AI processing completes
-        const question = ''; // Will be updated with result.sent_from_csv later
-
         // DON'T set state directly - let socket event handle it for all users including sender
         // This ensures synchronization across all participants
+        // Question text will be set after AI processing completes
         socketRef.current?.emit('shared-media-display', {
           imageUrl,
           audioUrl,
           username: user.username,
-          question,
+          question: '', // Will be updated with result.sent_from_csv in shared-ai-result event
         });
 
         const formData = new FormData();

@@ -994,50 +994,129 @@ const Meeting = () => {
 
   const handleScreenShare = async () => {
     if (isSharingScreen) {
+      // Stop screen sharing and restore camera
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach((t) => t.stop());
+        screenStreamRef.current = null;
+      }
+      if (localCameraTrackRef.current && !localCameraTrackRef.current.enabled) {
+        // Re-enable camera track if it was disabled
+        localCameraTrackRef.current.enabled = true;
+      }
       await replaceTrack(localCameraTrackRef.current, false);
       setIsSharingScreen(false);
       socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
-      screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     } else {
+      // Prevent multiple screen shares - check if one is already active
+      if (screenStreamRef.current) {
+        // Stop any existing screen share first
+        screenStreamRef.current.getTracks().forEach((t) => t.stop());
+        screenStreamRef.current = null;
+        setIsSharingScreen(false);
+      }
+      
       try {
+        // Store camera track reference BEFORE starting screen share
+        const currentVideoTrack = localStreamRef.current?.getVideoTracks()[0];
+        if (currentVideoTrack && currentVideoTrack.kind === 'video' && !currentVideoTrack.label.includes('screen')) {
+          // Only store if it's not already a screen share track
+          localCameraTrackRef.current = currentVideoTrack;
+        }
+        
         const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
         screenStreamRef.current = screen;
         const screenTrack = screen.getVideoTracks()[0];
+        
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
         socketRef.current?.emit('screen-share-start', { userId: socketRef.current.id });
         
         screenTrack.onended = async () => {
-          await replaceTrack(localCameraTrackRef.current, false);
+          // Screen share ended (user stopped via browser UI)
+          if (screenStreamRef.current) {
+            screenStreamRef.current.getTracks().forEach((t) => t.stop());
+            screenStreamRef.current = null;
+          }
+          
+          // Restore camera track
+          if (localCameraTrackRef.current && localStreamRef.current) {
+            // Ensure camera track is enabled
+            if (!localCameraTrackRef.current.enabled) {
+              localCameraTrackRef.current.enabled = true;
+            }
+            await replaceTrack(localCameraTrackRef.current, false);
+          }
+          
           setIsSharingScreen(false);
           socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
         };
       } catch (e) {
         console.error('Screen share error:', e);
-        toast.error('Screen sharing failed.');
+        if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') {
+          toast.error('Screen sharing failed.');
+        }
+        // Reset state on error
+        setIsSharingScreen(false);
+        screenStreamRef.current = null;
       }
     }
   };
 
   const replaceTrack = async (newTrack, isScreen = false) => {
+    if (!newTrack) return;
+    
     const stream = localStreamRef.current;
     if (!stream) return;
+    
     const oldVideo = stream.getVideoTracks()[0];
-    if (oldVideo) {
-      oldVideo.stop();
+    if (oldVideo && oldVideo !== newTrack) {
+      // Don't stop the camera track when switching to screen share (we'll need it back)
+      // When switching back to camera, the old track is the screen share, so stop it
+      const isCameraTrack = oldVideo === localCameraTrackRef.current;
+      if (isScreen && isCameraTrack) {
+        // Switching TO screen share: keep camera track alive, just remove from stream
+        // Don't stop it
+      } else {
+        // Switching FROM screen share or other cases: stop the old track
+        oldVideo.stop();
+      }
       stream.removeTrack(oldVideo);
     }
+    
+    // Ensure new track is enabled
+    if (!newTrack.enabled) {
+      newTrack.enabled = true;
+    }
+    
     stream.addTrack(newTrack);
+    
+    // Update peer connections
+    const replacePromises = [];
     peerConnections.current.forEach((pc) => {
       const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
-      if (sender) sender.replaceTrack(newTrack);
+      if (sender) {
+        replacePromises.push(sender.replaceTrack(newTrack).catch(err => {
+          console.error('Error replacing track in peer connection:', err);
+        }));
+      }
     });
+    
+    await Promise.all(replacePromises);
+    
+    // Update participant state with new stream reference
     setParticipants((prev) =>
-      prev.map((p) => (p.isLocal ? { ...p, isScreenSharing: isScreen } : p))
+      prev.map((p) => {
+        if (p.isLocal) {
+          return { 
+            ...p, 
+            isScreenSharing: isScreen,
+            videoEnabled: true,
+            stream: stream // Update stream reference to trigger re-render
+          };
+        }
+        return p;
+      })
     );
-    socketRef.current?.emit(isScreen ? 'screen-share-start' : 'screen-share-stop', {
-      userId: socketRef.current.id,
-    });
   };
 
   if (isLoading) {

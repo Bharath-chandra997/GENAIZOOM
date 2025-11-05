@@ -67,6 +67,10 @@ const MeetingMainArea = ({
       videoRefs.current.set(participant.userId, element);
       if (participant.stream) {
         element.srcObject = participant.stream;
+        // Ensure video plays
+        element.play().catch(err => {
+          console.warn('Video play error:', err);
+        });
       }
     }
   };
@@ -74,8 +78,15 @@ const MeetingMainArea = ({
   useEffect(() => {
     participants.forEach(participant => {
       const videoElement = videoRefs.current.get(participant.userId);
-      if (videoElement && participant.stream && videoElement.srcObject !== participant.stream) {
-        videoElement.srcObject = participant.stream;
+      if (videoElement && participant.stream) {
+        // Update srcObject if it changed
+        if (videoElement.srcObject !== participant.stream) {
+          videoElement.srcObject = participant.stream;
+          // Ensure video plays after srcObject change
+          videoElement.play().catch(err => {
+            console.warn('Video play error after srcObject update:', err);
+          });
+        }
       }
     });
   }, [participants]);
@@ -96,6 +107,19 @@ const MeetingMainArea = ({
     const isScreenSharing = participant.isScreenSharing;
 
     let videoClass = 'pro-video-element';
+    
+    // Only apply mirror transform for local camera (not screen shares or remote videos)
+    const shouldMirror = participant.isLocal && !isScreenSharing;
+    const videoStyle = {
+      width: '100%',
+      height: '100%',
+      objectFit: isScreenSharing ? 'contain' : 'cover', // Use 'contain' for screen shares to show full content
+      borderRadius: '8px',
+      display: 'block',
+      margin: '0',
+      padding: '0',
+      transform: shouldMirror ? 'scaleX(-1)' : 'none'
+    };
 
     return (
       <motion.div
@@ -122,16 +146,7 @@ const MeetingMainArea = ({
               playsInline
               className={videoClass}
               key={`video-${participant.userId}-${participant.stream ? 'stream' : 'no-stream'}`}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                borderRadius: '8px',
-                display: 'block',
-                margin: '0',
-                padding: '0',
-                transform: 'scaleX(-1)'
-              }}
+              style={videoStyle}
             />
           ) : isAI ? (
             <div className="pro-ai-visualization">

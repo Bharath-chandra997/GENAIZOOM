@@ -167,7 +167,13 @@
   display: block;
   margin: 0;
   padding: 0;
-  transform: scaleX(-1);
+  transform: none; /* Transform is now controlled via inline styles in JS */
+}
+
+/* Screen share videos should not be mirrored */
+.pro-video-frame--screen-share .pro-video-element {
+  transform: none;
+  object-fit: contain;
 }
 
 /* Placeholder */

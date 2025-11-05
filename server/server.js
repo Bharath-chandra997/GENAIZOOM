@@ -436,6 +436,15 @@ app.post('/api/meeting-session/:roomId/ai-state', authenticate, async (req, res)
     }
     
     session.updateAIState(aiStateData);
+    
+    // Also update sharedMedia if imageUrl/audioUrl are provided
+    if (aiStateData.imageUrl !== undefined || aiStateData.audioUrl !== undefined) {
+      if (!session.sharedMedia) session.sharedMedia = {};
+      if (aiStateData.imageUrl !== undefined) session.sharedMedia.imageUrl = aiStateData.imageUrl;
+      if (aiStateData.audioUrl !== undefined) session.sharedMedia.audioUrl = aiStateData.audioUrl;
+      session.markModified('sharedMedia');
+    }
+    
     await session.save();
     
     res.json(session);
@@ -1177,7 +1186,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('shared-media-display', async ({ imageUrl, audioUrl, username }) => {
+  socket.on('shared-media-display', async ({ imageUrl, audioUrl, username, question }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
       info(`Broadcasting shared-media-display from ${socketIdToUsername[socket.id]} in room ${roomId}`);
@@ -1191,7 +1200,8 @@ io.on('connection', (socket) => {
               'sharedMedia.audioUrl': audioUrl,
               'sharedMedia.uploaderUsername': username,
               'sharedMedia.isDisplayed': true,
-              'sharedMedia.displayedAt': new Date()
+              'sharedMedia.displayedAt': new Date(),
+              'aiState.output': question || '' // Store question text if provided
             }
           },
           { upsert: true }
@@ -1200,7 +1210,8 @@ io.on('connection', (socket) => {
         logError('Error persisting shared media display to session:', err);
       }
       
-      socket.to(roomId).emit('shared-media-display', { imageUrl, audioUrl, username });
+      // Broadcast to ALL users in room (including sender) for synchronization
+      io.to(roomId).emit('shared-media-display', { imageUrl, audioUrl, username, question });
     }
   });
 
@@ -1239,10 +1250,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('shared-ai-result', async ({ response, username }) => {
+  socket.on('shared-ai-result', async ({ result, imageUrl, audioUrl, username, question }) => {
     const roomId = socketToRoom[socket.id];
     if (roomId) {
       info(`Broadcasting shared-ai-result from ${socketIdToUsername[socket.id]} in room ${roomId}`);
+      
+      const response = result || {}; // Handle both result and response for backward compatibility
       
       try {
         await MeetingSession.findOneAndUpdate(
@@ -1251,7 +1264,10 @@ io.on('connection', (socket) => {
             $set: { 
               'aiState.output': typeof response === 'string' ? response : JSON.stringify(response),
               'aiState.completedAt': new Date(),
-              'aiState.resultUsername': username
+              'aiState.resultUsername': username,
+              'sharedMedia.imageUrl': imageUrl || undefined,
+              'sharedMedia.audioUrl': audioUrl || undefined,
+              'sharedMedia.uploaderUsername': username || undefined
             }
           },
           { upsert: true }
@@ -1260,7 +1276,14 @@ io.on('connection', (socket) => {
         logError('Error persisting shared AI result to session:', err);
       }
       
-      socket.to(roomId).emit('shared-ai-result', { response, username });
+      // Broadcast to ALL users in room (including sender) for synchronization
+      io.to(roomId).emit('shared-ai-result', { 
+        result: response, 
+        imageUrl, 
+        audioUrl, 
+        username,
+        question 
+      });
     }
   });
 

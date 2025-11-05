@@ -367,13 +367,17 @@ const Meeting = () => {
         audioForm.append('file', audioFile);
         const audioUrl = await upload(audioForm, 'audio');
 
-        setAiUploadedImage(imageUrl);
-        setAiUploadedAudio(audioUrl);
+        // Extract question text from audio filename or prepare for extraction
+        // Question will be set after AI processing completes
+        const question = ''; // Will be updated with result.sent_from_csv later
 
+        // DON'T set state directly - let socket event handle it for all users including sender
+        // This ensures synchronization across all participants
         socketRef.current?.emit('shared-media-display', {
           imageUrl,
           audioUrl,
           username: user.username,
+          question,
         });
 
         const formData = new FormData();
@@ -393,14 +397,17 @@ const Meeting = () => {
         const raw = response.data.prediction || response.data.result || response.data;
         const fullResult = typeof raw === 'string' ? { text: raw } : raw;
 
-        setAiResponse(JSON.stringify(fullResult));
-        setIsAIProcessingLayout(true);
+        // Extract question text if available
+        const question = fullResult.sent_from_csv || fullResult.question || '';
 
+        // DON'T set state directly - let socket event handle it for all users including sender
+        // This ensures synchronization across all participants
         socketRef.current?.emit('shared-ai-result', {
           result: fullResult,
           imageUrl,
           audioUrl,
           username: user.username,
+          question,
         });
 
         await axios.post(
@@ -457,29 +464,43 @@ const Meeting = () => {
     [user, roomId]
   );
 
-  const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username }) => {
-    setAiUploadedImage(imageUrl);
-    setAiUploadedAudio(audioUrl);
+  const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username, question }) => {
+    // Clear previous AI response when new media is uploaded
+    // This ensures clean state when a new upload starts
     setAiResponse('');
+    // Set uploaded media - this triggers the processing layout display
+    setAiUploadedImage(imageUrl || null);
+    setAiUploadedAudio(audioUrl || null);
     setIsAIProcessingLayout(true);
+    
+    // Question text will be included in the AI response event when processing completes
+    // For now, we just show the uploaded media in the processing layout
   }, []);
 
   const handleSharedAIResult = useCallback(
-    ({ result, imageUrl, audioUrl, username }) => {
-      setAiResponse(JSON.stringify(result));
+    ({ result, imageUrl, audioUrl, username, question }) => {
+      // Parse result if it's a string
+      const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      
+      // Update all AI state from the synchronized event
+      // This ensures all users see the same state
+      setAiResponse(JSON.stringify(parsedResult));
       if (imageUrl) setAiUploadedImage(imageUrl);
       if (audioUrl) setAiUploadedAudio(audioUrl);
       setIsAIProcessingLayout(true);
 
-      toast.info(
-        <div>
-          <strong>{username}</strong> shared AI result
-          {result.sent_from_csv && <span style={{ color: '#10b981', marginLeft: 6 }}>[CSV]</span>}
-        </div>,
-        { position: 'bottom-center' }
-      );
+      // Show notification only if it's not the current user (to avoid duplicate notifications)
+      if (username !== user.username) {
+        toast.info(
+          <div>
+            <strong>{username}</strong> shared AI result
+            {(parsedResult?.sent_from_csv || question) && <span style={{ color: '#10b981', marginLeft: 6 }}>[CSV]</span>}
+          </div>,
+          { position: 'bottom-center' }
+        );
+      }
     },
-    []
+    [user.username]
   );
 
   const handleSharedMediaRemoval = useCallback(() => {
@@ -715,18 +736,35 @@ const Meeting = () => {
             setParticipants([localParticipant, ...remoteParticipants]);
 
             if (sessionData?.chatMessages) setMessages(sessionData.chatMessages);
-            if (sessionData?.aiState) {
-              setAiResponse(sessionData.aiState.output ? JSON.stringify({
-                text: sessionData.aiState.output,
-                sent_from_csv: sessionData.aiState.question,
-                confidence: 0.99,
-                latency_ms: 500,
-                device: 'cpu',
-                type: 'vqa'
-              }) : '');
-              setAiUploadedImage(sessionData.aiState.imageUrl || null);
-              setAiUploadedAudio(sessionData.aiState.audioUrl || null);
-              setIsAIProcessingLayout(!!sessionData.aiState.imageUrl || !!sessionData.aiState.output);
+            
+            // Restore AI state from session data (sharedMedia and aiState)
+            if (sessionData?.sharedMedia || sessionData?.aiState) {
+              const sharedMedia = sessionData.sharedMedia || {};
+              const aiState = sessionData.aiState || {};
+              
+              // Restore uploaded media
+              setAiUploadedImage(sharedMedia.imageUrl || null);
+              setAiUploadedAudio(sharedMedia.audioUrl || null);
+              
+              // Restore AI response if it exists
+              if (aiState.output) {
+                try {
+                  // Try to parse as JSON first, if it fails, treat as plain text
+                  const parsed = typeof aiState.output === 'string' 
+                    ? (aiState.output.startsWith('{') ? JSON.parse(aiState.output) : { text: aiState.output })
+                    : aiState.output;
+                  
+                  setAiResponse(JSON.stringify(parsed));
+                } catch (e) {
+                  // If parsing fails, create a simple text object
+                  setAiResponse(JSON.stringify({ text: aiState.output }));
+                }
+              } else {
+                setAiResponse('');
+              }
+              
+              // Show processing layout if there's media or a response
+              setIsAIProcessingLayout(!!sharedMedia.imageUrl || !!sharedMedia.audioUrl || !!aiState.output);
             }
             setIsLoading(false);
           }

@@ -394,8 +394,16 @@ const Meeting = () => {
         const raw = response.data.prediction || response.data.result || response.data;
         const fullResult = typeof raw === 'string' ? { text: raw } : raw;
 
-        // Extract question text if available
+        // Extract question text if available and ensure it's in the result object
         const question = fullResult.sent_from_csv || fullResult.question || '';
+        
+        // Ensure question is always in the result object for consistent parsing across all users
+        if (question && !fullResult.sent_from_csv) {
+          fullResult.sent_from_csv = question;
+        }
+        if (question && !fullResult.question) {
+          fullResult.question = question;
+        }
 
         // DON'T set state directly - let socket event handle it for all users including sender
         // This ensures synchronization across all participants
@@ -478,6 +486,16 @@ const Meeting = () => {
     ({ result, imageUrl, audioUrl, username, question }) => {
       // Parse result if it's a string
       const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      
+      // Ensure question is included in the result object for consistent display
+      // This ensures all users see the question text in the AI frame
+      if (question && !parsedResult.sent_from_csv) {
+        parsedResult.sent_from_csv = question;
+      }
+      // Also ensure question field is set if sent_from_csv is not present
+      if (question && !parsedResult.question) {
+        parsedResult.question = question;
+      }
       
       // Update all AI state from the synchronized event
       // This ensures all users see the same state

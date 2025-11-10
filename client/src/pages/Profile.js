@@ -6,7 +6,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import Navbar from '../components/Navbar'; // Adjust path if necessary
 
 const Profile = () => {
-  const { user, updateProfile, isLoading, isDarkMode } = useAuth();
+  const { user, updateProfile, isLoading } = useAuth();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -107,11 +107,7 @@ const Profile = () => {
   return (
     <>
       <Navbar />
-      <div className={`min-h-screen py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-300 ${
-        isDarkMode 
-          ? 'bg-gradient-to-br from-gray-900 to-gray-800' 
-          : 'bg-gray-50'
-      }`}>
+      <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-300 bg-gray-50">
         <div className="max-w-2xl mx-auto">
           
           <div className="text-center mb-8 animate-fade-in">
@@ -120,25 +116,17 @@ const Profile = () => {
                 {user.username?.charAt(0)?.toUpperCase()}
               </span>
             </div>
-            <h1 className={`text-3xl font-bold transition-colors duration-300 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+            <h1 className="text-3xl font-bold transition-colors duration-300 text-gray-900">
               Profile Settings
             </h1>
-            <p className={`mt-2 transition-colors duration-300 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-            }`}>
+            <p className="mt-2 transition-colors duration-300 text-gray-600">
               Manage your account information
             </p>
           </div>
 
           <div className="space-y-6">
             
-            <div className={`rounded-2xl shadow-lg border p-8 animate-slide-up transition-colors duration-300 ${
-              isDarkMode
-                ? 'bg-gray-800 border-gray-700'
-                : 'bg-white border-gray-200'
-            }`}>
+            <div className="rounded-2xl shadow-lg border p-8 animate-slide-up transition-colors duration-300 bg-white border-gray-200">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-gray-900">
                   Account Information
@@ -233,70 +221,48 @@ const Profile = () => {
               )}
             </div>
 
-            <div className={`profile-card rounded-2xl shadow-lg border p-8 transition-colors duration-300 ${
-              isDarkMode
-                ? 'bg-gray-800/85 border-gray-700'
-                : 'bg-white border-gray-200'
-            }`}>
-              <h2 className={`text-xl font-semibold mb-6 transition-colors duration-300 ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-900'
-              }`}>
+            <div className="profile-card rounded-2xl shadow-lg border p-8 transition-colors duration-300 bg-white border-gray-200">
+              <h2 className="text-xl font-semibold mb-6 transition-colors duration-300 text-gray-900">
                 Account Statistics
               </h2>
               
               <div className="grid sm:grid-cols-3 gap-6">
-                <div className={`text-center p-4 rounded-xl transition-colors duration-300 ${
-                  isDarkMode ? 'bg-blue-900/20' : 'bg-blue-50'
-                }`}>
-                  <div className={`text-2xl font-bold mb-1 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                <div className="text-center p-4 rounded-xl transition-colors duration-300 bg-blue-50">
+                  <div className="text-2xl font-bold mb-1 text-blue-600">
                     🎥
                   </div>
-                  <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>HD Video</div>
-                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Up to 720p</div>
+                  <div className="text-sm text-gray-600">HD Video</div>
+                  <div className="text-xs text-gray-500">Up to 720p</div>
                 </div>
                 
-                <div className={`text-center p-4 rounded-xl transition-colors duration-300 ${
-                  isDarkMode ? 'bg-green-900/20' : 'bg-green-50'
-                }`}>
-                  <div className={`text-2xl font-bold mb-1 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>
+                <div className="text-center p-4 rounded-xl transition-colors duration-300 bg-green-50">
+                  <div className="text-2xl font-bold mb-1 text-green-600">
                     👥
                   </div>
-                  <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Max Participants</div>
-                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>10 people</div>
+                  <div className="text-sm text-gray-600">Max Participants</div>
+                  <div className="text-xs text-gray-500">10 people</div>
                 </div>
                 
-                <div className={`text-center p-4 rounded-xl transition-colors duration-300 ${
-                  isDarkMode ? 'bg-purple-900/20' : 'bg-purple-50'
-                }`}>
-                  <div className={`text-2xl font-bold mb-1 ${isDarkMode ? 'text-purple-400' : 'text-purple-600'}`}>
+                <div className="text-center p-4 rounded-xl transition-colors duration-300 bg-purple-50">
+                  <div className="text-2xl font-bold mb-1 text-purple-600">
                     💬
                   </div>
-                  <div className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Features</div>
-                  <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Chat & Screen Share</div>
+                  <div className="text-sm text-gray-600">Features</div>
+                  <div className="text-xs text-gray-500">Chat & Screen Share</div>
                 </div>
               </div>
             </div>
 
-            <div className={`profile-card rounded-2xl shadow-lg border p-8 transition-colors duration-300 ${
-              isDarkMode
-                ? 'bg-gray-800/85 border-gray-700'
-                : 'bg-white border-gray-200'
-            }`}>
-              <h2 className={`text-xl font-semibold mb-6 transition-colors duration-300 ${
-                isDarkMode ? 'text-gray-200' : 'text-gray-900'
-              }`}>
+            <div className="profile-card rounded-2xl shadow-lg border p-8 transition-colors duration-300 bg-white border-gray-200">
+              <h2 className="text-xl font-semibold mb-6 transition-colors duration-300 text-gray-900">
                 Security & Privacy
               </h2>
               
-              <div className={`space-y-4 text-sm transition-colors duration-300 ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-600'
-              }`}>
+              <div className="space-y-4 text-sm transition-colors duration-300 text-gray-600">
                 <div className="flex items-start space-x-3">
                   <span className="text-green-500 mt-0.5">✓</span>
                   <div>
-                    <div className={`font-medium transition-colors duration-300 ${
-                      isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                    }`}>Secure Authentication</div>
+                    <div className="font-medium transition-colors duration-300 text-gray-900">Secure Authentication</div>
                     <div>Password hashed with bcrypt and secured with JWT tokens</div>
                   </div>
                 </div>
@@ -304,9 +270,7 @@ const Profile = () => {
                 <div className="flex items-start space-x-3">
                   <span className="text-green-500 mt-0.5">✓</span>
                   <div>
-                    <div className={`font-medium transition-colors duration-300 ${
-                      isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                    }`}>No Data Collection</div>
+                    <div className="font-medium transition-colors duration-300 text-gray-900">No Data Collection</div>
                     <div>We don't store or analyze your meeting content</div>
                   </div>
                 </div>
@@ -314,9 +278,7 @@ const Profile = () => {
                 <div className="flex items-start space-x-3">
                   <span className="text-green-500 mt-0.5">✓</span>
                   <div>
-                    <div className={`font-medium transition-colors duration-300 ${
-                      isDarkMode ? 'text-gray-200' : 'text-gray-900'
-                    }`}>Local Storage Only</div>
+                    <div className="font-medium transition-colors duration-300 text-gray-900">Local Storage Only</div>
                     <div>All data is stored locally on your device</div>
                   </div>
                 </div>

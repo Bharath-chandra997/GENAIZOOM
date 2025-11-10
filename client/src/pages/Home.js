@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const SERVER_URL = 'https://genaizoomserver-0yn4.onrender.com';
 
 const Home = () => {
-  const { user, isAuthenticated, isLoading, isDarkMode } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [joinRoomId, setJoinRoomId] = useState('');
@@ -177,60 +177,36 @@ const Home = () => {
   ];
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${
-      isDarkMode 
-        ? 'bg-gradient-to-br from-gray-900 to-gray-800' 
-        : 'bg-gradient-to-br from-gray-50 to-blue-50'
-    }`}>
+    <div className="min-h-screen transition-colors duration-300 bg-gradient-to-br from-gray-50 to-blue-50">
       <Navbar />
       <div className="py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12 animate-fade-in">
-            <h1 className={`text-4xl sm:text-5xl font-bold mb-4 transition-colors duration-300 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+            <h1 className="text-4xl sm:text-5xl font-bold mb-4 transition-colors duration-300 text-gray-900">
               Welcome back, {user?.username || 'User'}! 👋
             </h1>
-            <p className={`text-xl mb-4 transition-colors duration-300 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-            }`}>
+            <p className="text-xl mb-4 transition-colors duration-300 text-gray-600">
               Email: {user?.email || 'Not available'}
             </p>
-            <p className={`text-xl mb-8 transition-colors duration-300 ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-            }`}>
+            <p className="text-xl mb-8 transition-colors duration-300 text-gray-600">
               Start a meeting or join one to connect with your team
             </p>
-            <div className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 ${
-              isDarkMode 
-                ? 'bg-green-900 text-green-200' 
-                : 'bg-green-100 text-green-800'
-            }`}>
+            <div className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium transition-colors duration-300 bg-green-100 text-green-800">
               <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
               Online and ready to connect
             </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 mb-12">
-            <div className={`rounded-2xl shadow-lg border p-8 hover:shadow-xl transition-all duration-300 animate-slide-up ${
-              isDarkMode 
-                ? 'bg-gray-800 border-gray-700' 
-                : 'bg-white border-gray-200'
-            }`}>
+            <div className="rounded-2xl shadow-lg border p-8 hover:shadow-xl transition-all duration-300 animate-slide-up bg-white border-gray-200">
               <div className="text-center">
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 ${
-                  isDarkMode ? 'bg-blue-900' : 'bg-blue-100'
-                }`}>
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 bg-blue-100">
                   <span className="text-3xl">🎥</span>
                 </div>
-                <h2 className={`text-2xl font-bold mb-4 transition-colors duration-300 ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
+                <h2 className="text-2xl font-bold mb-4 transition-colors duration-300 text-gray-900">
                   Start New Meeting
                 </h2>
-                <p className={`mb-8 transition-colors duration-300 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                }`}>
+                <p className="mb-8 transition-colors duration-300 text-gray-600">
                   Create a new meeting room and invite up to 15 participants
                 </p>
                 <button
@@ -250,25 +226,15 @@ const Home = () => {
               </div>
             </div>
 
-            <div className={`rounded-2xl shadow-lg border p-8 hover:shadow-xl transition-all duration-300 animate-slide-up ${
-              isDarkMode 
-                ? 'bg-gray-800 border-gray-700' 
-                : 'bg-white border-gray-200'
-            }`}>
+            <div className="rounded-2xl shadow-lg border p-8 hover:shadow-xl transition-all duration-300 animate-slide-up bg-white border-gray-200">
               <div className="text-center">
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 ${
-                  isDarkMode ? 'bg-green-900' : 'bg-green-100'
-                }`}>
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 bg-green-100">
                   <span className="text-3xl">🚪</span>
                 </div>
-                <h2 className={`text-2xl font-bold mb-4 transition-colors duration-300 ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
+                <h2 className="text-2xl font-bold mb-4 transition-colors duration-300 text-gray-900">
                   Join Meeting
                 </h2>
-                <p className={`mb-8 transition-colors duration-300 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                }`}>
+                <p className="mb-8 transition-colors duration-300 text-gray-600">
                   Enter a meeting ID to join an existing room
                 </p>
                 <form onSubmit={handleJoinMeeting} className="space-y-4">
@@ -277,11 +243,7 @@ const Home = () => {
                     value={joinRoomId}
                     onChange={(e) => setJoinRoomId(e.target.value)}
                     placeholder="Enter Meeting ID"
-                    className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 ${
-                      isDarkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                    }`}
+                    className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 bg-white border-gray-300 text-gray-900 placeholder-gray-500"
                   />
                   <button
                     type="submit"
@@ -296,27 +258,17 @@ const Home = () => {
 
           {/* Scheduled Meetings Container */}
           <div className="mb-12">
-            <h3 className={`text-2xl font-bold text-center mb-8 transition-colors duration-300 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+            <h3 className="text-2xl font-bold text-center mb-8 transition-colors duration-300 text-gray-900">
               📅 Scheduled Meetings
             </h3>
             
             {scheduledMeetings.length === 0 ? (
-              <div className={`rounded-2xl shadow-lg border p-12 text-center transition-colors duration-300 ${
-                isDarkMode 
-                  ? 'bg-gray-800 border-gray-700' 
-                  : 'bg-white border-gray-200'
-              }`}>
+              <div className="rounded-2xl shadow-lg border p-12 text-center transition-colors duration-300 bg-white border-gray-200">
                 <div className="text-6xl mb-4">📅</div>
-                <h4 className={`text-xl font-semibold mb-2 transition-colors duration-300 ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
+                <h4 className="text-xl font-semibold mb-2 transition-colors duration-300 text-gray-900">
                   No Scheduled Meetings
                 </h4>
-                <p className={`text-sm transition-colors duration-300 ${
-                  isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                }`}>
+                <p className="text-sm transition-colors duration-300 text-gray-600">
                   You haven't scheduled any meetings yet. Click below to schedule one!
                 </p>
               </div>
@@ -342,22 +294,14 @@ const Home = () => {
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.3, delay: index * 0.1 }}
                         whileHover={{ scale: 1.02 }}
-                        className={`rounded-xl shadow-lg border p-6 hover:shadow-xl transition-all duration-200 ${
-                          isDarkMode 
-                            ? 'bg-gray-800 border-gray-700' 
-                            : 'bg-white border-gray-200'
-                        }`}
+                        className="rounded-xl shadow-lg border p-6 hover:shadow-xl transition-all duration-200 bg-white border-gray-200"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <h4 className={`text-lg font-semibold mb-2 transition-colors duration-300 ${
-                              isDarkMode ? 'text-white' : 'text-gray-900'
-                            }`}>
+                            <h4 className="text-lg font-semibold mb-2 transition-colors duration-300 text-gray-900">
                               {meeting.title}
                             </h4>
-                            <div className={`flex items-center space-x-4 text-sm transition-colors duration-300 ${
-                              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                            }`}>
+                            <div className="flex items-center space-x-4 text-sm transition-colors duration-300 text-gray-600">
                               <span>📅 {new Date(meeting.scheduledStart).toLocaleDateString()}</span>
                               <span>🕒 {new Date(meeting.scheduledStart).toLocaleTimeString()}</span>
                               <span>⏱️ {meeting.duration} minutes</span>
@@ -410,9 +354,7 @@ const Home = () => {
           </div>
 
           <div className="mb-12">
-            <h3 className={`text-2xl font-bold text-center mb-8 transition-colors duration-300 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+            <h3 className="text-2xl font-bold text-center mb-8 transition-colors duration-300 text-gray-900">
               Quick Actions
             </h3>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -434,14 +376,8 @@ const Home = () => {
             </div>
           </div>
 
-          <div className={`rounded-2xl shadow-lg border p-8 transition-colors duration-300 ${
-            isDarkMode 
-              ? 'bg-gray-800 border-gray-700' 
-              : 'bg-white border-gray-200'
-          }`}>
-            <h3 className={`text-2xl font-bold text-center mb-8 transition-colors duration-300 ${
-              isDarkMode ? 'text-white' : 'text-gray-900'
-            }`}>
+          <div className="rounded-2xl shadow-lg border p-8 transition-colors duration-300 bg-white border-gray-200">
+            <h3 className="text-2xl font-bold text-center mb-8 transition-colors duration-300 text-gray-900">
               Meeting Features
             </h3>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -453,14 +389,10 @@ const Home = () => {
               ].map((feature, index) => (
                 <div key={index} className="text-center p-4">
                   <div className="text-3xl mb-3">{feature.icon}</div>
-                  <h4 className={`font-semibold mb-1 transition-colors duration-300 ${
-                    isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>
+                  <h4 className="font-semibold mb-1 transition-colors duration-300 text-gray-900">
                     {feature.title}
                   </h4>
-                  <p className={`text-sm transition-colors duration-300 ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-600'
-                  }`}>
+                  <p className="text-sm transition-colors duration-300 text-gray-600">
                     {feature.desc}
                   </p>
                 </div>
@@ -469,11 +401,7 @@ const Home = () => {
           </div>
 
           <div className="mt-8 text-center">
-            <div className={`inline-flex items-center px-6 py-3 rounded-full text-sm transition-colors duration-300 ${
-              isDarkMode 
-                ? 'bg-blue-900 text-blue-200' 
-                : 'bg-blue-50 text-blue-800'
-            }`}>
+            <div className="inline-flex items-center px-6 py-3 rounded-full text-sm transition-colors duration-300 bg-blue-50 text-blue-800">
               <span className="mr-2">ℹ️</span>
               Maximum 15 participants per meeting for optimal performance
             </div>
@@ -482,18 +410,12 @@ const Home = () => {
           {/* Meeting Title Modal */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className={`rounded-2xl p-6 w-full max-w-md transition-colors duration-300 ${
-                isDarkMode ? 'bg-gray-800' : 'bg-white'
-              }`}>
-                <h2 className={`text-2xl font-bold mb-4 transition-colors duration-300 ${
-                  isDarkMode ? 'text-white' : 'text-gray-900'
-                }`}>
+              <div className="rounded-2xl p-6 w-full max-w-md transition-colors duration-300 bg-white">
+                <h2 className="text-2xl font-bold mb-4 transition-colors duration-300 text-gray-900">
                   Create New Meeting
                 </h2>
                 <div className="mb-4">
-                  <label htmlFor="meetingTitle" className={`block text-sm font-medium mb-2 transition-colors duration-300 ${
-                    isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
+                  <label htmlFor="meetingTitle" className="block text-sm font-medium mb-2 transition-colors duration-300 text-gray-700">
                     Meeting Title
                   </label>
                   <input
@@ -502,11 +424,7 @@ const Home = () => {
                     value={meetingTitle}
                     onChange={(e) => setMeetingTitle(e.target.value)}
                     placeholder="Enter meeting title"
-                    className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 ${
-                      isDarkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
-                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                    }`}
+                    className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 bg-white border-gray-300 text-gray-900 placeholder-gray-500"
                   />
                 </div>
                 <div className="flex space-x-3">

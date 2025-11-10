@@ -451,15 +451,6 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
             </svg>
           </button>
 
-          {/* Color */}
-          <input
-            type="color"
-            value={myColor}
-            onChange={(e) => setMyColor(e.target.value)}
-            className="tool-color-input"
-            title="Color"
-          />
-
           {/* Thickness */}
           <input
             type="range"

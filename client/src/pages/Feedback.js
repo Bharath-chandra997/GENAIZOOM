@@ -90,7 +90,7 @@ const Feedback = () => {
   }
 
   return (
-    <div className="feedback theme--dark min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
+    <div className="feedback min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <Navbar />
       <div className="py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto">

@@ -195,7 +195,7 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     }
   };
 
-  // Upload
+  // Upload or Re-upload
   const handleUploadClick = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -206,9 +206,26 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
       const reader = new FileReader();
       reader.onload = () => {
         const img = reader.result;
-        setImage(img);
-        setPendingImage(img);
-        socketRef.current?.emit('scribble:image', { roomId, img });
+        // If there's already an image, clear scribbles and reset canvas
+        if (image) {
+          setStrokesArray([]);
+          clearCanvas(canvasDrawRef.current);
+          clearCanvas(canvasImageRef.current);
+          imageRef.current = null;
+          socketRef.current?.emit('scribble:clear-all', { roomId });
+        }
+        // Load new image
+        const el = new Image();
+        el.onload = () => {
+          imageRef.current = el;
+          setImage(img);
+          setPendingImage(img);
+          drawImage();
+          redrawAll();
+          socketRef.current?.emit('scribble:image', { roomId, img });
+        };
+        el.onerror = () => console.error('Failed to load image');
+        el.src = img;
       };
       reader.readAsDataURL(file);
     };
@@ -374,7 +391,12 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
             onClick={() => setTool('pen')}
             title="Pen"
           >
-            Pen
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+              <path d="M2 2l7.586 7.586"></path>
+              <circle cx="11" cy="11" r="2"></circle>
+            </svg>
           </button>
 
           {/* Rectangle */}
@@ -383,7 +405,9 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
             onClick={() => setTool('rect')}
             title="Rectangle"
           >
-            Rectangle
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            </svg>
           </button>
 
           {/* Circle */}
@@ -392,17 +416,39 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
             onClick={() => setTool('circle')}
             title="Circle"
           >
-            Circle
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+            </svg>
           </button>
 
           {/* Clear All */}
           <button className="tool" onClick={clearAll} title="Clear All">
-            Trash
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
           </button>
 
           {/* Download */}
           <button className="tool" onClick={downloadCanvas} title="Download">
-            Download
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+
+          {/* Re-upload Image */}
+          <button 
+            className="tool" 
+            onClick={handleUploadClick} 
+            title={image ? "Re-upload Image" : "Upload Image"}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
           </button>
 
           {/* Color */}
@@ -422,31 +468,32 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
             value={thickness}
             onChange={(e) => setThickness(parseInt(e.target.value, 10))}
             className="tool-size-input"
-            title="Thickness"
+            title={`Thickness: ${thickness}`}
           />
-
-          {/* Upload */}
-          {!image && (
-            <button className="scribble-upload-btn" onClick={handleUploadClick}>
-              Upload
-            </button>
-          )}
 
           {/* Confirm/Cancel */}
           {pendingImage && (
             <div className="scribble-upload-actions">
-              <button onClick={() => setPendingImage(null)} className="scribble-action-btn">
-                Cancel
+              <button onClick={() => setPendingImage(null)} className="scribble-action-btn" title="Cancel">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
               </button>
-              <button onClick={confirmImage} className="scribble-action-btn primary">
-                Confirm
+              <button onClick={confirmImage} className="scribble-action-btn primary" title="Confirm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
               </button>
             </div>
           )}
 
           {/* Close */}
           <button className="tool" onClick={onClose} title="Close">
-            Close
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
           </button>
         </div>
 

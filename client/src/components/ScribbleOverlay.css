@@ -31,6 +31,16 @@
   font-size: 18px;
   transition: all 0.2s ease;
   flex-shrink: 0;
+  color: #374151;
+  padding: 0;
+}
+.tool svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+.tool.active svg {
+  color: #fff;
 }
 .tool:hover { 
   background: rgba(0,0,0,0.08); 
@@ -99,7 +109,7 @@
   flex-shrink: 0;
 }
 .scribble-action-btn { 
-  padding: 10px 16px; 
+  padding: 8px 12px; 
   border-radius: 8px; 
   border: 1px solid rgba(0,0,0,0.08); 
   background: #fff; 
@@ -108,15 +118,29 @@
   font-weight: 500;
   transition: all 0.2s ease;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  color: #374151;
+}
+.scribble-action-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
+.scribble-action-btn.primary {
+  background: linear-gradient(135deg,#10b981 0%,#059669 100%); 
+  color: #fff; 
+  border-color: transparent;
+}
+.scribble-action-btn.primary svg {
+  color: #fff;
 }
 .scribble-action-btn:hover {
   background: rgba(0,0,0,0.04);
   transform: translateY(-1px);
-}
-.scribble-action-btn.primary { 
-  background: linear-gradient(135deg,#10b981 0%,#059669 100%); 
-  color: #fff; 
-  border-color: transparent;
 }
 .scribble-action-btn.primary:hover {
   box-shadow: 0 4px 12px rgba(16,185,129,0.4);

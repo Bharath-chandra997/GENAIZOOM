@@ -1260,7 +1260,7 @@ const Meeting = () => {
               }}
               autoPlay
               playsInline
-              muted={false}
+              muted={!p.audioEnabled}
               style={{ display: 'none' }}
             />
           ))}

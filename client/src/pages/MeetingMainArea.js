@@ -4,7 +4,7 @@ import { extractAIQuestionAndAnswer } from '../utils/aiResponseHelpers';
 import './MeetingMainArea.css';
 
 const MeetingMainArea = ({
-  participants = [],
+  participants  = [],
   realParticipants = [],
   isSomeoneScreenSharing = false,
   toolbarPosition = { x: 20, y: 20 },
@@ -67,7 +67,6 @@ const MeetingMainArea = ({
       videoRefs.current.set(participant.userId, element);
       if (participant.stream) {
         element.srcObject = participant.stream;
-        // Ensure video plays
         element.play().catch(err => {
           console.warn('Video play error:', err);
         });
@@ -79,16 +78,12 @@ const MeetingMainArea = ({
     participants.forEach(participant => {
       const videoElement = videoRefs.current.get(participant.userId);
       if (videoElement && participant.stream) {
-        // Update srcObject if it changed
         if (videoElement.srcObject !== participant.stream) {
           videoElement.srcObject = participant.stream;
-          // Ensure video plays after srcObject change
           videoElement.play().catch(err => {
             console.warn('Video play error after srcObject update:', err);
           });
         }
-        // Ensure audio continues playing even when navigating pages
-        // This prevents audio loss during grid page navigation
         if (participant.stream.getAudioTracks().length > 0) {
           const audioTracks = participant.stream.getAudioTracks();
           audioTracks.forEach(track => {
@@ -99,9 +94,8 @@ const MeetingMainArea = ({
         }
       }
     });
-  }, [participants, gridPage]); // Add gridPage to dependencies to ensure audio persists on page change
+  }, [participants, gridPage]);
 
-  // === NEW: Parse full AI JSON ===
   const parseAIResult = (raw) => {
     try {
       return typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -118,12 +112,11 @@ const MeetingMainArea = ({
 
     let videoClass = 'pro-video-element';
     
-    // Only apply mirror transform for local camera (not screen shares or remote videos)
     const shouldMirror = participant.isLocal && !isScreenSharing;
     const videoStyle = {
       width: '100%',
       height: '100%',
-      objectFit: isScreenSharing ? 'contain' : 'cover', // Use 'contain' for screen shares to show full content
+      objectFit: isScreenSharing ? 'contain' : 'cover',
       borderRadius: '8px',
       display: 'block',
       margin: '0',
@@ -150,7 +143,7 @@ const MeetingMainArea = ({
             <video
               ref={(video) => setVideoRef(participant, video)}
               autoPlay
-              muted={participant.isLocal}
+              muted={true}  // CRITICAL FIX: Always mute local video to prevent echo
               playsInline
               className={videoClass}
               key={`video-${participant.userId}-${participant.stream ? 'stream' : 'no-stream'}`}
@@ -158,7 +151,6 @@ const MeetingMainArea = ({
             />
           ) : isAI ? (
             <div className="pro-ai-visualization">
-              {/* Revert Button */}
               {isAIProcessingLayout && (
                 <button
                   className="pro-ai-wrong-btn"
@@ -172,7 +164,6 @@ const MeetingMainArea = ({
                 </button>
               )}
 
-              {/* 1. Processing: Show uploaded media */}
               {isAIProcessingLayout && !aiResponse && (aiUploadedImage || aiUploadedAudio) ? (
                 <div className="pro-ai-processing-layout">
                   <div className="pro-ai-uploaded-content-wrapper">
@@ -196,7 +187,7 @@ const MeetingMainArea = ({
                     )}
                   </div>
                 </div>
-              ) : /* 2. Result: Show full AI response */ isAIProcessingLayout && aiResponse ? (
+              ) : isAIProcessingLayout && aiResponse ? (
                 (() => {
                   const result = parseAIResult(aiResponse);
                   const question = result.sent_from_csv || '';
@@ -205,7 +196,6 @@ const MeetingMainArea = ({
 
                   return (
                     <div className="pro-ai-response-layout">
-                      {/* Question (CSV) */}
                       {hasCSV && (
                         <div className="pro-ai-question-text">
                           {question}
@@ -213,7 +203,6 @@ const MeetingMainArea = ({
                         </div>
                       )}
 
-                      {/* Image */}
                       {aiUploadedImage && (
                         <div className="pro-ai-response-image-container">
                           <img
@@ -224,14 +213,12 @@ const MeetingMainArea = ({
                         </div>
                       )}
 
-                      {/* Answer */}
                       {answer && (
                         <div className="pro-ai-answer-text">
                           <span className="pro-ai-answer-label">AI:</span> {answer}
                         </div>
                       )}
 
-                      {/* Metadata */}
                       <div className="pro-ai-meta">
                         {result.confidence !== undefined && (
                           <span>
@@ -248,7 +235,6 @@ const MeetingMainArea = ({
                   );
                 })()
               ) : (
-                /* 3. Idle: AI Avatar + Canvas */
                 <>
                   <div className="pro-ai-logo-container">
                     <AIAvatar size={120} />
@@ -425,7 +411,6 @@ const MeetingMainArea = ({
         {isSomeoneScreenSharing ? renderScreenShareView() : renderGridView()}
       </motion.div>
 
-      {/* Pagination */}
       {!isSomeoneScreenSharing && totalGridPages > 1 && participants.length > 3 && (
         <div className="pro-grid-pagination">
           <button

@@ -114,7 +114,7 @@ const Meeting = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isAIPopupOpen, setIsAIPopupOpen] = useState(false);
-  const [isAudioMuted, setIsAudioMuted] = useState(false); // false = mic ON
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
@@ -122,7 +122,6 @@ const Meeting = () => {
   const [gridPage, setGridPage] = useState(0);
   const [scribbleActive, setScribbleActive] = useState(false);
 
-  // === AI STATE ===
   const [aiResponse, setAiResponse] = useState('');
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
@@ -406,14 +405,14 @@ const Meeting = () => {
         });
 
         const raw = response.data.prediction || response.data.result || response.data;
-        const fullResult = typeof raw === 'string' ? { text: raw } : raw; // <-- DEFINED HERE
+        const fullResult = typeof raw === 'string' ? { text: raw } : raw;
 
         const question = fullResult.sent_from_csv || fullResult.question || '';
         if (question && !fullResult.sent_from_csv) {
-          fullResult.sent_from_csv = question;
+            fullResult.sent_from_csv = question;
         }
         if (question && !fullResult.question) {
-          fullResult.question = question;
+            fullResult.question = question;
         }
 
         socketRef.current?.emit('shared-ai-result', {
@@ -963,7 +962,6 @@ const Meeting = () => {
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
 
-        // Mic ON + "Mute" button
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
           audioTrack.enabled = true;
@@ -1006,14 +1004,12 @@ const Meeting = () => {
       remoteAudioRefs.current.clear();
       if (aiAnimationRef.current) cancelAnimationFrame(aiAnimationRef.current);
       if (socketRef.current) {
- częściej
         socketCleanup();
         socketRef.current.disconnect();
       }
     };
   }, [user, navigate, roomId, setupSocketListeners]);
 
-  // MUTE/UNMUTE – uses replaceTrack(null)
   const toggleAudio = async () => {
     const stream = localStreamRef.current;
     if (!stream) return;
@@ -1024,10 +1020,8 @@ const Meeting = () => {
     const wasEnabled = audioTrack.enabled;
     const nextEnabled = !wasEnabled;
 
-    // Toggle local track
     audioTrack.enabled = nextEnabled;
 
-    // MUTE/UNMUTE REMOTELY
     const promises = [];
     peerConnections.current.forEach((pc) => {
       const audioSender = pc.getSenders().find((s) => s.track?.kind === 'audio');
@@ -1046,15 +1040,10 @@ const Meeting = () => {
       console.error('Audio mute/unmute failed:', err);
     }
 
-    // Update UI
     setIsAudioMuted(!nextEnabled);
-
-    // Update local participant
     setParticipants((prev) =>
       prev.map((p) => (p.isLocal ? { ...p, audioEnabled: nextEnabled } : p))
     );
-
-    // Notify others
     socketRef.current?.emit('toggle-audio', { enabled: nextEnabled });
   };
 

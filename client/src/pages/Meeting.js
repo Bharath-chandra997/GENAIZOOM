@@ -116,7 +116,7 @@ const Meeting = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isAIPopupOpen, setIsAIPopupOpen] = useState(false);
-  const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [isAudioMuted, setIsAudioMuted] = useState(false); // false = mic ON
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
@@ -157,7 +157,7 @@ const Meeting = () => {
   const lastIceFetch = useRef(0);
   const signalingStates = useRef(new Map());
   const pendingIceCandidates = useRef(new Map());
-  const remoteAudioRefs = useRef(new Map()); // Track audio elements
+  const remoteAudioRefs = useRef(new Map());
 
   const isMirroringBrowser = useMemo(
     () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream,
@@ -196,7 +196,6 @@ const Meeting = () => {
     }
   }, [totalGridPages, gridPage]);
 
-  // FIXED: Pass `userId` into the callback
   const getUsernameById = useCallback(
     (userId) => {
       const participant = allParticipants.find((p) => p.userId === userId);
@@ -297,7 +296,6 @@ const Meeting = () => {
     return cleanup;
   }, [initializeAiAnimation]);
 
-  // === AUTOPLAY UNLOCK ===
   useEffect(() => {
     const unlockAudio = () => {
       const audio = new Audio();
@@ -595,7 +593,6 @@ const Meeting = () => {
           )
         );
 
-        // Force audio playback
         setTimeout(() => {
           const audioEl = remoteAudioRefs.current.get(remoteSocketId);
           if (audioEl && audioEl.srcObject !== remoteStream) {
@@ -967,9 +964,12 @@ const Meeting = () => {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
-        const initialAudioTrack = stream.getAudioTracks()[0];
-        if (initialAudioTrack) {
-          setIsAudioMuted(!initialAudioTrack.enabled);
+
+        // FIXED: Force mic ON and correct button
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack) {
+          audioTrack.enabled = true;
+          setIsAudioMuted(false); // Show "Mute" button
         }
       } catch (e) {
         console.error('Media init error:', e);
@@ -1014,33 +1014,38 @@ const Meeting = () => {
     };
   }, [user, navigate, roomId, setupSocketListeners]);
 
-  // FIXED: Mute/Unmute with proper track sync
+  // FIXED: Mute/Unmute with correct logic
   const toggleAudio = () => {
     const stream = localStreamRef.current;
     if (!stream) return;
 
     const audioTracks = stream.getAudioTracks();
-    if (!audioTracks.length) return;
+    if (audioTracks.length === 0) return;
 
-    const nextEnabled = !audioTracks[0].enabled;
+    const wasEnabled = audioTracks[0].enabled;
+    const nextEnabled = !wasEnabled;
 
-    audioTracks.forEach((track) => {
-      track.enabled = nextEnabled;
-    });
+    // Toggle track
+    audioTracks.forEach(track => track.enabled = nextEnabled);
 
-    // Sync with all peer connections
-    peerConnections.current.forEach((pc) => {
-      pc.getSenders().forEach((sender) => {
-        if (sender.track && sender.track.kind === 'audio') {
+    // Sync peers
+    peerConnections.current.forEach(pc => {
+      pc.getSenders().forEach(sender => {
+        if (sender.track?.kind === 'audio') {
           sender.track.enabled = nextEnabled;
         }
       });
     });
 
+    // Update UI: isAudioMuted = true → show "Unmute"
     setIsAudioMuted(!nextEnabled);
-    setParticipants((prev) =>
-      prev.map((p) => (p.isLocal ? { ...p, audioEnabled: nextEnabled } : p))
+
+    // Update local participant
+    setParticipants(prev =>
+      prev.map(p => p.isLocal ? { ...p, audioEnabled: nextEnabled } : p)
     );
+
+    // Notify others
     socketRef.current?.emit('toggle-audio', { enabled: nextEnabled });
   };
 
@@ -1259,7 +1264,6 @@ const Meeting = () => {
           />
         </div>
 
-        {/* REMOTE AUDIO - FIXED WITH REF + AUTOPLAY */}
         {allParticipants
           .filter((p) => !p.isLocal && !p.isAI && p.stream)
           .map((p) => (

@@ -11,10 +11,7 @@ const MeetingSidebar = ({
   onCloseChat, 
   participants, 
   onCloseParticipants, 
-  roomId,
   aiParticipant,
-  getUserAvatar,
-  AIAvatar,
   onPinParticipant,
   onCopyInvite
 }) => {
@@ -37,11 +34,7 @@ const MeetingSidebar = ({
         <Participants
           participants={participants}
           aiParticipant={aiParticipant}
-          currentUser={user}
           onClose={onCloseParticipants}
-          roomId={roomId}
-          getUserAvatar={getUserAvatar}
-          AIAvatar={AIAvatar}
           onPinParticipant={onPinParticipant}
           onCopyInvite={onCopyInvite}
         />

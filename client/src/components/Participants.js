@@ -5,15 +5,11 @@ const Participants = ({
   participants = [],
   aiParticipant = null,
   pendingRequests = [],
-  currentUser,
   meetingInfo,
   onClose,
   onAcceptJoin,
   onRejectJoin,
   onPinParticipant,
-  roomId,
-  getUserAvatar,
-  AIAvatar,
   onCopyInvite,
 }) => {
   // Combine real participants with AI if it exists
@@ -71,13 +67,6 @@ const Participants = ({
                   data-user-id={participant.userId}
                 >
                   <div className="pro-participants-card__left">
-                    <div className="pro-participants-card__avatar">
-                      {isAI ? (
-                        <AIAvatar size={32} />
-                      ) : (
-                        getUserAvatar(participant, 32)
-                      )}
-                    </div>
                     <div className="pro-participants-card__meta">
                       <span className="pro-participants-card__name">
                         {participant.username}

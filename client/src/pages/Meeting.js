@@ -1006,16 +1006,34 @@ const Meeting = () => {
   }, [user, navigate, roomId, setupSocketListeners]);
 
   const toggleAudio = () => {
-    const track = localStreamRef.current?.getAudioTracks()[0];
-    if (track) {
-      track.enabled = !track.enabled;
-      const enabled = track.enabled;
-      setIsAudioMuted(!enabled);
-      setParticipants((prev) =>
-        prev.map((p) => (p.isLocal ? { ...p, audioEnabled: enabled } : p))
-      );
-      socketRef.current?.emit('toggle-audio', { enabled });
-    }
+    const stream = localStreamRef.current;
+    if (!stream) return;
+
+    const audioTracks = stream.getAudioTracks();
+    if (!audioTracks.length) return;
+
+    // Determine the next state (mute when any track is currently enabled)
+    const currentlyEnabled = audioTracks.some((track) => track.enabled);
+    const nextEnabled = !currentlyEnabled;
+
+    audioTracks.forEach((track) => {
+      track.enabled = nextEnabled;
+    });
+
+    // Ensure all peer connection audio senders respect the new enabled state
+    peerConnections.current.forEach((pc) => {
+      pc.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'audio') {
+          sender.track.enabled = nextEnabled;
+        }
+      });
+    });
+
+    setIsAudioMuted(!nextEnabled);
+    setParticipants((prev) =>
+      prev.map((p) => (p.isLocal ? { ...p, audioEnabled: nextEnabled } : p))
+    );
+    socketRef.current?.emit('toggle-audio', { enabled: nextEnabled });
   };
 
   const toggleVideo = async () => {
@@ -1281,7 +1299,7 @@ const Meeting = () => {
             }}
           >
             {isParticipantsOpen && (
-              <div className="pro-sidebar-popup" onClick={(e) => e.stopPropagation()}>
+              <div className="pro-sidebar-popup pro-sidebar-popup--participants" onClick={(e) => e.stopPropagation()}>
                 <MeetingSidebar
                   isChatOpen={isChatOpen}
                   isParticipantsOpen={isParticipantsOpen}
@@ -1295,9 +1313,6 @@ const Meeting = () => {
                   participants={allParticipants}
                   aiParticipant={aiParticipant}
                   onCloseParticipants={() => setIsParticipantsOpen(false)}
-                  roomId={roomId}
-                  getUserAvatar={getUserAvatar}
-                  AIAvatar={AIAvatar}
                   onPinParticipant={(uid) => socketRef.current?.emit('pin-participant', { userId: uid })}
                   onCopyInvite={() => {
                     const link = `${window.location.origin}/join/${roomId}`;

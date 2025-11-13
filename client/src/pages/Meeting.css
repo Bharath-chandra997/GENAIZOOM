@@ -82,6 +82,12 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
+.pro-sidebar-popup--participants {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
 /* Ensure embedded Chat fills the popup with no unintended gap */
 .pro-sidebar-popup .chat-container {
   width: 100%;

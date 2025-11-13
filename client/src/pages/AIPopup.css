@@ -137,15 +137,16 @@
 .pro-ai-upload-section {
   flex: 1;
   overflow-y: auto;
-  padding-right: 4px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-height: 0;
-  
-  /* Firefox scrollbar */
+  background: #000;
+  color: #fff;
+  border-radius: 12px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(59, 130, 246, 0.6) rgba(30, 41, 59, 0.1);
+  scrollbar-color: rgba(148, 163, 184, 0.8) rgba(30, 41, 59, 0.3);
 }
 
 /* Webkit scrollbar for upload section */
@@ -154,23 +155,23 @@
 }
 
 .pro-ai-upload-section::-webkit-scrollbar-track {
-  background: rgba(30, 41, 59, 0.1);
+  background: rgba(30, 41, 59, 0.3);
   border-radius: 10px;
   margin: 4px 0;
 }
 
 .pro-ai-upload-section::-webkit-scrollbar-thumb {
-  background: rgba(59, 130, 246, 0.6);
+  background: rgba(148, 163, 184, 0.9);
   border-radius: 10px;
-  border: 2px solid rgba(30, 41, 59, 0.1);
+  border: 2px solid rgba(30, 41, 59, 0.3);
 }
 
 .pro-ai-upload-section::-webkit-scrollbar-thumb:hover {
-  background: rgba(59, 130, 246, 0.8);
+  background: rgba(226, 232, 240, 0.9);
 }
 
 .pro-ai-upload-section::-webkit-scrollbar-thumb:active {
-  background: rgba(59, 130, 246, 1);
+  background: rgba(226, 232, 240, 1);
 }
 
 .pro-ai-upload-section::-webkit-scrollbar-corner {
@@ -179,15 +180,17 @@
 
 .pro-ai-upload-area {
   margin-bottom: 0;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
   padding: 16px;
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 .pro-ai-upload-area h4 {
   margin-bottom: 12px;
-  color: #e5e7eb;
+  color: #fff;
   font-size: 16px;
   font-weight: 600;
 }
@@ -195,24 +198,24 @@
 .pro-ai-file-input {
   width: 100%;
   padding: 12px;
-  border: 2px dashed #cbd5e1;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #111827;
+  border: 2px dashed #475569;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #f8fafc;
   font-size: 14px;
   transition: all 0.3s ease;
   cursor: pointer;
 }
 
 .pro-ai-file-input:hover {
-  border-color: #93c5fd;
-  background: #f8fafc;
+  border-color: #60a5fa;
+  background: #1e293b;
 }
 
 .pro-ai-file-input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
 }
 
 .pro-ai-upload-preview {

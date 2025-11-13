@@ -983,6 +983,7 @@ const Meeting = () => {
     };
   }, [user, navigate, roomId, setupSocketListeners]);
 
+  // FIXED: Mute/Unmute with proper track sync
   const toggleAudio = () => {
     const stream = localStreamRef.current;
     if (!stream) return;
@@ -990,7 +991,7 @@ const Meeting = () => {
     const audioTracks = stream.getAudioTracks();
     if (!audioTracks.length) return;
 
-    const nextEnabled = audioTracks[0].enabled === false;
+    const nextEnabled = !audioTracks[0].enabled;
 
     audioTracks.forEach((track) => {
       track.enabled = nextEnabled;
@@ -999,7 +1000,9 @@ const Meeting = () => {
     peerConnections.current.forEach((pc) => {
       pc.getSenders()
         .filter((s) => s.track?.kind === 'audio')
-        .forEach((s) => (s.track.enabled = nextEnabled));
+        .forEach((sender) => {
+          if (sender.track) sender.track.enabled = nextEnabled;
+        });
     });
 
     setIsAudioMuted(!nextEnabled);
@@ -1224,7 +1227,7 @@ const Meeting = () => {
           />
         </div>
 
-        {/* Hidden audio players for ALL remote participants (never unmounted) */}
+        {/* PERSISTENT AUDIO: All remote users always audible */}
         {allParticipants
           .filter((p) => !p.isLocal && !p.isAI && p.stream)
           .map((p) => (

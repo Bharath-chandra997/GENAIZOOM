@@ -157,6 +157,7 @@ const Meeting = () => {
   const lastIceFetch = useRef(0);
   const signalingStates = useRef(new Map());
   const pendingIceCandidates = useRef(new Map());
+  const remoteAudioRefs = useRef(new Map()); // Track audio elements
 
   const isMirroringBrowser = useMemo(
     () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream,
@@ -196,7 +197,7 @@ const Meeting = () => {
   }, [totalGridPages, gridPage]);
 
   const getUsernameById = useCallback(
-    (userId) => {
+    (userId翼) => {
       const participant = allParticipants.find((p) => p.userId === userId);
       return participant
         ? participant.isLocal
@@ -294,6 +295,22 @@ const Meeting = () => {
     const cleanup = initializeAiAnimation();
     return cleanup;
   }, [initializeAiAnimation]);
+
+  // === AUTOPLAY UNLOCK ===
+  useEffect(() => {
+    const unlockAudio = () => {
+      const audio = new Audio();
+      audio.play().catch(() => {});
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
 
   const handleRevertAILayout = useCallback(() => {
     setAiUploadedImage(null);
@@ -569,11 +586,22 @@ const Meeting = () => {
       pc.ontrack = (event) => {
         clearTimeout(timeout);
         connectionTimeouts.current.delete(remoteSocketId);
+        const [remoteStream] = event.streams;
+
         setParticipants((prev) =>
           prev.map((p) =>
-            p.userId === remoteSocketId ? { ...p, stream: event.streams[0] } : p
+            p.userId === remoteSocketId ? { ...p, stream: remoteStream } : p
           )
         );
+
+        // Force audio playback
+        setTimeout(() => {
+          const audioEl = remoteAudioRefs.current.get(remoteSocketId);
+          if (audioEl && audioEl.srcObject !== remoteStream) {
+            audioEl.srcObject = remoteStream;
+            audioEl.play().catch(() => {});
+          }
+        }, 300);
       };
 
       pc.onicecandidate = (event) => {
@@ -689,6 +717,7 @@ const Meeting = () => {
     connectionTimeouts.current.delete(userId);
     signalingStates.current.delete(userId);
     pendingIceCandidates.current.delete(userId);
+    remoteAudioRefs.current.delete(userId);
     setParticipants((prev) => prev.filter((p) => p.userId !== userId));
   }, []);
 
@@ -875,7 +904,7 @@ const Meeting = () => {
         socket.off('toggle-audio');
         socket.off('pin-participant');
         socket.off('unpin-participant');
-        socket.off('shared-ai-result');
+        socket.off('shared-ai748-result');
         socket.off('shared-media-display');
         socket.off('shared-media-removal');
         socket.off('scribble:image');
@@ -975,6 +1004,7 @@ const Meeting = () => {
       connectionTimeouts.current.clear();
       signalingStates.current.clear();
       pendingIceCandidates.current.clear();
+      remoteAudioRefs.current.clear();
       if (aiAnimationRef.current) cancelAnimationFrame(aiAnimationRef.current);
       if (socketRef.current) {
         socketCleanup();
@@ -997,12 +1027,13 @@ const Meeting = () => {
       track.enabled = nextEnabled;
     });
 
+    // Sync with all peer connections
     peerConnections.current.forEach((pc) => {
-      pc.getSenders()
-        .filter((s) => s.track?.kind === 'audio')
-        .forEach((sender) => {
-          if (sender.track) sender.track.enabled = nextEnabled;
-        });
+      pc.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'audio') {
+          sender.track.enabled = nextEnabled;
+        }
+      });
     });
 
     setIsAudioMuted(!nextEnabled);
@@ -1227,16 +1258,24 @@ const Meeting = () => {
           />
         </div>
 
-        {/* PERSISTENT AUDIO: All remote users always audible */}
+        {/* REMOTE AUDIO - FIXED WITH REF + AUTOPLAY */}
         {allParticipants
           .filter((p) => !p.isLocal && !p.isAI && p.stream)
           .map((p) => (
             <audio
               key={`remote-audio-${p.userId}`}
+              ref={(el) => {
+                if (el) {
+                  remoteAudioRefs.current.set(p.userId, el);
+                  if (el.srcObject !== p.stream) {
+                    el.srcObject = p.stream;
+                    el.play().catch(() => {});
+                  }
+                }
+              }}
               autoPlay
               playsInline
               muted={false}
-              srcObject={p.stream}
               style={{ display: 'none' }}
             />
           ))}

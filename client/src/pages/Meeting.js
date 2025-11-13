@@ -196,8 +196,9 @@ const Meeting = () => {
     }
   }, [totalGridPages, gridPage]);
 
+  // FIXED: Pass `userId` into the callback
   const getUsernameById = useCallback(
-    (userId翼) => {
+    (userId) => {
       const participant = allParticipants.find((p) => p.userId === userId);
       return participant
         ? participant.isLocal
@@ -904,7 +905,7 @@ const Meeting = () => {
         socket.off('toggle-audio');
         socket.off('pin-participant');
         socket.off('unpin-participant');
-        socket.off('shared-ai748-result');
+        socket.off('shared-ai-result');
         socket.off('shared-media-display');
         socket.off('shared-media-removal');
         socket.off('scribble:image');

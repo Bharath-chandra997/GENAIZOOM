@@ -104,7 +104,7 @@ const AIAvatar = ({ size = 40 }) => {
 };
 
 const Meeting = () => {
-  const { roomId } = useParams();
+  const {roomId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -114,7 +114,7 @@ const Meeting = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isAIPopupOpen, setIsAIPopupOpen] = useState(false);
-  const [isAudioMuted, setIsAudioMuted] = useState(true); // Start as muted? No → false
+  const [isAudioMuted, setIsAudioMuted] = useState(false); // false = mic ON initially
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
@@ -963,7 +963,7 @@ const Meeting = () => {
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
 
-        // Ensure mic is ON initially
+        // FIXED: Ensure mic is ON and UI shows "Mute"
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
           audioTrack.enabled = true;
@@ -1012,7 +1012,7 @@ const Meeting = () => {
     };
   }, [user, navigate, roomId, setupSocketListeners]);
 
-  // FIXED: toggleAudio using track.enabled
+  // FIXED: toggleAudio — reliable mute/unmute using track.enabled
   const toggleAudio = () => {
     const stream = localStreamRef.current;
     if (!stream) return;

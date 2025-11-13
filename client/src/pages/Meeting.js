@@ -114,7 +114,7 @@ const Meeting = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isAIPopupOpen, setIsAIPopupOpen] = useState(false);
-  const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [isAudioMuted, setIsAudioMuted] = useState(true); // Start as muted? No → false
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
@@ -122,6 +122,7 @@ const Meeting = () => {
   const [gridPage, setGridPage] = useState(0);
   const [scribbleActive, setScribbleActive] = useState(false);
 
+  // === AI STATE ===
   const [aiResponse, setAiResponse] = useState('');
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
@@ -409,10 +410,10 @@ const Meeting = () => {
 
         const question = fullResult.sent_from_csv || fullResult.question || '';
         if (question && !fullResult.sent_from_csv) {
-            fullResult.sent_from_csv = question;
+          fullResult.sent_from_csv = question;
         }
         if (question && !fullResult.question) {
-            fullResult.question = question;
+          fullResult.question = question;
         }
 
         socketRef.current?.emit('shared-ai-result', {
@@ -962,10 +963,11 @@ const Meeting = () => {
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
 
+        // Ensure mic is ON initially
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
           audioTrack.enabled = true;
-          setIsAudioMuted(false);
+          setIsAudioMuted(false); // Show "Mute" button
         }
       } catch (e) {
         console.error('Media init error:', e);
@@ -1010,41 +1012,23 @@ const Meeting = () => {
     };
   }, [user, navigate, roomId, setupSocketListeners]);
 
-  const toggleAudio = async () => {
+  // FIXED: toggleAudio using track.enabled
+  const toggleAudio = () => {
     const stream = localStreamRef.current;
     if (!stream) return;
 
     const audioTrack = stream.getAudioTracks()[0];
     if (!audioTrack) return;
 
-    const wasEnabled = audioTrack.enabled;
-    const nextEnabled = !wasEnabled;
+    const willBeMuted = !isAudioMuted;
+    audioTrack.enabled = !willBeMuted;
 
-    audioTrack.enabled = nextEnabled;
-
-    const promises = [];
-    peerConnections.current.forEach((pc) => {
-      const audioSender = pc.getSenders().find((s) => s.track?.kind === 'audio');
-      if (audioSender) {
-        promises.push(
-          nextEnabled
-            ? audioSender.replaceTrack(audioTrack)
-            : audioSender.replaceTrack(null)
-        );
-      }
-    });
-
-    try {
-      await Promise.all(promises);
-    } catch (err) {
-      console.error('Audio mute/unmute failed:', err);
-    }
-
-    setIsAudioMuted(!nextEnabled);
+    setIsAudioMuted(willBeMuted);
     setParticipants((prev) =>
-      prev.map((p) => (p.isLocal ? { ...p, audioEnabled: nextEnabled } : p))
+      prev.map((p) => (p.isLocal ? { ...p, audioEnabled: !willBeMuted } : p))
     );
-    socketRef.current?.emit('toggle-audio', { enabled: nextEnabled });
+
+    socketRef.current?.emit('toggle-audio', { enabled: !willBeMuted });
   };
 
   const toggleVideo = async () => {

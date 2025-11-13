@@ -965,11 +965,11 @@ const Meeting = () => {
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
 
-        // FIXED: Force mic ON and correct button
+        // FIXED: Force mic ON and show "Mute" button
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
           audioTrack.enabled = true;
-          setIsAudioMuted(false); // Show "Mute" button
+          setIsAudioMuted(false);
         }
       } catch (e) {
         console.error('Media init error:', e);
@@ -1014,7 +1014,7 @@ const Meeting = () => {
     };
   }, [user, navigate, roomId, setupSocketListeners]);
 
-  // FIXED: Mute/Unmute with correct logic
+  // FIXED: Mute/Unmute — actually stops audio to remote peers
   const toggleAudio = () => {
     const stream = localStreamRef.current;
     if (!stream) return;
@@ -1025,27 +1025,29 @@ const Meeting = () => {
     const wasEnabled = audioTracks[0].enabled;
     const nextEnabled = !wasEnabled;
 
-    // Toggle track
-    audioTracks.forEach(track => track.enabled = nextEnabled);
+    // 1. Toggle local track
+    audioTracks.forEach(track => {
+      track.enabled = nextEnabled;
+    });
 
-    // Sync peers
-    peerConnections.current.forEach(pc => {
-      pc.getSenders().forEach(sender => {
-        if (sender.track?.kind === 'audio') {
+    // 2. MUTE AUDIO TO REMOTE PEERS
+    peerConnections.current.forEach((pc) => {
+      pc.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'audio') {
           sender.track.enabled = nextEnabled;
         }
       });
     });
 
-    // Update UI: isAudioMuted = true → show "Unmute"
+    // 3. Update UI
     setIsAudioMuted(!nextEnabled);
 
-    // Update local participant
+    // 4. Update local participant
     setParticipants(prev =>
       prev.map(p => p.isLocal ? { ...p, audioEnabled: nextEnabled } : p)
     );
 
-    // Notify others
+    // 5. Notify others
     socketRef.current?.emit('toggle-audio', { enabled: nextEnabled });
   };
 
@@ -1177,7 +1179,7 @@ const Meeting = () => {
     
     stream.addTrack(newTrack);
     
-    const replacePromises = [];
+ const replacePromises = [];
     peerConnections.current.forEach((pc) => {
       const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
       if (sender) {

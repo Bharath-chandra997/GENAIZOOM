@@ -743,7 +743,7 @@ const Meeting = () => {
               isLocal: true,
               isHost,
               videoEnabled: true,
-              audioEnabled: true,
+              audioEnabled: localStreamRef.current?.getAudioTracks()[0]?.enabled ?? true,
               isScreenSharing: false,
               socketId: socket.id,
               profilePicture: user.profilePicture,
@@ -963,6 +963,10 @@ const Meeting = () => {
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
+        const initialAudioTrack = stream.getAudioTracks()[0];
+        if (initialAudioTrack) {
+          setIsAudioMuted(!initialAudioTrack.enabled);
+        }
       } catch (e) {
         console.error('Media init error:', e);
         toast.error('Failed to access camera/microphone.');

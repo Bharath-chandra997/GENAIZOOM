@@ -823,15 +823,43 @@
   border-color: #764ba2;
 }
 
-.pro-control-btn--muted {
-  background: #fee2e2;
-  color: #dc2626;
-  border-color: #fecaca;
-}
-
 .pro-control-btn--disabled {
   background: #f1f5f9;
   color: #94a3b8;
+}
+
+.pro-control-btn--audio {
+  background: #111827;
+  color: #f8fafc;
+  border-color: #1f2937;
+  transition: all 0.2s ease;
+}
+
+.pro-control-btn--audio.is-unmuted:hover {
+  background: #1e293b;
+  border-color: #1f2937;
+  color: #f8fafc;
+}
+
+.pro-control-btn--audio.is-muted {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #b91c1c;
+}
+
+.pro-control-btn--audio.is-muted:hover {
+  background: #b91c1c;
+  border-color: #991b1b;
+}
+
+.pro-control-btn__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pro-control-btn__label {
+  font-weight: 500;
 }
 
 .pro-invite-btn {

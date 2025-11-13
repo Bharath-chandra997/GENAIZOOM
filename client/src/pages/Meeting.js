@@ -98,9 +98,7 @@ const AIAvatar = ({ size = 40 }) => {
           color: 'white',
           fontWeight: 'bold',
         }}
-      >
-        
-      </div>
+      />
     </div>
   );
 };
@@ -408,7 +406,7 @@ const Meeting = () => {
         });
 
         const raw = response.data.prediction || response.data.result || response.data;
-        const full = typeof(raw) === 'string' ? { text: raw } : raw;
+        const fullResult = typeof raw === 'string' ? { text: raw } : raw; // <-- DEFINED HERE
 
         const question = fullResult.sent_from_csv || fullResult.question || '';
         if (question && !fullResult.sent_from_csv) {
@@ -490,14 +488,14 @@ const Meeting = () => {
   const handleSharedAIResult = useCallback(
     ({ result, imageUrl, audioUrl, username, question }) => {
       const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      
+
       if (question && !parsedResult.sent_from_csv) {
         parsedResult.sent_from_csv = question;
       }
       if (question && !parsedResult.question) {
         parsedResult.question = question;
       }
-      
+
       setAiResponse(JSON.stringify(parsedResult));
       if (imageUrl) setAiUploadedImage(imageUrl);
       if (audioUrl) setAiUploadedAudio(audioUrl);
@@ -702,12 +700,12 @@ const Meeting = () => {
 
   const handleUserLeft = useCallback(({ userId, username }) => {
     if (username) {
-      toast.info(`${username} left the meeting`, { 
+      toast.info(`${username} left the meeting`, {
         position: 'top-center',
         autoClose: 3000,
       });
     }
-    
+
     const pc = peerConnections.current.get(userId);
     if (pc) pc.close();
     peerConnections.current.delete(userId);
@@ -727,12 +725,12 @@ const Meeting = () => {
           { roomId, username: user.username, isReconnect: false },
           (otherUsers, sessionData) => {
             const isHost = otherUsers.length === 0;
-            
-            toast.success(`Welcome to the meeting, ${user.username}!`, { 
+
+            toast.success(`Welcome to the meeting, ${user.username}!`, {
               position: 'top-center',
               autoClose: 3000,
             });
-            
+
             const remoteParticipants = otherUsers.map((u) => ({
               userId: u.userId,
               username: u.username,
@@ -759,23 +757,23 @@ const Meeting = () => {
             };
             setParticipants((prev) => {
               const filtered = prev.filter((p) => !p.isLocal);
-              return [localParticipant, ...filtered, ...remoteParticipants.filter((rp) => 
+              return [localParticipant, ...filtered, ...remoteParticipants.filter((rp) =>
                 !filtered.some((p) => p.userId === rp.userId)
               )];
             });
 
             if (sessionData?.chatMessages) setMessages(sessionData.chatMessages);
-            
+
             if (sessionData?.sharedMedia || sessionData?.aiState) {
               const sharedMedia = sessionData.sharedMedia || {};
               const aiState = sessionData.aiState || {};
-              
+
               setAiUploadedImage(sharedMedia.imageUrl || null);
               setAiUploadedAudio(sharedMedia.audioUrl || null);
-              
+
               if (aiState.output) {
                 try {
-                  const parsed = typeof aiState.output === 'string' 
+                  const parsed = typeof aiState.output === 'string'
                     ? (aiState.output.startsWith('{') ? JSON.parse(aiState.output) : { text: aiState.output })
                     : aiState.output;
                   setAiResponse(JSON.stringify(parsed));
@@ -785,7 +783,7 @@ const Meeting = () => {
               } else {
                 setAiResponse('');
               }
-              
+
               setIsAIProcessingLayout(!!sharedMedia.imageUrl || !!sharedMedia.audioUrl || !!aiState.output);
             }
             setIsLoading(false);
@@ -796,12 +794,12 @@ const Meeting = () => {
       socket.on('connect', onConnect);
       socket.on('user-joined', async ({ userId, username, isHost, profilePicture }) => {
         if (userId === socket.id) return;
-        
-        toast.success(`${username} joined the meeting`, { 
+
+        toast.success(`${username} joined the meeting`, {
           position: 'top-center',
           autoClose: 3000,
         });
-        
+
         setParticipants((prev) => {
           const existingIndex = prev.findIndex((p) => p.userId === userId);
           if (existingIndex >= 0) {
@@ -898,7 +896,6 @@ const Meeting = () => {
         socket.off('chat-message');
         socket.off('screen-share-start');
         socket.off('screen-share-stop');
-Sparrow;
         socket.off('toggle-video');
         socket.off('toggle-audio');
         socket.off('pin-participant');
@@ -966,7 +963,7 @@ Sparrow;
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
 
-        // FIXED: Mic ON + "Mute" button
+        // Mic ON + "Mute" button
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
           audioTrack.enabled = true;
@@ -1009,13 +1006,14 @@ Sparrow;
       remoteAudioRefs.current.clear();
       if (aiAnimationRef.current) cancelAnimationFrame(aiAnimationRef.current);
       if (socketRef.current) {
+ częściej
         socketCleanup();
         socketRef.current.disconnect();
       }
     };
   }, [user, navigate, roomId, setupSocketListeners]);
 
-  // FIXED: MUTE/UNMUTE — uses replaceTrack(null)
+  // MUTE/UNMUTE – uses replaceTrack(null)
   const toggleAudio = async () => {
     const stream = localStreamRef.current;
     if (!stream) return;
@@ -1026,13 +1024,13 @@ Sparrow;
     const wasEnabled = audioTrack.enabled;
     const nextEnabled = !wasEnabled;
 
-    // 1. Toggle local track
+    // Toggle local track
     audioTrack.enabled = nextEnabled;
 
-    // 2. MUTE/UNMUTE REMOTELY
+    // MUTE/UNMUTE REMOTELY
     const promises = [];
     peerConnections.current.forEach((pc) => {
-      const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio');
+      const audioSender = pc.getSenders().find((s) => s.track?.kind === 'audio');
       if (audioSender) {
         promises.push(
           nextEnabled
@@ -1048,15 +1046,15 @@ Sparrow;
       console.error('Audio mute/unmute failed:', err);
     }
 
-    // 3. Update UI
+    // Update UI
     setIsAudioMuted(!nextEnabled);
 
-    // 4. Update local participant
-    setParticipants(prev =>
-      prev.map(p => p.isLocal ? { ...p, audioEnabled: nextEnabled } : p)
+    // Update local participant
+    setParticipants((prev) =>
+      prev.map((p) => (p.isLocal ? { ...p, audioEnabled: nextEnabled } : p))
     );
 
-    // 5. Notify others
+    // Notify others
     socketRef.current?.emit('toggle-audio', { enabled: nextEnabled });
   };
 
@@ -1087,9 +1085,7 @@ Sparrow;
         localCameraTrackRef.current = newTrack;
 
         peerConnections.current.forEach((pc) => {
-          const sender = pc
-            .getSenders()
-            .find((s) => s.track?.kind === 'video');
+          const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
           if (sender) sender.replaceTrack(newTrack);
         });
 
@@ -1123,34 +1119,34 @@ Sparrow;
         screenStreamRef.current = null;
         setIsSharingScreen(false);
       }
-      
+
       try {
         const currentVideoTrack = localStreamRef.current?.getVideoTracks()[0];
         if (currentVideoTrack && currentVideoTrack.kind === 'video' && !currentVideoTrack.label.includes('screen')) {
           localCameraTrackRef.current = currentVideoTrack;
         }
-        
+
         const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
         screenStreamRef.current = screen;
         const screenTrack = screen.getVideoTracks()[0];
-        
+
         await replaceTrack(screenTrack, true);
         setIsSharingScreen(true);
         socketRef.current?.emit('screen-share-start', { userId: socketRef.current.id });
-        
+
         screenTrack.onended = async () => {
           if (screenStreamRef.current) {
             screenStreamRef.current.getTracks().forEach((t) => t.stop());
             screenStreamRef.current = null;
           }
-          
+
           if (localCameraTrackRef.current && localStreamRef.current) {
             if (!localCameraTrackRef.current.enabled) {
               localCameraTrackRef.current.enabled = true;
             }
             await replaceTrack(localCameraTrackRef.current, false);
           }
-          
+
           setIsSharingScreen(false);
           socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
         };
@@ -1167,47 +1163,47 @@ Sparrow;
 
   const replaceTrack = async (newTrack, isScreen = false) => {
     if (!newTrack) return;
-    
+
     const stream = localStreamRef.current;
     if (!stream) return;
-    
+
     const oldVideo = stream.getVideoTracks()[0];
     if (oldVideo && oldVideo !== newTrack) {
       const isCameraTrack = oldVideo === localCameraTrackRef.current;
       if (isScreen && isCameraTrack) {
-        // Keep camera track alive
+        // keep camera alive
       } else {
         oldVideo.stop();
       }
       stream.removeTrack(oldVideo);
     }
-    
+
     if (!newTrack.enabled) {
       newTrack.enabled = true;
     }
-    
+
     stream.addTrack(newTrack);
-    
+
     const replacePromises = [];
     peerConnections.current.forEach((pc) => {
       const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
       if (sender) {
-        replacePromises.push(sender.replaceTrack(newTrack).catch(err => {
+        replacePromises.push(sender.replaceTrack(newTrack).catch((err) => {
           console.error('Error replacing track in peer connection:', err);
         }));
       }
     });
-    
+
     await Promise.all(replacePromises);
-    
+
     setParticipants((prev) =>
       prev.map((p) => {
         if (p.isLocal) {
-          return { 
-            ...p, 
+          return {
+            ...p,
             isScreenSharing: isScreen,
             videoEnabled: true,
-            stream: stream
+            stream,
           };
         }
         return p;

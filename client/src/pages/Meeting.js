@@ -408,7 +408,7 @@ const Meeting = () => {
         });
 
         const raw = response.data.prediction || response.data.result || response.data;
-        const fullResult = typeof raw === 'string' ? { text: raw } : raw;
+        const full = typeof(raw) === 'string' ? { text: raw } : raw;
 
         const question = fullResult.sent_from_csv || fullResult.question || '';
         if (question && !fullResult.sent_from_csv) {
@@ -898,6 +898,7 @@ const Meeting = () => {
         socket.off('chat-message');
         socket.off('screen-share-start');
         socket.off('screen-share-stop');
+Sparrow;
         socket.off('toggle-video');
         socket.off('toggle-audio');
         socket.off('pin-participant');
@@ -965,7 +966,7 @@ const Meeting = () => {
         localStreamRef.current = stream;
         localCameraTrackRef.current = stream.getVideoTracks()[0];
 
-        // FIXED: Force mic ON and show "Mute" button
+        // FIXED: Mic ON + "Mute" button
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
           audioTrack.enabled = true;
@@ -1014,30 +1015,38 @@ const Meeting = () => {
     };
   }, [user, navigate, roomId, setupSocketListeners]);
 
-  // FIXED: Mute/Unmute — actually stops audio to remote peers
-  const toggleAudio = () => {
+  // FIXED: MUTE/UNMUTE — uses replaceTrack(null)
+  const toggleAudio = async () => {
     const stream = localStreamRef.current;
     if (!stream) return;
 
-    const audioTracks = stream.getAudioTracks();
-    if (audioTracks.length === 0) return;
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack) return;
 
-    const wasEnabled = audioTracks[0].enabled;
+    const wasEnabled = audioTrack.enabled;
     const nextEnabled = !wasEnabled;
 
     // 1. Toggle local track
-    audioTracks.forEach(track => {
-      track.enabled = nextEnabled;
+    audioTrack.enabled = nextEnabled;
+
+    // 2. MUTE/UNMUTE REMOTELY
+    const promises = [];
+    peerConnections.current.forEach((pc) => {
+      const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio');
+      if (audioSender) {
+        promises.push(
+          nextEnabled
+            ? audioSender.replaceTrack(audioTrack)
+            : audioSender.replaceTrack(null)
+        );
+      }
     });
 
-    // 2. MUTE AUDIO TO REMOTE PEERS
-    peerConnections.current.forEach((pc) => {
-      pc.getSenders().forEach((sender) => {
-        if (sender.track && sender.track.kind === 'audio') {
-          sender.track.enabled = nextEnabled;
-        }
-      });
-    });
+    try {
+      await Promise.all(promises);
+    } catch (err) {
+      console.error('Audio mute/unmute failed:', err);
+    }
 
     // 3. Update UI
     setIsAudioMuted(!nextEnabled);
@@ -1179,7 +1188,7 @@ const Meeting = () => {
     
     stream.addTrack(newTrack);
     
- const replacePromises = [];
+    const replacePromises = [];
     peerConnections.current.forEach((pc) => {
       const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
       if (sender) {

@@ -189,6 +189,13 @@ const Meeting = () => {
     [displayParticipants.length]
   );
 
+  // Adjust gridPage if it exceeds totalGridPages (e.g., after a user leaves)
+  useEffect(() => {
+    if (gridPage >= totalGridPages) {
+      setGridPage(Math.max(0, totalGridPages - 1));
+    }
+  }, [totalGridPages, gridPage]);
+
   const getUsernameById = useCallback(
     (userId) => {
       const participant = allParticipants.find((p) => p.userId === userId);
@@ -1271,6 +1278,19 @@ const Meeting = () => {
             onAIReset={handleRevertAILayout}
           />
         </div>
+
+        {/* Hidden audio players for all remote real participants to ensure audio across grid pages */}
+        {allParticipants
+          .filter((p) => !p.isLocal && !p.isAI && p.stream && p.audioEnabled)
+          .map((p) => (
+            <audio
+              key={p.userId}  // Unique key to prevent duplicates
+              autoPlay
+              playsInline
+              srcObject={p.stream}
+              style={{ display: 'none' }}
+            />
+          ))}
 
         {isChatOpen && (
           <div className="pro-chat-sidebar-overlay" onClick={() => setIsChatOpen(false)}>

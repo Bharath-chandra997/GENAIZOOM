@@ -125,7 +125,7 @@ const Meeting = () => {
   const [scribbleActive, setScribbleActive] = useState(false);
 
   // === AI STATE ===
-  const [aiResponse, setAiResponse] = useState(''); // Full JSON string
+  const [aiResponse, setAiResponse] = useState('');
   const [aiUploadedImage, setAiUploadedImage] = useState(null);
   const [aiUploadedAudio, setAiUploadedAudio] = useState(null);
   const [isAIProcessingLayout, setIsAIProcessingLayout] = useState(false);
@@ -189,7 +189,6 @@ const Meeting = () => {
     [displayParticipants.length]
   );
 
-  // Adjust gridPage if it exceeds totalGridPages (e.g., after a user leaves)
   useEffect(() => {
     if (gridPage >= totalGridPages) {
       setGridPage(Math.max(0, totalGridPages - 1));
@@ -296,7 +295,6 @@ const Meeting = () => {
     return cleanup;
   }, [initializeAiAnimation]);
 
-  // === REVERT AI LAYOUT ===
   const handleRevertAILayout = useCallback(() => {
     setAiUploadedImage(null);
     setAiUploadedAudio(null);
@@ -374,14 +372,11 @@ const Meeting = () => {
         audioForm.append('file', audioFile);
         const audioUrl = await upload(audioForm, 'audio');
 
-        // DON'T set state directly - let socket event handle it for all users including sender
-        // This ensures synchronization across all participants
-        // Question text will be set after AI processing completes
         socketRef.current?.emit('shared-media-display', {
           imageUrl,
           audioUrl,
           username: user.username,
-          question: '', // Will be updated with result.sent_from_csv in shared-ai-result event
+          question: '',
         });
 
         const formData = new FormData();
@@ -396,15 +391,10 @@ const Meeting = () => {
           timeout: 60000,
         });
 
-        console.log('FastAPI raw response:', response.data);
-
         const raw = response.data.prediction || response.data.result || response.data;
         const fullResult = typeof raw === 'string' ? { text: raw } : raw;
 
-        // Extract question text if available and ensure it's in the result object
         const question = fullResult.sent_from_csv || fullResult.question || '';
-        
-        // Ensure question is always in the result object for consistent parsing across all users
         if (question && !fullResult.sent_from_csv) {
           fullResult.sent_from_csv = question;
         }
@@ -412,8 +402,6 @@ const Meeting = () => {
           fullResult.question = question;
         }
 
-        // DON'T set state directly - let socket event handle it for all users including sender
-        // This ensures synchronization across all participants
         socketRef.current?.emit('shared-ai-result', {
           result: fullResult,
           imageUrl,
@@ -477,41 +465,28 @@ const Meeting = () => {
   );
 
   const handleSharedMediaDisplay = useCallback(({ imageUrl, audioUrl, username, question }) => {
-    // Clear previous AI response when new media is uploaded
-    // This ensures clean state when a new upload starts
     setAiResponse('');
-    // Set uploaded media - this triggers the processing layout display
     setAiUploadedImage(imageUrl || null);
     setAiUploadedAudio(audioUrl || null);
     setIsAIProcessingLayout(true);
-    
-    // Question text will be included in the AI response event when processing completes
-    // For now, we just show the uploaded media in the processing layout
   }, []);
 
   const handleSharedAIResult = useCallback(
     ({ result, imageUrl, audioUrl, username, question }) => {
-      // Parse result if it's a string
       const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
       
-      // Ensure question is included in the result object for consistent display
-      // This ensures all users see the question text in the AI frame
       if (question && !parsedResult.sent_from_csv) {
         parsedResult.sent_from_csv = question;
       }
-      // Also ensure question field is set if sent_from_csv is not present
       if (question && !parsedResult.question) {
         parsedResult.question = question;
       }
       
-      // Update all AI state from the synchronized event
-      // This ensures all users see the same state
       setAiResponse(JSON.stringify(parsedResult));
       if (imageUrl) setAiUploadedImage(imageUrl);
       if (audioUrl) setAiUploadedAudio(audioUrl);
       setIsAIProcessingLayout(true);
 
-      // Show notification only if it's not the current user (to avoid duplicate notifications)
       if (username !== user.username) {
         toast.info(
           <div>
@@ -745,7 +720,7 @@ const Meeting = () => {
             }));
             const localParticipant = {
               userId: socket.id,
-              username: user.username, // Remove "(You)" suffix - it's added in the UI
+              username: user.username,
               stream: localStreamRef.current,
               isLocal: true,
               isHost,
@@ -755,7 +730,6 @@ const Meeting = () => {
               socketId: socket.id,
               profilePicture: user.profilePicture,
             };
-            // Check for existing local participant to prevent duplicates on reload
             setParticipants((prev) => {
               const filtered = prev.filter((p) => !p.isLocal);
               return [localParticipant, ...filtered, ...remoteParticipants.filter((rp) => 
@@ -765,33 +739,26 @@ const Meeting = () => {
 
             if (sessionData?.chatMessages) setMessages(sessionData.chatMessages);
             
-            // Restore AI state from session data (sharedMedia and aiState)
             if (sessionData?.sharedMedia || sessionData?.aiState) {
               const sharedMedia = sessionData.sharedMedia || {};
               const aiState = sessionData.aiState || {};
               
-              // Restore uploaded media
               setAiUploadedImage(sharedMedia.imageUrl || null);
               setAiUploadedAudio(sharedMedia.audioUrl || null);
               
-              // Restore AI response if it exists
               if (aiState.output) {
                 try {
-                  // Try to parse as JSON first, if it fails, treat as plain text
                   const parsed = typeof aiState.output === 'string' 
                     ? (aiState.output.startsWith('{') ? JSON.parse(aiState.output) : { text: aiState.output })
                     : aiState.output;
-                  
                   setAiResponse(JSON.stringify(parsed));
                 } catch (e) {
-                  // If parsing fails, create a simple text object
                   setAiResponse(JSON.stringify({ text: aiState.output }));
                 }
               } else {
                 setAiResponse('');
               }
               
-              // Show processing layout if there's media or a response
               setIsAIProcessingLayout(!!sharedMedia.imageUrl || !!sharedMedia.audioUrl || !!aiState.output);
             }
             setIsLoading(false);
@@ -809,10 +776,8 @@ const Meeting = () => {
         });
         
         setParticipants((prev) => {
-          // Check if participant already exists (prevent duplicates on reconnect)
           const existingIndex = prev.findIndex((p) => p.userId === userId);
           if (existingIndex >= 0) {
-            // Update existing participant instead of adding duplicate
             const updated = [...prev];
             updated[existingIndex] = {
               ...updated[existingIndex],
@@ -881,7 +846,9 @@ const Meeting = () => {
       });
       socket.on('toggle-audio', ({ userId, enabled }) => {
         setParticipants((prev) =>
-          prev.map((p) => (p.userId === userId ? { ...p, audioEnabled: enabled } : p))
+          prev.map((p) =>
+            p.userId === userId ? { ...p, audioEnabled: enabled } : p
+          )
         );
       });
       socket.on('pin-participant', ({ userId }) => setPinnedParticipantId(userId));
@@ -1023,21 +990,16 @@ const Meeting = () => {
     const audioTracks = stream.getAudioTracks();
     if (!audioTracks.length) return;
 
-    // Determine the next state (mute when any track is currently enabled)
-    const currentlyEnabled = audioTracks.some((track) => track.enabled);
-    const nextEnabled = !currentlyEnabled;
+    const nextEnabled = audioTracks[0].enabled === false;
 
     audioTracks.forEach((track) => {
       track.enabled = nextEnabled;
     });
 
-    // Ensure all peer connection audio senders respect the new enabled state
     peerConnections.current.forEach((pc) => {
-      pc.getSenders().forEach((sender) => {
-        if (sender.track && sender.track.kind === 'audio') {
-          sender.track.enabled = nextEnabled;
-        }
-      });
+      pc.getSenders()
+        .filter((s) => s.track?.kind === 'audio')
+        .forEach((s) => (s.track.enabled = nextEnabled));
     });
 
     setIsAudioMuted(!nextEnabled);
@@ -1094,32 +1056,26 @@ const Meeting = () => {
 
   const handleScreenShare = async () => {
     if (isSharingScreen) {
-      // Stop screen sharing and restore camera
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
         screenStreamRef.current = null;
       }
       if (localCameraTrackRef.current && !localCameraTrackRef.current.enabled) {
-        // Re-enable camera track if it was disabled
         localCameraTrackRef.current.enabled = true;
       }
       await replaceTrack(localCameraTrackRef.current, false);
       setIsSharingScreen(false);
       socketRef.current?.emit('screen-share-stop', { userId: socketRef.current.id });
     } else {
-      // Prevent multiple screen shares - check if one is already active
       if (screenStreamRef.current) {
-        // Stop any existing screen share first
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
         screenStreamRef.current = null;
         setIsSharingScreen(false);
       }
       
       try {
-        // Store camera track reference BEFORE starting screen share
         const currentVideoTrack = localStreamRef.current?.getVideoTracks()[0];
         if (currentVideoTrack && currentVideoTrack.kind === 'video' && !currentVideoTrack.label.includes('screen')) {
-          // Only store if it's not already a screen share track
           localCameraTrackRef.current = currentVideoTrack;
         }
         
@@ -1132,15 +1088,12 @@ const Meeting = () => {
         socketRef.current?.emit('screen-share-start', { userId: socketRef.current.id });
         
         screenTrack.onended = async () => {
-          // Screen share ended (user stopped via browser UI)
           if (screenStreamRef.current) {
             screenStreamRef.current.getTracks().forEach((t) => t.stop());
             screenStreamRef.current = null;
           }
           
-          // Restore camera track
           if (localCameraTrackRef.current && localStreamRef.current) {
-            // Ensure camera track is enabled
             if (!localCameraTrackRef.current.enabled) {
               localCameraTrackRef.current.enabled = true;
             }
@@ -1155,7 +1108,6 @@ const Meeting = () => {
         if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') {
           toast.error('Screen sharing failed.');
         }
-        // Reset state on error
         setIsSharingScreen(false);
         screenStreamRef.current = null;
       }
@@ -1170,27 +1122,21 @@ const Meeting = () => {
     
     const oldVideo = stream.getVideoTracks()[0];
     if (oldVideo && oldVideo !== newTrack) {
-      // Don't stop the camera track when switching to screen share (we'll need it back)
-      // When switching back to camera, the old track is the screen share, so stop it
       const isCameraTrack = oldVideo === localCameraTrackRef.current;
       if (isScreen && isCameraTrack) {
-        // Switching TO screen share: keep camera track alive, just remove from stream
-        // Don't stop it
+        // Keep camera track alive
       } else {
-        // Switching FROM screen share or other cases: stop the old track
         oldVideo.stop();
       }
       stream.removeTrack(oldVideo);
     }
     
-    // Ensure new track is enabled
     if (!newTrack.enabled) {
       newTrack.enabled = true;
     }
     
     stream.addTrack(newTrack);
     
-    // Update peer connections
     const replacePromises = [];
     peerConnections.current.forEach((pc) => {
       const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
@@ -1203,7 +1149,6 @@ const Meeting = () => {
     
     await Promise.all(replacePromises);
     
-    // Update participant state with new stream reference
     setParticipants((prev) =>
       prev.map((p) => {
         if (p.isLocal) {
@@ -1211,7 +1156,7 @@ const Meeting = () => {
             ...p, 
             isScreenSharing: isScreen,
             videoEnabled: true,
-            stream: stream // Update stream reference to trigger re-render
+            stream: stream
           };
         }
         return p;
@@ -1279,14 +1224,15 @@ const Meeting = () => {
           />
         </div>
 
-        {/* Hidden audio players for all remote real participants to ensure audio across grid pages */}
+        {/* Hidden audio players for ALL remote participants (never unmounted) */}
         {allParticipants
-          .filter((p) => !p.isLocal && !p.isAI && p.stream && p.audioEnabled)
+          .filter((p) => !p.isLocal && !p.isAI && p.stream)
           .map((p) => (
             <audio
-              key={p.userId}  // Unique key to prevent duplicates
+              key={`remote-audio-${p.userId}`}
               autoPlay
               playsInline
+              muted={false}
               srcObject={p.stream}
               style={{ display: 'none' }}
             />

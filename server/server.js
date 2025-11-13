@@ -857,6 +857,20 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('scribble:lock', { locked: false, by: null });
   });
   
+  // Clear all handler - permanently clear server state
+  socket.on('scribble:clear-all', ({ roomId }) => {
+    if (!roomId) return;
+    const state = getScribbleState(roomId);
+    const next = { 
+      ...state,
+      drawings: [], // Clear all drawings permanently
+    };
+    setScribbleState(roomId, next);
+    // Broadcast to all clients to clear their canvases
+    io.to(roomId).emit('scribble:clear-all');
+    io.to(roomId).emit('scribble:drawings', []); // Send empty array to clear all clients
+  });
+  
   // Color change handler
   socket.on('scribble:userColorChange', ({ roomId, id, color }) => {
     if (!roomId || !id || !color) return;

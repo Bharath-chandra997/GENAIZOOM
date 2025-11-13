@@ -98,7 +98,7 @@
   border: 1px solid #e5e7eb;
   transition: all 0.2s ease;
   animation: videoFrameAppear 0.3s ease-out;
-  cursor: pointer;
+  cursor: default;
   margin: 0;
   padding: 0;
   display: flex;

@@ -738,7 +738,7 @@ const Meeting = () => {
             }));
             const localParticipant = {
               userId: socket.id,
-              username: `${user.username} (You)`,
+              username: user.username, // Remove "(You)" suffix - it's added in the UI
               stream: localStreamRef.current,
               isLocal: true,
               isHost,
@@ -748,7 +748,13 @@ const Meeting = () => {
               socketId: socket.id,
               profilePicture: user.profilePicture,
             };
-            setParticipants([localParticipant, ...remoteParticipants]);
+            // Check for existing local participant to prevent duplicates on reload
+            setParticipants((prev) => {
+              const filtered = prev.filter((p) => !p.isLocal);
+              return [localParticipant, ...filtered, ...remoteParticipants.filter((rp) => 
+                !filtered.some((p) => p.userId === rp.userId)
+              )];
+            });
 
             if (sessionData?.chatMessages) setMessages(sessionData.chatMessages);
             
@@ -796,7 +802,19 @@ const Meeting = () => {
         });
         
         setParticipants((prev) => {
-          if (prev.some((p) => p.userId === userId)) return prev;
+          // Check if participant already exists (prevent duplicates on reconnect)
+          const existingIndex = prev.findIndex((p) => p.userId === userId);
+          if (existingIndex >= 0) {
+            // Update existing participant instead of adding duplicate
+            const updated = [...prev];
+            updated[existingIndex] = {
+              ...updated[existingIndex],
+              username,
+              isHost,
+              profilePicture,
+            };
+            return updated;
+          }
           return [
             ...prev,
             {

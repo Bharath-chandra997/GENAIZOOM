@@ -53,14 +53,24 @@ const MeetingControls = ({
       <div className="pro-controls-center">
         <button
           className={`pro-control-btn ${isChatOpen ? 'pro-control-btn--active' : ''}`}
-          onClick={() => setIsChatOpen(!isChatOpen)}
+          onClick={() => {
+            setIsChatOpen(!isChatOpen);
+            if (!isChatOpen) {
+              setIsParticipantsOpen(false); // Close participants when opening chat
+            }
+          }}
           title="Toggle Chat"
         >
           💬
         </button>
         <button
           className={`pro-control-btn ${isParticipantsOpen ? 'pro-control-btn--active' : ''}`}
-          onClick={() => setIsParticipantsOpen(!isParticipantsOpen)}
+          onClick={() => {
+            setIsParticipantsOpen(!isParticipantsOpen);
+            if (!isParticipantsOpen) {
+              setIsChatOpen(false); // Close chat when opening participants
+            }
+          }}
           title="Toggle Participants"
         >
           👥

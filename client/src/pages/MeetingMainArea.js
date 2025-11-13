@@ -87,9 +87,19 @@ const MeetingMainArea = ({
             console.warn('Video play error after srcObject update:', err);
           });
         }
+        // Ensure audio continues playing even when navigating pages
+        // This prevents audio loss during grid page navigation
+        if (participant.stream.getAudioTracks().length > 0) {
+          const audioTracks = participant.stream.getAudioTracks();
+          audioTracks.forEach(track => {
+            if (track.readyState === 'live' && !track.enabled) {
+              track.enabled = true;
+            }
+          });
+        }
       }
     });
-  }, [participants]);
+  }, [participants, gridPage]); // Add gridPage to dependencies to ensure audio persists on page change
 
   // === NEW: Parse full AI JSON ===
   const parseAIResult = (raw) => {
@@ -129,13 +139,11 @@ const MeetingMainArea = ({
         } ${isAI ? 'pro-video-frame--ai' : ''} ${
           isScreenSharing ? 'pro-video-frame--screen-share' : ''
         }`}
-        onClick={() => !isAI && handlePinParticipant(participant.userId)}
         layout
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.8 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        whileTap={{ scale: 0.98 }}
       >
         <div className="pro-video-container">
           {hasVideo && !isAI ? (

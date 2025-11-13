@@ -65,20 +65,32 @@ const ScribbleOverlay = ({ socketRef, roomId, onClose, participants = [], curren
     const onDrawings = (data) => {
       if (!Array.isArray(data)) return;
       const filtered = data.filter((s) => s && s.id);
-      if (filtered.length === 0) return;
-
-      setStrokesArray(filtered);
+      
+      // If filtered array is empty, this means clear-all was called
+      // Ensure canvas is cleared and state is reset permanently
+      setStrokesArray([]);
       const canvas = canvasDrawRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-        filtered.forEach((s) => drawStroke(s));
+      }
+      
+      // Only restore drawings if there are actually drawings to restore
+      if (filtered.length > 0) {
+        setStrokesArray(filtered);
+        if (canvas) {
+          filtered.forEach((s) => drawStroke(s));
+        }
       }
     };
 
     const onClearAll = () => {
       setStrokesArray([]);
       clearCanvas(canvasDrawRef.current);
+      // Clear image state as well when clearing all
+      setImage(null);
+      imageRef.current = null;
+      clearCanvas(canvasImageRef.current);
     };
 
     socket.on('scribble:image', onImage);
